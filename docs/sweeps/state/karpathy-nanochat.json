@@ -1,0 +1,145 @@
+{
+  "saved_at": "2026-04-07T17:28:31.059630+00:00",
+  "items": [
+    {
+      "id": "tag:github.com,2008:Grit::Commit/a445144d3905c6845fda2d3cab8e63248a70cd32",
+      "title": "create a group for dev dependencies, there is no need to install all \u2026",
+      "link": "https://github.com/karpathy/nanochat/commit/a445144d3905c6845fda2d3cab8e63248a70cd32",
+      "published": "2026-03-26T03:41:28Z",
+      "summary": "create a group for dev dependencies, there is no need to install all this other stuff just for speedrun and it's exposing people to dependency chain attacks. we need to delete more dependencies. dependencies bad bad bad"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/03be953668310114916f44bf5957d5c32f72c6db",
+      "title": "delete non-essential deps from legacy use",
+      "link": "https://github.com/karpathy/nanochat/commit/03be953668310114916f44bf5957d5c32f72c6db",
+      "published": "2026-03-26T03:41:28Z",
+      "summary": "delete non-essential deps from legacy use"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/7808dc7159e7c793d9a160f5015df3b2a6b30ac1",
+      "title": "Merge pull request #595 from svlandeg/fix/typo",
+      "link": "https://github.com/karpathy/nanochat/commit/7808dc7159e7c793d9a160f5015df3b2a6b30ac1",
+      "published": "2026-03-25T21:40:25Z",
+      "summary": "Merge pull request #595 from svlandeg/fix/typo Small fixes"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/a4ed96687b40e232dc553ee11e199018109393dc",
+      "title": "Merge pull request #634 from 2bitbit/fix-docs-and-comments",
+      "link": "https://github.com/karpathy/nanochat/commit/a4ed96687b40e232dc553ee11e199018109393dc",
+      "published": "2026-03-25T21:31:49Z",
+      "summary": "Merge pull request #634 from 2bitbit/fix-docs-and-comments fix: correct minor typos in help text, README, and comments"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/7b70f6b411dfba53191b25d6c4a49b22faec39ca",
+      "title": "Merge pull request #639 from mathieu-lacage/master",
+      "link": "https://github.com/karpathy/nanochat/commit/7b70f6b411dfba53191b25d6c4a49b22faec39ca",
+      "published": "2026-03-25T21:29:30Z",
+      "summary": "Merge pull request #639 from mathieu-lacage/master Verified: both paths return identical data (99,842 rows), and all splits under subset='all' load cleanly."
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/47e983eea7513d545fb6becc8b32756b6c43d06b",
+      "title": "fix: use meta device in disable_fp8 to avoid VRAM spike (#616)",
+      "link": "https://github.com/karpathy/nanochat/commit/47e983eea7513d545fb6becc8b32756b6c43d06b",
+      "published": "2026-03-25T21:24:57Z",
+      "summary": "fix: use meta device in disable_fp8 to avoid VRAM spike (#616) When swapping Float8Linear to Linear in disable_fp8 context manager, using device=fp8_module.weight.device directly allocates new tensors on GPU, causing unnecessary VRAM spike (~1GB for large models). This fix uses device='meta' to avoid physical memory allocation, then swaps in the weight tensor reference. This eliminates the unnecessary VRAM spike during evaluation phase. Fixes issue #592 Co-authored-by: RoomWithOutRoof"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/c0dbf1f3fff10ef9d1a50e14a6188e04506251b6",
+      "title": "use COMPUTE_DTYPE-aware cast in Muon polar express step",
+      "link": "https://github.com/karpathy/nanochat/commit/c0dbf1f3fff10ef9d1a50e14a6188e04506251b6",
+      "published": "2026-03-25T20:19:14Z",
+      "summary": "use COMPUTE_DTYPE-aware cast in Muon polar express step The bf16 cast is intentional for speed on Hopper+ GPUs, but should be skipped on other platforms rather than blindly applied. fp16 is unstable here due to its limited exponent range, and fp32 platforms don't benefit from the cast. Now: bf16 when COMPUTE_DTYPE is bf16, no cast otherwise. Inspired by PR #667. Co-Authored-By: Claude Opus 4.6 (1M context)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/4e1694cc957075591fda8adb4a1f34b2f47fdea1",
+      "title": "bunch of ideas tried from openai/parameter-golf, all negative results\u2026",
+      "link": "https://github.com/karpathy/nanochat/commit/4e1694cc957075591fda8adb4a1f34b2f47fdea1",
+      "published": "2026-03-24T22:13:13Z",
+      "summary": "bunch of ideas tried from openai/parameter-golf, all negative results for nanochat"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/1cd94d768f14ac4a20249eedc89df568f3f4d50b",
+      "title": "bump D:N ratio to 12 per recent scaling laws re-run",
+      "link": "https://github.com/karpathy/nanochat/commit/1cd94d768f14ac4a20249eedc89df568f3f4d50b",
+      "published": "2026-03-24T19:25:50Z",
+      "summary": "bump D:N ratio to 12 per recent scaling laws re-run"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/c16db281ffe816966e8a4e1ef79b00d4b627228a",
+      "title": "fix small bug with params logging and batch size",
+      "link": "https://github.com/karpathy/nanochat/commit/c16db281ffe816966e8a4e1ef79b00d4b627228a",
+      "published": "2026-03-24T19:25:34Z",
+      "summary": "fix small bug with params logging and batch size"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/dfe7d39ce8f40c948222e493c7f39e39f0e9189e",
+      "title": "Merge branch 'master' into fix/typo",
+      "link": "https://github.com/karpathy/nanochat/commit/dfe7d39ce8f40c948222e493c7f39e39f0e9189e",
+      "published": "2026-03-18T16:01:45Z",
+      "summary": "Merge branch 'master' into fix/typo"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/5019accc5bc75400c33148253adfa25dc57c153b",
+      "title": "fix scaling laws scripts after the bigram embeddings were removed",
+      "link": "https://github.com/karpathy/nanochat/commit/5019accc5bc75400c33148253adfa25dc57c153b",
+      "published": "2026-03-17T16:55:56Z",
+      "summary": "fix scaling laws scripts after the bigram embeddings were removed"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/51f42a4406ccd5223f945edbbd6deefba14e3f97",
+      "title": "~1.5h :-)",
+      "link": "https://github.com/karpathy/nanochat/commit/51f42a4406ccd5223f945edbbd6deefba14e3f97",
+      "published": "2026-03-15T21:29:27Z",
+      "summary": "~1.5h :-)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/1f9e42a85588c34be86e4cb30db5488b0f01f4c2",
+      "title": "two more typos, from PR 645",
+      "link": "https://github.com/karpathy/nanochat/commit/1f9e42a85588c34be86e4cb30db5488b0f01f4c2",
+      "published": "2026-03-15T21:27:18Z",
+      "summary": "two more typos, from PR 645"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/bd6e9c8d5fb1d02f43bb4bb0c837736183662b39",
+      "title": "fix numbering",
+      "link": "https://github.com/karpathy/nanochat/commit/bd6e9c8d5fb1d02f43bb4bb0c837736183662b39",
+      "published": "2026-03-15T21:18:18Z",
+      "summary": "fix numbering"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/02e865c2ab150a1e1a906d4ba7e330027ec49208",
+      "title": "Merge branch 'master' into fix/typo",
+      "link": "https://github.com/karpathy/nanochat/commit/02e865c2ab150a1e1a906d4ba7e330027ec49208",
+      "published": "2026-03-15T21:18:01Z",
+      "summary": "Merge branch 'master' into fix/typo"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/1b1cc3c599908330bbe620c79e0ad00a87ff07c7",
+      "title": "submit new time to GPT-2 leaderboard entry: 99 minutes",
+      "link": "https://github.com/karpathy/nanochat/commit/1b1cc3c599908330bbe620c79e0ad00a87ff07c7",
+      "published": "2026-03-14T17:15:01Z",
+      "summary": "submit new time to GPT-2 leaderboard entry: 99 minutes"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/a825e63f81e62e2e9fd38655e9b2e39417620545",
+      "title": "Autoresearch round 2: smear, backout, and hyperparameter tuning",
+      "link": "https://github.com/karpathy/nanochat/commit/a825e63f81e62e2e9fd38655e9b2e39417620545",
+      "published": "2026-03-14T17:03:06Z",
+      "summary": "Autoresearch round 2: smear, backout, and hyperparameter tuning New architectural features: - Smear: mix previous token embedding into current position via learned gate, providing cheap bigram-like info (works in training + KV cache) - Backout: subtract learned fraction of mid-layer residual before logit projection to remove low-level features Hyperparameter tuning: - Muon momentum warmdown 0.97\u21920.90 during LR warmdown phase - Non-uniform per-layer init: resid_lambdas 1.15\u21921.05, x0_lambdas 0.20\u21920.05 - c_fc init scale 0.4x, QK norm scale 1.2, sliding window seq_len/4 - Speedrun data:params ratio reduced to 8 Co-Authored-By: Claude Opus 4.6 (1M context)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/6405b26d24ff66c431aa8e5e14f9ee55e812832a",
+      "title": "Merge branch 'master' into fix/typo",
+      "link": "https://github.com/karpathy/nanochat/commit/6405b26d24ff66c431aa8e5e14f9ee55e812832a",
+      "published": "2026-03-13T12:56:50Z",
+      "summary": "Merge branch 'master' into fix/typo"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/1052d25d454847a4bbf2cb85cbee250471535814",
+      "title": "we only need to wait 2h now!",
+      "link": "https://github.com/karpathy/nanochat/commit/1052d25d454847a4bbf2cb85cbee250471535814",
+      "published": "2026-03-13T12:46:16Z",
+      "summary": "we only need to wait 2h now!"
+    }
+  ]
+}

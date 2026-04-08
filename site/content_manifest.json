@@ -1,0 +1,67 @@
+{
+  "site": {
+    "title": "Nodehome",
+    "tagline": "AI after the browser.",
+    "description": "A running publication about local models, private inference, self-hosted agents, weird hardware, research sweeps, and the builders wiring their own AI stack together.",
+    "eyebrow": "Independent publication // local-first AI // field reports from owned systems",
+    "editor_note": "AI is getting physical again. It shows up in terminals, racks, side projects, and ugly little workflows people actually control.",
+    "about": "Nodehome covers AI once it leaves the browser and hits real machines: local models, private inference, self-hosted agents, rack builds, research sweeps, and the people doing the wiring themselves.",
+    "signal": "A link-forward publication about owned AI systems. Less launch theater, more model servers, thermals, quantization, note pipelines, and field notes from the local-first frontier."
+  },
+  "posts": [
+    {
+      "slug": "weekly-node-sweep-w15",
+      "title": "Weekly Node Sweep: First Signals from the Local-First Frontier",
+      "source": "docs/sweeps/weekly/2026-W15.md",
+      "date": "2026-04-07",
+      "type": "Digest",
+      "section": "Latest",
+      "excerpt": "A weekly rollup of the strongest signals from the Nodehome sweep system: model releases, local inference infra, hardware notes, and where the local-first scene is actually moving."
+    },
+    {
+      "slug": "karpathy-dossier",
+      "title": "Karpathy Research Dossier",
+      "source": "docs/wiki/research/karpathy-dossier.md",
+      "date": "2026-04-04",
+      "type": "Research",
+      "section": "Field Reports",
+      "excerpt": "A structured dossier on Andrej Karpathy's current projects, vocabulary, workflows, and the ideas shaping the local AI builder ecosystem."
+    },
+    {
+      "slug": "3090-blower-market-april-2026",
+      "title": "RTX 3090 Blower Market Intel, April 2026",
+      "source": "docs/wiki/research/3090-blower-market-april2026.md",
+      "date": "2026-04-04",
+      "type": "Build Log",
+      "section": "Hardware",
+      "excerpt": "Real market pricing, scam patterns, seller behavior, and what actually matters when sourcing blower 3090s for dense local inference builds."
+    },
+    {
+      "slug": "ai-agent-traps",
+      "title": "AI Agent Traps for Local Research Systems",
+      "source": "docs/wiki/research/ai-agent-traps.md",
+      "date": "2026-04-05",
+      "type": "Analysis",
+      "section": "Latest",
+      "excerpt": "How trap categories from current agent research map onto local knowledge pipelines, autonomous sweeps, and builder workflows."
+    },
+    {
+      "slug": "gpu-architecture-comparison",
+      "title": "GPU Architecture Comparison for Local AI Builders",
+      "source": "docs/wiki/research/gpu-architecture-comparison.md",
+      "date": "2026-04-04",
+      "type": "Reference",
+      "section": "Hardware",
+      "excerpt": "A practical comparison of 3090s, 4090s, 5090s, A100s, and H100s through the lens of local inference, not data center marketing."
+    },
+    {
+      "slug": "sovereign-node-build-guide",
+      "title": "Sovereign Node v1.0 Build and Configuration Guide",
+      "source": "docs/wiki/research/sovereign-node-build-guide.md",
+      "date": "2026-04-05",
+      "type": "Build Log",
+      "section": "Field Reports",
+      "excerpt": "A real-world multi-GPU rack build guide covering BIOS settings, Linux/NVIDIA setup, multi-GPU inference, and the gotchas that actually matter."
+    }
+  ]
+}
