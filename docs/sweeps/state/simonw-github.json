@@ -1,0 +1,194 @@
+{
+  "saved_at": "2026-04-07T17:28:31.151918+00:00",
+  "items": [
+    {
+      "id": "tag:github.com,2008:push/10293742244",
+      "title": "simonw pushed llm",
+      "link": "https://github.com/simonw/llm/compare/cad03fb4f4...1bfb96d60b",
+      "published": "2026-04-07 16:11:45 UTC",
+      "summary": "simonw pushed to main in simonw/llm \u00b7 April 7, 2026 16:11 1 commit to main 1bfb96d Ignore *.db (temporary test databases)"
+    },
+    {
+      "id": "tag:github.com,2008:push/10292532234",
+      "title": "simonw pushed research",
+      "link": "https://github.com/simonw/research/compare/8f953578d1...df8daf3952",
+      "published": "2026-04-07 15:41:15 UTC",
+      "summary": "simonw pushed to main in simonw/research \u00b7 April 7, 2026 15:41 1 commit to main df8daf3 SQLite WAL mode works correctly across Docker containers sharing a vo\u2026"
+    },
+    {
+      "id": "tag:github.com,2008:pr_merged/8165259428",
+      "title": "simonw contributed to simonw/research",
+      "link": "https://github.com/simonw/research/pull/106",
+      "published": "2026-04-07 08:41:13 -0700",
+      "summary": "simonw merged simonw/research#106 \u00b7 April 7, 2026 08:41 SQLite WAL mode works correctly across Docker containers sharing a volume #106 SQLite in WAL mode: if you have two Docker containers each with the same volume mounted, does WAL mode work correctly or is there an issue that th\u2026 +439 -0"
+    },
+    {
+      "id": "tag:github.com,2008:pr_created/8165241229",
+      "title": "simonw contributed to simonw/research",
+      "link": "https://github.com/simonw/research/pull/106",
+      "published": "2026-04-07 08:40:46 -0700",
+      "summary": "simonw opened simonw/research#106 \u00b7 April 7, 2026 08:40 SQLite WAL mode works correctly across Docker containers sharing a volume #106 SQLite in WAL mode: if you have two Docker containers each with the same volume mounted, does WAL mode work correctly or is there an issue that th\u2026 +439 -0"
+    },
+    {
+      "id": "tag:github.com,2008:push/10292493490",
+      "title": "simonw created a branch",
+      "link": "https://github.com/simonw/research/compare/0000000000...414292b88d",
+      "published": "2026-04-07 15:40:13 UTC",
+      "summary": "simonw created a branch in simonw/research \u00b7 April 7, 2026 15:40 refs/heads/sqlite-wal in simonw/research Updated Apr 7"
+    },
+    {
+      "id": "tag:github.com,2008:star/8163557770",
+      "title": "simonw starred milla-jovovich/mempalace",
+      "link": "https://github.com/milla-jovovich/mempalace",
+      "published": "2026-04-07 07:58:14 -0700",
+      "summary": "simonw starred milla-jovovich/mempalace \u00b7 April 7, 2026 07:58 milla-jovovich/mempalace The highest-scoring AI memory system ever benchmarked. And it's free. Python 12.8k Updated Apr 6"
+    },
+    {
+      "id": "tag:github.com,2008:push/10258339967",
+      "title": "simonw pushed llm",
+      "link": "https://github.com/simonw/llm/compare/3be4505317...226d73d805",
+      "published": "2026-04-06 21:13:25 UTC",
+      "summary": "simonw pushed to parts in simonw/llm \u00b7 April 6, 2026 21:13 2 commits to parts 2949373 Add generic plugin upgrade guide for StreamEvent/parts support ed22399 Update plugin upgrade guide with lessons from llm-mistral conversion 4 more commits \u00bb"
+    },
+    {
+      "id": "tag:github.com,2008:publish_release/8108938487",
+      "title": "datasette released 0.2 at datasette/datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/releases/tag/0.2",
+      "published": "2026-04-05 20:25:43 -0700",
+      "summary": "simonw released 0.2 of datasette/datasette-ports \u00b7 April 5, 2026 20:25 datasette / /datasette/datasette-ports 0.2 No longer requires Datasette - running uvx datasette-ports now works as well. Installing it as a Datasette plugin continues to provide the datasette ports command."
+    },
+    {
+      "id": "tag:github.com,2008:push/10227235712",
+      "title": "simonw pushed datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/compare/7cd77feb7e...5d68f6e641",
+      "published": "2026-04-06 03:24:58 UTC",
+      "summary": "simonw pushed to main in datasette/datasette-ports \u00b7 April 6, 2026 03:24 1 commit to main 5d68f6e Release 0.2"
+    },
+    {
+      "id": "tag:github.com,2008:push/10227231739",
+      "title": "simonw pushed datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/compare/4190d06b54...7cd77feb7e",
+      "published": "2026-04-06 03:24:44 UTC",
+      "summary": "simonw pushed to main in datasette/datasette-ports \u00b7 April 6, 2026 03:24 1 commit to main 7cd77fe Don't depend on datasette unless used as a plugin"
+    },
+    {
+      "id": "tag:github.com,2008:push/10227223815",
+      "title": "simonw pushed datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/compare/da442ec779...4190d06b54",
+      "published": "2026-04-06 03:24:18 UTC",
+      "summary": "simonw pushed to main in datasette/datasette-ports \u00b7 April 6, 2026 03:24 1 commit to main 4190d06 Don't depend on datasette unless used as a plugin"
+    },
+    {
+      "id": "tag:github.com,2008:push/10227185208",
+      "title": "simonw pushed datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/compare/a5dc52b1eb...da442ec779",
+      "published": "2026-04-06 03:22:11 UTC",
+      "summary": "simonw pushed to main in datasette/datasette-ports \u00b7 April 6, 2026 03:22 2 commits to main 58bd932 Also register datasette-ports command script da442ec Don't depend on datasette unless used as a plugin"
+    },
+    {
+      "id": "tag:github.com,2008:publish_release/8108555615",
+      "title": "simonw released 0.3 at simonw/scan-for-secrets",
+      "link": "https://github.com/simonw/scan-for-secrets/releases/tag/0.3",
+      "published": "2026-04-05 19:59:28 -0700",
+      "summary": "simonw released 0.3 of simonw/scan-for-secrets \u00b7 April 5, 2026 19:59 simonw / /simonw/scan-for-secrets 0.3 New -r/--redact option which shows the list of matches, asks for confirmation and then replaces every match with REDACTED , taking escaping rules into account. New Python function redact_file(file_\u2026 Read more"
+    },
+    {
+      "id": "tag:github.com,2008:push/10226711316",
+      "title": "simonw pushed scan-for-secrets",
+      "link": "https://github.com/simonw/scan-for-secrets/compare/0c41f415a4...f9a3cc0ed0",
+      "published": "2026-04-06 02:58:21 UTC",
+      "summary": "simonw pushed to main in simonw/scan-for-secrets \u00b7 April 6, 2026 02:58 1 commit to main f9a3cc0 Release 0.3"
+    },
+    {
+      "id": "tag:github.com,2008:push/10226701079",
+      "title": "simonw pushed scan-for-secrets",
+      "link": "https://github.com/simonw/scan-for-secrets/compare/a7cb65d599...0c41f415a4",
+      "published": "2026-04-06 02:57:49 UTC",
+      "summary": "simonw pushed to main in simonw/scan-for-secrets \u00b7 April 6, 2026 02:57 1 commit to main 0c41f41 -r/--redact flag ( #1 )"
+    },
+    {
+      "id": "tag:github.com,2008:pr_merged/8108533756",
+      "title": "simonw contributed to simonw/scan-for-secrets",
+      "link": "https://github.com/simonw/scan-for-secrets/pull/1",
+      "published": "2026-04-05 19:57:48 -0700",
+      "summary": "simonw merged simonw/scan-for-secrets#1 \u00b7 April 5, 2026 19:57 -r/--redact flag for redacting strings #1 Add a -r/--redact option which asks for user approval (after telling it how many replacements will happen and in which files and which lines - sta\u2026 +274 -15 1 comment"
+    },
+    {
+      "id": "tag:github.com,2008:push/10226654743",
+      "title": "simonw pushed tools",
+      "link": "https://github.com/simonw/tools/compare/7173a95388...787cb39d44",
+      "published": "2026-04-06 02:55:24 UTC",
+      "summary": "simonw pushed to main in simonw/tools \u00b7 April 6, 2026 02:55 1 commit to main 787cb39 Add cleanup-claude-code-paste tool ( #264 )"
+    },
+    {
+      "id": "tag:github.com,2008:pr_merged/8108497767",
+      "title": "simonw contributed to simonw/tools",
+      "link": "https://github.com/simonw/tools/pull/264",
+      "published": "2026-04-05 19:55:23 -0700",
+      "summary": "simonw merged simonw/tools#264 \u00b7 April 5, 2026 19:55 Add Claude code paste cleanup utility #264 Build cleanup-claude-code-paste.html It lets you paste in text like this (note all the whitespace): \u276f Add a -r/--redact option which asks for user\u2026 +146 -0 2 comments"
+    },
+    {
+      "id": "tag:github.com,2008:pr_created/8108470713",
+      "title": "simonw contributed to simonw/tools",
+      "link": "https://github.com/simonw/tools/pull/264",
+      "published": "2026-04-05 19:53:27 -0700",
+      "summary": "simonw opened simonw/tools#264 \u00b7 April 5, 2026 19:53 Add Claude code paste cleanup utility #264 Build cleanup-claude-code-paste.html It lets you paste in text like this (note all the whitespace): \u276f Add a -r/--redact option which asks for user\u2026 +146 -0 2 comments"
+    },
+    {
+      "id": "tag:github.com,2008:pr_created/8108440731",
+      "title": "simonw contributed to simonw/scan-for-secrets",
+      "link": "https://github.com/simonw/scan-for-secrets/pull/1",
+      "published": "2026-04-05 19:51:16 -0700",
+      "summary": "simonw opened simonw/scan-for-secrets#1 \u00b7 April 5, 2026 19:51 -r/--redact flag for redacting strings #1 Add a -r/--redact option which asks for user approval (after telling it how many replacements will happen and in which files and which lines - sta\u2026 +274 -15 1 comment"
+    },
+    {
+      "id": "tag:github.com,2008:push/10226571783",
+      "title": "simonw created a branch",
+      "link": "https://github.com/simonw/scan-for-secrets/compare/0000000000...9de00e2d22",
+      "published": "2026-04-06 02:51:01 UTC",
+      "summary": "simonw created a branch in simonw/scan-for-secrets \u00b7 April 6, 2026 02:51 refs/heads/redact in simonw/scan-for-secrets Updated Apr 6"
+    },
+    {
+      "id": "tag:github.com,2008:publish_release/8106625889",
+      "title": "datasette released 0.1 at datasette/datasette-ports",
+      "link": "https://github.com/datasette/datasette-ports/releases/tag/0.1",
+      "published": "2026-04-05 17:23:55 -0700",
+      "summary": "simonw released 0.1 of datasette/datasette-ports \u00b7 April 5, 2026 17:23 datasette / /datasette/datasette-ports 0.1 Initial release. Run datasette ports to see a list of all Datasette instances on the current machine."
+    },
+    {
+      "id": "tag:github.com,2008:push/10223879505",
+      "title": "simonw created a branch",
+      "link": "https://github.com/datasette/datasette-ports/compare/0000000000...a5dc52b1eb",
+      "published": "2026-04-06 00:22:31 UTC",
+      "summary": "simonw created a branch in datasette/datasette-ports \u00b7 April 6, 2026 00:22 refs/heads/main in datasette/datasette-ports Updated Apr 6"
+    },
+    {
+      "id": "tag:github.com,2008:push/10223799352",
+      "title": "simonw created a branch",
+      "link": "https://github.com/simonw/tools/compare/0000000000...5f470affb0",
+      "published": "2026-04-06 00:17:57 UTC",
+      "summary": "simonw created a branch in simonw/tools \u00b7 April 6, 2026 00:17 refs/heads/claude/build-cleanup-paste-tool-0qsYc in simonw/tools Updated Apr 6"
+    },
+    {
+      "id": "tag:github.com,2008:push/10223440052",
+      "title": "simonw created a branch",
+      "link": "https://github.com/simonw/llm-mistral/compare/0000000000...185e31c2ea",
+      "published": "2026-04-05 23:57:09 UTC",
+      "summary": "simonw created a branch in simonw/llm-mistral \u00b7 April 5, 2026 23:57 refs/heads/parts in simonw/llm-mistral Updated Apr 5"
+    },
+    {
+      "id": "tag:github.com,2008:push/10219320748",
+      "title": "simonw pushed simonwillisonblog",
+      "link": "https://github.com/simonw/simonwillisonblog/compare/c2f447c389...3ec8c1d6fe",
+      "published": "2026-04-05 19:52:23 UTC",
+      "summary": "simonw pushed to main in simonw/simonwillisonblog \u00b7 April 5, 2026 19:52 1 commit to main 3ec8c1d Fix images inside beats overflowing on homepage and timelines ( #655 )"
+    },
+    {
+      "id": "tag:github.com,2008:pr_merged/8104257697",
+      "title": "simonw contributed to simonw/simonwillisonblog",
+      "link": "https://github.com/simonw/simonwillisonblog/pull/655",
+      "published": "2026-04-05 12:52:22 -0700",
+      "summary": "simonw merged simonw/simonwillisonblog#655 \u00b7 April 5, 2026 12:52 Make images in beat notes responsive with max-width constraint #655 Make sure that images inside beats on the hompage and other timelines have max width 100% Summary Added CSS styling to make images within beat no\u2026 +5 -0 1 comment"
+    }
+  ]
+}

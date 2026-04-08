@@ -1,0 +1,5 @@
+RESEND_API_KEY=re_xxxxxxxxx
+DIGEST_FROM_EMAIL=digest@example.com
+DIGEST_FROM_NAME=AI Sweep
+DIGEST_TO_EMAILS=bmoore7789@gmail.com
+DIGEST_EMAIL_ENABLED=true

@@ -1,0 +1,145 @@
+{
+  "saved_at": "2026-04-07T17:28:31.072864+00:00",
+  "items": [
+    {
+      "id": "tag:github.com,2008:Grit::Commit/de1aa6fa73e135839109e09fec1a0997f4207b2a",
+      "title": "CUDA: check for buffer overlap before fusing (#21566)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/de1aa6fa73e135839109e09fec1a0997f4207b2a",
+      "published": "2026-04-07T16:57:04Z",
+      "summary": "CUDA: check for buffer overlap before fusing (#21566) * CUDA: check for buffer overlap before fusing * use ggml_cuda_check_fusion_memory_ranges"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/69c28f1547c169902f62ca48bee75fb876c4d8e6",
+      "title": "llama-server: fix model params not propagated (#21509)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/69c28f1547c169902f62ca48bee75fb876c4d8e6",
+      "published": "2026-04-07T13:39:41Z",
+      "summary": "llama-server: fix model params not propagated (#21509) Signed-off-by: Aaron Teo"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/0d049d6a9245ccffc6073743ff8b6bb24ac6a47b",
+      "title": "unicode : add custom Qwen2 regex handler to fix segfault on long inpu\u2026",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/0d049d6a9245ccffc6073743ff8b6bb24ac6a47b",
+      "published": "2026-04-07T13:13:38Z",
+      "summary": "unicode : add custom Qwen2 regex handler to fix segfault on long input (#21257) * unicode : add custom Qwen2 regex handler to fix segfault on long input std::regex uses recursive backtracking internally, which causes a stack overflow (segfault) when tokenizing long sequences of repeated characters (e.g. 43K 'A's). The Qwen2 tokenizer regex differs from Llama3 only in the digit pattern (\\p{N} vs \\p{N}{1,3}), so it was falling through to the std::regex fallback path instead of using a custom handler. Add unicode_regex_split_custom_qwen2() following the established pattern used by gpt2, llama3, kimi_k2, and afmoe custom handlers. Closes: https://github.com/ggml-org/llama.cpp/issues/21113 * cont : remove TODO comment * cont : update comment to reflect original regex * use the correct regex in the comment this time... [no ci] --------- Co-authored-by: Aldehir Rojas"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/a8ec0df4617692ef0f18b212f2e16bba540e053a",
+      "title": "llama: remove per-arch tensor name lists (#21531)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/a8ec0df4617692ef0f18b212f2e16bba540e053a",
+      "published": "2026-04-07T13:02:03Z",
+      "summary": "llama: remove per-arch tensor name lists (#21531)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/e8f50826979b5d3d4f54e522e552caf430edce0d",
+      "title": "server : fix restore for checkpoints with pos_min == 0 (#21510)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/e8f50826979b5d3d4f54e522e552caf430edce0d",
+      "published": "2026-04-07T12:29:17Z",
+      "summary": "server : fix restore for checkpoints with pos_min == 0 (#21510)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/22fc79134e23feea5cbc1074eaae77143932ccbc",
+      "title": "ggml : deprecate GGML_OP_ADD1 (#21363)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/22fc79134e23feea5cbc1074eaae77143932ccbc",
+      "published": "2026-04-07T12:28:27Z",
+      "summary": "ggml : deprecate GGML_OP_ADD1 (#21363) * ggml : deprecate GGML_OP_ADD1 * cont : remove tests * cont : re-enable vulkan check"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/2a619f6fbce255924e8c08a2b82ff96e1d65c2e6",
+      "title": "ggml: Vulkan build, Linux -- output error string for errno on fork fa\u2026",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/2a619f6fbce255924e8c08a2b82ff96e1d65c2e6",
+      "published": "2026-04-07T11:54:55Z",
+      "summary": "ggml: Vulkan build, Linux -- output error string for errno on fork failure (#20868) (#20904)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/edd4d9bca5dcb9be1ce66e618157d8787a0ea16f",
+      "title": "vulkan: add FA dequant for q4_1, q5_0, q5_1, iq4_nl (#21029)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/edd4d9bca5dcb9be1ce66e618157d8787a0ea16f",
+      "published": "2026-04-07T11:41:29Z",
+      "summary": "vulkan: add FA dequant for q4_1, q5_0, q5_1, iq4_nl (#21029) Add dequantize4() implementations for Q4_1, Q5_0, Q5_1, and IQ4_NL in the flash attention base shader. Register them in the shader generator, pipeline creation, and enable in the scalar/coopmat1 FA support check."
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/482192f12dbb79e710505bb454599caa5f4354ec",
+      "title": "webui : store reasoning_content so it is sent back in subsequent requ\u2026",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/482192f12dbb79e710505bb454599caa5f4354ec",
+      "published": "2026-04-07T11:32:44Z",
+      "summary": "webui : store reasoning_content so it is sent back in subsequent requests (#21249)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/71a81f6fcc2c7e4bf17c3c2484c9498358d173b2",
+      "title": "ggml-cuda : fix CDNA2 compute capability constant for gfx90a (MI210) \u2026",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/71a81f6fcc2c7e4bf17c3c2484c9498358d173b2",
+      "published": "2026-04-07T10:18:55Z",
+      "summary": "ggml-cuda : fix CDNA2 compute capability constant for gfx90a (MI210) (#21519) GGML_CUDA_CC_CDNA2 was set to 0x910 Fix by setting the constant to 0x90a to match the actual gfx90a ISA."
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/ecce0087da749a5d7b0314aae9f1f136eee8b834",
+      "title": "fix: Detect streaming state in reasoning content blocks (#21549)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/ecce0087da749a5d7b0314aae9f1f136eee8b834",
+      "published": "2026-04-07T10:04:41Z",
+      "summary": "fix: Detect streaming state in reasoning content blocks (#21549)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/d1f82e382ddf67f63ee0fd28ae613456cbb23481",
+      "title": "Fix rtl text rendering (#21382)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/d1f82e382ddf67f63ee0fd28ae613456cbb23481",
+      "published": "2026-04-07T09:37:20Z",
+      "summary": "Fix rtl text rendering (#21382) * Fix Arabic RTL text rendering in web UI - Add dir='auto' attributes to markdown containers and blocks - Implement post-processing to add dir='auto' to all text elements - Replace directional CSS properties with logical properties for proper RTL list alignment - Ensure bidirectional text support for mixed Arabic/English content * Clean up commented duplicate function Remove the commented-out duplicate transformMdastNode function that was left over from refactoring. * Fix Arabic RTL text rendering in web UI - Add dir='auto' attributes to markdown containers and blocks - Implement post-processing to add dir='auto' to all text elements - Replace directional CSS properties with logical properties for proper RTL list alignment - Minor code formatting improvements This ensures bidirectional text support for mixed Arabic/English content in the llama.cpp web UI. * Implement rehype plugin for comprehensive RTL text support - Add rehypeRtlSupport plugin that applies dir='auto' to all elements with children - Replace DOMParser-based approach with efficient HAST tree processing - Remove hardcoded element lists for better maintainability - Ensure proper bidirectional text rendering for mixed RTL/LTR content * Fix RTL text rendering with rehype plugin and cleanup * fix: prettier formatting"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/0988accf824e817d0e3db55c05f5f2954fbfe505",
+      "title": "[SYCL] Add Q8_0 reorder optimization (~3x tg speedup on Intel Arc) (#\u2026",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/0988accf824e817d0e3db55c05f5f2954fbfe505",
+      "published": "2026-04-07T08:12:49Z",
+      "summary": "[SYCL] Add Q8_0 reorder optimization (~3x tg speedup on Intel Arc) (#21527) Extend the existing reorder optimization to Q8_0. The reorder separates scale factors from weight data for coalesced memory access -- was implemented for Q4_0/Q4_K/Q6_K but Q8_0 was missing. On Arc Pro B70 (Xe2), Q8_0 tg goes from 4.88 to 15.24 t/s (3.1x) on Qwen3.5-27B. BW utilization: 21% -> 66%. The key fix beyond the kernels: Q8_0 was missing from the type check in ggml_backend_sycl_buffer_init_tensor() that allocates the extra struct carrying the reorder flag -- so the optimization was silently skipped. AI (Claude) was used to assist with root cause investigation and writing the kernel code. All code was human-reviewed and tested on real hardware. Fixes: #21517"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/0033f53a072af953b457c9fd2314e6e28bd11cc7",
+      "title": "docs: fix typo in build.md (emdawbwebgpu -> emdawnwebgpu) (#21518)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/0033f53a072af953b457c9fd2314e6e28bd11cc7",
+      "published": "2026-04-07T04:37:26Z",
+      "summary": "docs: fix typo in build.md (emdawbwebgpu -> emdawnwebgpu) (#21518)"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/d0a6dfeb28a09831d904fc4d910ddb740da82834",
+      "title": "ggml-webgpu: Add the support of `MUL_MAT_ID` (#21147)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/d0a6dfeb28a09831d904fc4d910ddb740da82834",
+      "published": "2026-04-06T20:08:46Z",
+      "summary": "ggml-webgpu: Add the support of `MUL_MAT_ID` (#21147) * Add mul_mat_id support to WebGPU * Apply suggestion from @reeselevine --------- Co-authored-by: Reese Levine"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/2e1f0a889e19a3922db57452268f4574c35c36e5",
+      "title": "ggml: add Q1_0 1-bit quantization support (CPU) (#21273)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/2e1f0a889e19a3922db57452268f4574c35c36e5",
+      "published": "2026-04-06T18:55:21Z",
+      "summary": "ggml: add Q1_0 1-bit quantization support (CPU) (#21273) * ggml: add Q1_0 and Q1_0_g128 1-bit quantization support (CPU) * add generic fallback for x86 * remove Q1_0 (group size 32) * rename Q1_0_g128 => Q1_0 * fix Q1_0 LlamaFileType Enum * Fix trailing spaces; add generic fallback for othre backends * Apply suggestions from code review Co-authored-by: Sigbj\u00f8rn Skj\u00e6ret * fix /r/n spacing + arch-fallback --------- Co-authored-by: Sigbj\u00f8rn Skj\u00e6ret"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/506200cf8b5c8419ce97d16dc8c50f4634e21ebe",
+      "title": "cli: fix stripping of \\n in multiline input (#21485)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/506200cf8b5c8419ce97d16dc8c50f4634e21ebe",
+      "published": "2026-04-06T18:54:06Z",
+      "summary": "cli: fix stripping of \\n in multiline input (#21485) * llama-cli: fix stripping of \\n in multiline input * Change & string to string_view * Apply suggestions from code review Co-authored-by: Sigbj\u00f8rn Skj\u00e6ret * Fix EditorConfig linter error --------- Co-authored-by: Sigbj\u00f8rn Skj\u00e6ret"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/15f786e6581598638840276948a7e6183fc96a83",
+      "title": "[CUDA ] Write an optimized flash_attn_stream_k_fixup kernel (#21159)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/15f786e6581598638840276948a7e6183fc96a83",
+      "published": "2026-04-06T18:34:29Z",
+      "summary": "[CUDA ] Write an optimized flash_attn_stream_k_fixup kernel (#21159) * Write an optimized flash_attn_stream_k_fixup kernel Write a specialized and more optimized kernel for cases where nblocks_stream_k is multiple of ntiles_dst. Make nblocks_stream_k to multiple of ntiles_dst if nblocks_stream_k > 2 * ntiles_dst * Use the new kernel only for nblocks_stream_k_raw > 4 * ntiles_dst to make sure we have enough concurrency on GPUs * Address review comments * Address review comments * Revert variable names to original"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/94ca829b6001019622c0f67fcd48e9ec6bd7dce8",
+      "title": "llama-bench: add `-fitc` and `-fitt` to arguments (#21304)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/94ca829b6001019622c0f67fcd48e9ec6bd7dce8",
+      "published": "2026-04-06T14:26:02Z",
+      "summary": "llama-bench: add `-fitc` and `-fitt` to arguments (#21304) * llama-bench: add `-fitc` and `-fitt` to arguments * update README.md * address review comments * update compare-llama-bench.py"
+    },
+    {
+      "id": "tag:github.com,2008:Grit::Commit/4aa962e2b0d04e6be6944f899edbdbe26177e492",
+      "title": "vocab : add byte token handling to BPE detokenizer for Gemma4 (#21488)",
+      "link": "https://github.com/ggml-org/llama.cpp/commit/4aa962e2b0d04e6be6944f899edbdbe26177e492",
+      "published": "2026-04-06T14:08:37Z",
+      "summary": "vocab : add byte token handling to BPE detokenizer for Gemma4 (#21488)"
+    }
+  ]
+}
