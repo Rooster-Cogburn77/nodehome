@@ -32,6 +32,25 @@ Required environment variables:
 5. Attach the custom domain:
    - `nodehome.ai`
 
+## GitHub-Connected Setup
+
+Repository:
+
+- `Rooster-Cogburn77/nodehome`
+
+Use these exact settings in Cloudflare Pages:
+
+- Production branch: `main`
+- Build command: `python site/build_site.py`
+- Build output directory: `site/public`
+- Root directory: repo root / leave blank
+
+Recommended outcome:
+
+- GitHub becomes the source of truth
+- pushes to `main` trigger production deploys
+- the direct-upload script remains available as fallback
+
 ## Notes
 
 - This site is fully static.
