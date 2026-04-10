@@ -43,6 +43,7 @@
 - Elevated Georgi Gerganov, Open WebUI leadership, and the LM Studio team in the docs as first-tier public builders to watch in local-first AI
 - Added build-specific sources for local inference and rack homelab relevance: TheBlokeAI, technomancers_ai, concat_ai, ServeTheHome, Level1Techs, and VideoCardz; flagged _akhaliq and arankomatsuzaki as volume-risk sources to review
 - Added Resend email-delivery scaffolding: separate sender script, workflow runner, env example, and scheduler flow updated to `generate -> optional send`
+- Captured David Mohl's `MCP vs Skills` framing as a useful `connectors vs manuals` pattern for Nodehome and Sovereign Node: MCP/connectors for service access, skills/manuals for gotchas and operator knowledge
 **Commits:** N/A
 **Next:** Inspect mobo+CPU (socket pins, BMC password). Await remaining deliveries. Assembly when GPUs arrive.
 
