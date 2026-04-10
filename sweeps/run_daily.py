@@ -6,9 +6,11 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import random
 import time
 import re
 import sys
+import threading
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -32,6 +34,9 @@ DEGRADED_PATH = SWEEPS_DIR / "health" / "degraded_sources.json"
 RAW_DIR = ROOT / "docs" / "wiki" / "raw"
 MANIFEST_PATH = ROOT / "sweeps" / "sources.json"
 USER_AGENT = "SovereignNodeSweep/0.1 (+local)"
+OPENRSS_CONCURRENCY = 2
+OPENRSS_DELAY_RANGE = (2.0, 5.0)
+_openrss_semaphore = threading.Semaphore(OPENRSS_CONCURRENCY)
 QUARANTINE_THRESHOLD = 3
 QUARANTINE_COOLDOWN_HOURS = 12
 MAX_ITEM_AGE_DAYS = 14
@@ -119,8 +124,13 @@ def normalize_text(value: str | None) -> str:
     return value.strip()
 
 
+def _sanitize_xml(xml_bytes: bytes) -> bytes:
+    """Strip bytes that are invalid in XML 1.0 (control chars except tab/newline/cr)."""
+    return bytes(b for b in xml_bytes if b in (0x09, 0x0A, 0x0D) or 0x20 <= b)
+
+
 def parse_feed(xml_bytes: bytes) -> list[dict[str, str]]:
-    root = ET.fromstring(xml_bytes)
+    root = ET.fromstring(_sanitize_xml(xml_bytes))
     items: list[dict[str, str]] = []
 
     if root.tag.endswith("rss"):
@@ -225,6 +235,10 @@ def fetch_page_description(url: str) -> str:
 
 
 def fetch_source(source: Source) -> dict[str, Any]:
+    is_openrss = "openrss.org" in source.url
+    if is_openrss:
+        _openrss_semaphore.acquire()
+        time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
     try:
         body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
         if source.kind == "feed":
@@ -236,6 +250,9 @@ def fetch_source(source: Source) -> dict[str, Any]:
         return {"ok": True, "items": items, "error": ""}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "items": [], "error": str(exc)}
+    finally:
+        if is_openrss:
+            _openrss_semaphore.release()
 
 
 def load_state_items(source_id: str) -> list[dict[str, str]]:
@@ -777,7 +794,8 @@ def synthesize_ai_summary(profile: str, run_date: date, entries: list[dict[str, 
     top_entries = sorted(entries, key=entry_rank)[:12]
     prompt_lines = [
         f"Summarize this AI infrastructure/newsletter sweep for {run_date.isoformat()} ({profile}).",
-        "Write 3-5 tight bullet points for a technical operator.",
+        "Write a single paragraph of 4-6 sentences for a technical operator.",
+        "Do NOT use bullet points. Write fluent, direct prose.",
         "Prioritize concrete developments that matter for local inference, multi-GPU rigs, workflows, and builder signal.",
         "Ignore routine GitHub churn. Mention uncertainty if sources were degraded.",
         "",
@@ -813,6 +831,242 @@ def synthesize_ai_summary(profile: str, run_date: date, entries: list[dict[str, 
     return response_text
 
 
+def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]], failures: list[str]) -> str:
+    """Build a prose summary paragraph without an LLM."""
+    if not entries:
+        return ""
+
+    top = sorted(entries, key=entry_rank)[:20]
+    lane_counts: dict[str, int] = {}
+    for entry in entries:
+        lane_counts[entry["lane"]] = lane_counts.get(entry["lane"], 0) + 1
+
+    total = len(entries)
+    active_lanes = [lane for lane, _count in sorted(lane_counts.items(), key=lambda item: (-item[1], item[0]))]
+    x_failures = sum(1 for failure in failures if failure.startswith("X:"))
+
+    def strip_source_noise(source: str) -> str:
+        replacements = (
+            " GitHub Activity",
+            " Releases",
+            " Commits",
+            " Blog",
+            " Atom",
+            " YouTube",
+        )
+        cleaned = source
+        for token in replacements:
+            cleaned = cleaned.replace(token, "")
+        return cleaned
+
+    def tidy_title(title: str) -> str:
+        cleaned = " ".join(title.split())
+        return cleaned.rstrip(".")
+
+    def normalized_title(title: str) -> str:
+        cleaned = tidy_title(title)
+        if cleaned.lower().startswith("blog | "):
+            cleaned = cleaned.split("|", 1)[1].strip()
+        return cleaned
+
+    def actor_prefix(title: str) -> str:
+        lowered = title.lower()
+        if lowered.startswith("simonw "):
+            return "Simon"
+        if lowered.startswith("karpathy "):
+            return "Karpathy"
+        return ""
+
+    def describe_item(item: dict[str, Any]) -> str:
+        title = normalized_title(item["title"])
+        source = item["source"]
+        lane = item["lane"]
+        source_name = strip_source_noise(source)
+        lowered = title.lower()
+
+        if "serve the home" in source_name.lower() or "servethehome" in source_name.lower():
+            return f"ServeTheHome published {title}"
+        if "level1techs" in source_name.lower():
+            return f"Level1Techs posted {title}"
+        if "geerling" in source_name.lower():
+            return f"Jeff Geerling published {title}"
+        if "simon willison" in source_name.lower():
+            if "released" in lowered or re.fullmatch(r".+\s0\.\d+.*", title):
+                return f"Simon Willison published {title}"
+            return f"Simon surfaced {title}"
+        if "karpathy" in source_name.lower():
+            return f"Karpathy posted {title}"
+        if "ollama" in source_name.lower():
+            return f"Ollama shipped {title}"
+        if "vllm" in source_name.lower():
+            if title.lower() == "vllm":
+                return "vLLM published a new blog post"
+            return f"vLLM shipped {title}"
+        if "llama.cpp" in source_name.lower():
+            if "tensor parallel" in lowered or "split-mode tensor" in lowered:
+                return f"llama.cpp landed {title}"
+            if re.fullmatch(r"b\d+", title):
+                return f"llama.cpp cut release {title}"
+            return f"llama.cpp changed {title}"
+        if lane == "hardware":
+            return f"{source_name} published {title}"
+        if lane == "infra":
+            return f"{source_name} shipped {title}"
+        if lane == "workflow":
+            actor = actor_prefix(title)
+            if actor:
+                return f"{actor} posted {title}"
+            return f"{source_name} surfaced {title}"
+        return f"{source_name} published {title}"
+
+    def contextualize_item(item: dict[str, Any]) -> str:
+        title = normalized_title(item["title"])
+        lowered = title.lower()
+        lane = item["lane"]
+        source_name = strip_source_noise(item["source"])
+
+        if "tensor parallel" in lowered:
+            return "a sign that local multi-GPU serving is still getting serious low-level attention"
+        if "split-mode tensor" in lowered:
+            return "another sign that multi-GPU inference is still in active flux"
+        if "cuda" in lowered:
+            return "small CUDA changes can compound quickly in local inference stacks"
+        if "vulkan" in lowered:
+            return "part of the slow spread of local inference beyond the CUDA-only path"
+        if "10gbe" in lowered or "10gbe" in source_name.lower():
+            return "cheap 10GbE gear is part of the home-rack AI story"
+        if "switch" in lowered:
+            return "cheap networking gear is part of the home-rack AI story"
+        if lowered in {"blog | vllm", "vllm", "blog | ollama", "ollama"}:
+            return "another marker of how fast the local serving layer is moving"
+        if title.startswith("v0.") or "release" in lowered:
+            if lane == "infra":
+                return "the local serving layer keeps moving fast"
+            return "worth reading for practical changes, not just version churn"
+        if lane == "hardware":
+            return "useful signal for people building real machines, not just reading model cards"
+        if lane == "workflow":
+            return "useful if it points to a workflow people can actually steal"
+        if lane == "scene":
+            return "part of the broader local-first AI scene taking shape"
+        return "worth a closer look"
+
+    def preferred_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def priority(item: dict[str, Any]) -> tuple[int, tuple[int, float]]:
+            title = normalized_title(item["title"])
+            lowered = title.lower()
+            score = 0
+            if title.lower() in {"vllm", "ollama"}:
+                score += 8
+            if "pushed " in lowered or "contributed to " in lowered or "opened a pull request" in lowered:
+                score += 5
+            if "created a branch" in lowered or "starred " in lowered:
+                score += 6
+            if re.fullmatch(r"b\d+", title):
+                score += 4
+            if "tensor parallel" in lowered or "split-mode tensor" in lowered or "cuda" in lowered:
+                score -= 5
+            if title.startswith("v0."):
+                score -= 2
+            if "review" in lowered or "benchmark" in lowered:
+                score -= 1
+            if item["lane"] == "workflow" and "github activity" in item["source"].lower():
+                score += 2
+            return (score, entry_rank(item))
+
+        def signature(item: dict[str, Any]) -> tuple[str, str]:
+            title = normalized_title(item["title"])
+            lowered = title.lower()
+            if title.startswith("v0."):
+                base = re.sub(r"rc\d+.*$", "", lowered)
+                return (item["source"], base)
+            if re.fullmatch(r"b\d+", title):
+                return (item["source"], "llamacpp-build")
+            return (item["source"], lowered)
+
+        selected: list[dict[str, Any]] = []
+        seen_signatures: set[tuple[str, str]] = set()
+        seen_lanes: set[str] = set()
+        seen_sources: set[str] = set()
+
+        for item in sorted(items, key=priority):
+            title = normalized_title(item["title"])
+            if title.lower() in {"vllm", "ollama"}:
+                continue
+            item_sig = signature(item)
+            if item_sig in seen_signatures:
+                continue
+            if item["lane"] in seen_lanes and len(seen_lanes) < 3:
+                continue
+            if item["source"] in seen_sources and len(seen_sources) < 3:
+                continue
+            selected.append(item)
+            seen_signatures.add(item_sig)
+            seen_lanes.add(item["lane"])
+            seen_sources.add(item["source"])
+            if len(selected) >= 4:
+                break
+
+        return selected or sorted(items, key=priority)[:4]
+
+    summary_items = preferred_items(top)
+
+    sentences: list[str] = []
+
+    if total == 1:
+        sentences.append("Quiet day.")
+    elif total <= 3:
+        sentences.append("Light day, but not empty.")
+    elif len(active_lanes) >= 3:
+        sentences.append("Busy day across multiple parts of the stack.")
+    elif active_lanes and active_lanes[0] == "infra":
+        sentences.append("Infra led the day.")
+    else:
+        sentences.append("A few things moved today.")
+
+    lead = summary_items[0]
+    sentences.append(f"{describe_item(lead)} — {contextualize_item(lead)}.")
+
+    for item in summary_items[1:4]:
+        lane = item["lane"]
+        if lane == lead["lane"] and total <= 2:
+            continue
+        if lane == lead["lane"] and lead["source"] == item["source"] and total <= 4:
+            continue
+        sentences.append(f"{describe_item(item)} — {contextualize_item(item)}.")
+        if len(sentences) >= 4:
+            break
+
+    if failures and len(sentences) < 5:
+        if total == 1 and x_failures == len(failures) and x_failures > 5:
+            sentences.append("Not a lot broke through, but the signal was clean enough to read.")
+        elif len(failures) > 3 and x_failures < len(failures):
+            sentences.append("The field looked thinner than usual, so treat this as a partial read.")
+
+    emerging = [item for item in top if item.get("novelty") == "emerging"]
+    if emerging and len(sentences) < 5:
+        if len(emerging) == 1:
+            sentences.append(f"One thing to keep an eye on: {normalized_title(emerging[0]['title'])}.")
+        else:
+            sentences.append(
+                f"Early-signal items worth watching include {normalized_title(emerging[0]['title'])} and {normalized_title(emerging[1]['title'])}."
+            )
+
+    while len(sentences) < 4:
+        if total == 1:
+            sentences.append("That was the only new item in the sweep.")
+        elif total <= 3:
+            sentences.append("Short issue, easy to scan.")
+        else:
+            filler = "No single breakthrough, but the pace of small serving-layer fixes is the story."
+            if filler in sentences:
+                sentences.append("Most of the remaining items are smaller release and commit updates.")
+            else:
+                sentences.append(filler)
+
+    return " ".join(sentences[:6]).replace("â€”", "-").replace("—", "-")
+
+
 def write_digest(
     profile: str,
     run_date: date,
@@ -840,7 +1094,7 @@ def write_digest(
         lines.append("")
 
     if ai_summary:
-        lines.extend(["## AI Summary", "", ai_summary, ""])
+        lines.extend(["## Summary", "", ai_summary, ""])
 
     if failures:
         lines.extend(["## Fetch Issues", ""])
@@ -955,6 +1209,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not generate optional AI summary even if enabled by environment.",
     )
+    parser.add_argument(
+        "--replay-current",
+        action="store_true",
+        help="Treat the current fetched snapshot as new items for rendering/testing without relying on saved diff state.",
+    )
     return parser.parse_args()
 
 
@@ -1025,7 +1284,9 @@ def main() -> int:
         items = result["items"]
         had_previous_state = has_previous_state(source.id)
         previous_ids = load_previous_ids(source.id)
-        if had_previous_state or args.bootstrap_emit:
+        if args.replay_current:
+            new_items = items
+        elif had_previous_state or args.bootstrap_emit:
             new_items = [item for item in items if item["id"] not in previous_ids]
         else:
             new_items = []
@@ -1110,8 +1371,11 @@ def main() -> int:
     entries = collapse_github_activity(entries)
     entries.sort(key=lambda entry: (entry["lane"], -sort_stamp(entry["published"]), entry["source"]))
     ai_summary = ""
-    if entries and not args.skip_ai_summary and ai_summary_enabled():
-        ai_summary = synthesize_ai_summary(args.profile, run_date, entries, failures)
+    if entries and not args.skip_ai_summary:
+        if ai_summary_enabled():
+            ai_summary = synthesize_ai_summary(args.profile, run_date, entries, failures)
+        if not ai_summary:
+            ai_summary = heuristic_summary(args.profile, run_date, entries, failures)
     digest_path = write_digest(args.profile, run_date, entries, failures, ai_summary=ai_summary)
     write_validation_queue(args.profile, run_date, validation_queue)
     write_health_report(args.profile, run_date, health_statuses)
