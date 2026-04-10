@@ -34,7 +34,7 @@ MANIFEST_PATH = ROOT / "sweeps" / "sources.json"
 USER_AGENT = "SovereignNodeSweep/0.1 (+local)"
 QUARANTINE_THRESHOLD = 3
 QUARANTINE_COOLDOWN_HOURS = 12
-MAX_ITEM_AGE_DAYS = 5
+MAX_ITEM_AGE_DAYS = 14
 GITHUB_ACTIVITY_COLLAPSE_THRESHOLD = 3
 LLAMACPP_COMMIT_KEYWORDS = (
     "cuda",
@@ -677,13 +677,9 @@ def is_high_signal_commit(title: str) -> bool:
 def is_low_value_github_activity(title: str) -> bool:
     lowered = title.lower()
     low_value_tokens = (
-        "pushed ",
         "created a branch",
         "starred ",
-        "contributed to ",
         "commented on an issue",
-        "closed a pull request",
-        "opened a pull request",
     )
     return any(token in lowered for token in low_value_tokens)
 
@@ -741,51 +737,6 @@ def collapse_github_activity(entries: list[dict[str, Any]]) -> list[dict[str, An
                 "novelty": newest["novelty"],
                 "action": "scan",
                 "why": f"Routine GitHub activity compressed for scanability: {top_types}.",
-                "validation_status": "n/a",
-                "followup_urls": [],
-            }
-        )
-    return passthrough + collapsed
-
-
-def collapse_release_trains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    passthrough: list[dict[str, Any]] = []
-    for entry in entries:
-        source_lower = entry["source"].lower()
-        title = entry["title"]
-        if "releases" not in source_lower:
-            passthrough.append(entry)
-            continue
-        if not (re.fullmatch(r"b\d+", title.strip()) or re.fullmatch(r"v[\w\.\-]+", title.strip(), flags=re.IGNORECASE)):
-            passthrough.append(entry)
-            continue
-        grouped.setdefault((entry["lane"], entry["source"]), []).append(entry)
-
-    collapsed: list[dict[str, Any]] = []
-    for (lane, source), items in grouped.items():
-        if len(items) < 3:
-            collapsed.extend(items)
-            continue
-        newest = max(items, key=lambda item: sort_stamp(item["published"]))
-        titles = [item["title"] for item in sorted(items, key=lambda item: sort_stamp(item["published"]), reverse=True)]
-        if "llama.cpp" in source.lower():
-            summary_title = f"llama.cpp release train: {len(items)} new builds"
-        elif "ollama" in source.lower():
-            summary_title = f"Ollama release train: {titles[-1]} -> {titles[0]}"
-        else:
-            summary_title = f"{source.replace(' Releases', '')}: {len(items)} new releases"
-        collapsed.append(
-            {
-                "lane": lane,
-                "source": source,
-                "title": summary_title,
-                "link": newest["link"],
-                "published": newest["published"],
-                "confidence": newest["confidence"],
-                "novelty": newest["novelty"],
-                "action": "watch",
-                "why": f"Compressed release train for scanability: {', '.join(titles[:4])}.",
                 "validation_status": "n/a",
                 "followup_urls": [],
             }
@@ -1157,7 +1108,6 @@ def main() -> int:
             save_state(source.id, items[:50])
 
     entries = collapse_github_activity(entries)
-    entries = collapse_release_trains(entries)
     entries.sort(key=lambda entry: (entry["lane"], -sort_stamp(entry["published"]), entry["source"]))
     ai_summary = ""
     if entries and not args.skip_ai_summary and ai_summary_enabled():
