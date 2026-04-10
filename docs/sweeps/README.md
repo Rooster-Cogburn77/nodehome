@@ -51,8 +51,12 @@ The script is intentionally narrow:
 - concurrent fetching
 - profile-based watchlists (`core`, `extended`, `all`)
 - top-signals summary at the top of each digest
+- noisy GitHub activity collapsed into summary items when it would otherwise dominate the digest
+- stale backlog items suppressed by age guardrails
+- llama.cpp commit filtering biased toward CUDA, multi-GPU, tensor-parallel, quantization, and related high-signal paths
 - weekly rollup stubs under `docs/sweeps/weekly/`
 - optional Resend email delivery as a separate send step
+- optional AI summary block when a local summary model is configured
 
 Output filenames:
 
@@ -77,6 +81,21 @@ Current X approach:
 - transient feed failures fall back to cached state and are recorded in the health report
 - repeated failures/cached fallbacks accumulate in `degraded_sources.json`
 - sources degraded for repeated runs are quarantined automatically, then retried after a cooldown window
+- local or external inference can optionally synthesize an `AI Summary` section into the digest
+
+Optional AI summary env:
+
+- `SWEEP_AI_SUMMARY_ENABLED=true`
+- `SWEEP_AI_SUMMARY_MODEL=<ollama-model-name>`
+- `SWEEP_AI_SUMMARY_URL=http://127.0.0.1:11434/api/generate`
+
+Example:
+
+```powershell
+$env:SWEEP_AI_SUMMARY_ENABLED='true'
+$env:SWEEP_AI_SUMMARY_MODEL='qwen2.5:14b'
+python sweeps/run_daily.py --profile core
+```
 
 Recommended schedule:
 
