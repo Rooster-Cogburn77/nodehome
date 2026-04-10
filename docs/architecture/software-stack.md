@@ -21,6 +21,13 @@
 | **Claw-code** | Claude Code agent harness (open-source) | github.com/instructkr/claw-code |
 | **Open WebUI** | Chat interface | Browser-based, multi-model |
 
+Working architectural framing:
+
+- `Connectors` for actual service/system access
+- `Manuals` (skills / repo-local guidance) for gotchas, workflow rules, and learned operating knowledge
+
+This is a useful way to think about MCP vs skills in the Sovereign Node stack: not either/or, but connector layer plus knowledge layer.
+
 ## Knowledge Management
 | Tool | Purpose | Notes |
 |------|---------|-------|
