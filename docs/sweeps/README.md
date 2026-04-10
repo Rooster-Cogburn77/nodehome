@@ -51,8 +51,8 @@ The script is intentionally narrow:
 - concurrent fetching
 - profile-based watchlists (`core`, `extended`, `all`)
 - top-signals summary at the top of each digest
-- noisy GitHub activity collapsed into summary items when it would otherwise dominate the digest
-- stale backlog items suppressed by age guardrails
+- obviously low-value GitHub activity collapsed into summary items when it would otherwise dominate the digest
+- stale backlog items suppressed by age guardrails, with a bias toward retaining real infra signal
 - llama.cpp commit filtering biased toward CUDA, multi-GPU, tensor-parallel, quantization, and related high-signal paths
 - weekly rollup stubs under `docs/sweeps/weekly/`
 - optional Resend email delivery as a separate send step
