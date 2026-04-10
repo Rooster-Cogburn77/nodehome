@@ -5,6 +5,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import os
 import time
 import re
 import sys
@@ -33,6 +34,22 @@ MANIFEST_PATH = ROOT / "sweeps" / "sources.json"
 USER_AGENT = "SovereignNodeSweep/0.1 (+local)"
 QUARANTINE_THRESHOLD = 3
 QUARANTINE_COOLDOWN_HOURS = 12
+MAX_ITEM_AGE_DAYS = 5
+GITHUB_ACTIVITY_COLLAPSE_THRESHOLD = 3
+LLAMACPP_COMMIT_KEYWORDS = (
+    "cuda",
+    "vulkan",
+    "hip",
+    "tensor parallel",
+    "split-mode tensor",
+    "multi-gpu",
+    "quant",
+    "qwen",
+    "gemma",
+    "reasoning",
+    "fuse",
+    "backend-agnostic",
+)
 
 
 @dataclass
@@ -637,7 +654,221 @@ def sort_stamp(value: str) -> float:
     return dt.timestamp()
 
 
-def write_digest(profile: str, run_date: date, entries: list[dict[str, str]], failures: list[str]) -> Path:
+def item_age_days(run_date: date, published: str) -> float | None:
+    dt = parse_published(published)
+    if dt.year <= 1900:
+        return None
+    run_dt = datetime.combine(run_date, datetime.min.time(), tzinfo=UTC) + timedelta(days=1)
+    return (run_dt - dt.astimezone(UTC)).total_seconds() / 86400
+
+
+def is_stale_item(run_date: date, item: dict[str, str]) -> bool:
+    age_days = item_age_days(run_date, item.get("published", ""))
+    if age_days is None:
+        return False
+    return age_days > MAX_ITEM_AGE_DAYS
+
+
+def is_high_signal_commit(title: str) -> bool:
+    lowered = title.lower()
+    return any(keyword in lowered for keyword in LLAMACPP_COMMIT_KEYWORDS)
+
+
+def is_low_value_github_activity(title: str) -> bool:
+    lowered = title.lower()
+    low_value_tokens = (
+        "pushed ",
+        "created a branch",
+        "starred ",
+        "contributed to ",
+        "commented on an issue",
+        "closed a pull request",
+        "opened a pull request",
+    )
+    return any(token in lowered for token in low_value_tokens)
+
+
+def collapse_github_activity(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+
+    for entry in entries:
+        if "github activity" not in entry["source"].lower():
+            passthrough.append(entry)
+            continue
+        if not is_low_value_github_activity(entry["title"]):
+            passthrough.append(entry)
+            continue
+        key = (entry["lane"], entry["source"])
+        grouped.setdefault(key, []).append(entry)
+
+    collapsed: list[dict[str, Any]] = []
+    for (lane, source), items in grouped.items():
+        if len(items) < GITHUB_ACTIVITY_COLLAPSE_THRESHOLD:
+            collapsed.extend(items)
+            continue
+        actor = source.replace(" GitHub Activity", "")
+        event_counts: dict[str, int] = {}
+        for item in items:
+            lowered = item["title"].lower()
+            if "pushed " in lowered:
+                label = "pushes"
+            elif "created a branch" in lowered:
+                label = "branch creations"
+            elif "starred " in lowered:
+                label = "stars"
+            elif "opened a pull request" in lowered:
+                label = "pull requests"
+            elif "closed a pull request" in lowered:
+                label = "closed pull requests"
+            elif "commented on an issue" in lowered:
+                label = "issue comments"
+            else:
+                label = "events"
+            event_counts[label] = event_counts.get(label, 0) + 1
+        top_types = ", ".join(
+            f"{count} {label}" for label, count in sorted(event_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+        )
+        newest = max(items, key=lambda item: sort_stamp(item["published"]))
+        collapsed.append(
+            {
+                "lane": lane,
+                "source": source,
+                "title": f"{actor}: {len(items)} GitHub events",
+                "link": newest["link"],
+                "published": newest["published"],
+                "confidence": newest["confidence"],
+                "novelty": newest["novelty"],
+                "action": "scan",
+                "why": f"Routine GitHub activity compressed for scanability: {top_types}.",
+                "validation_status": "n/a",
+                "followup_urls": [],
+            }
+        )
+    return passthrough + collapsed
+
+
+def collapse_release_trains(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for entry in entries:
+        source_lower = entry["source"].lower()
+        title = entry["title"]
+        if "releases" not in source_lower:
+            passthrough.append(entry)
+            continue
+        if not (re.fullmatch(r"b\d+", title.strip()) or re.fullmatch(r"v[\w\.\-]+", title.strip(), flags=re.IGNORECASE)):
+            passthrough.append(entry)
+            continue
+        grouped.setdefault((entry["lane"], entry["source"]), []).append(entry)
+
+    collapsed: list[dict[str, Any]] = []
+    for (lane, source), items in grouped.items():
+        if len(items) < 3:
+            collapsed.extend(items)
+            continue
+        newest = max(items, key=lambda item: sort_stamp(item["published"]))
+        titles = [item["title"] for item in sorted(items, key=lambda item: sort_stamp(item["published"]), reverse=True)]
+        if "llama.cpp" in source.lower():
+            summary_title = f"llama.cpp release train: {len(items)} new builds"
+        elif "ollama" in source.lower():
+            summary_title = f"Ollama release train: {titles[-1]} -> {titles[0]}"
+        else:
+            summary_title = f"{source.replace(' Releases', '')}: {len(items)} new releases"
+        collapsed.append(
+            {
+                "lane": lane,
+                "source": source,
+                "title": summary_title,
+                "link": newest["link"],
+                "published": newest["published"],
+                "confidence": newest["confidence"],
+                "novelty": newest["novelty"],
+                "action": "watch",
+                "why": f"Compressed release train for scanability: {', '.join(titles[:4])}.",
+                "validation_status": "n/a",
+                "followup_urls": [],
+            }
+        )
+    return passthrough + collapsed
+
+
+def infer_specific_why(source: Source, item: dict[str, str]) -> str:
+    title = item["title"].lower()
+    if "llama.cpp releases" in source.name.lower():
+        return "llama.cpp moved again; check whether this release train includes multi-GPU, quantization, or backend changes."
+    if "llama.cpp commits" in source.name.lower():
+        if "tensor parallel" in title or "split-mode tensor" in title:
+            return "Directly relevant to awkward multi-GPU topologies like 3x3090 builds and worth tracking against current stack assumptions."
+        if any(token in title for token in ("cuda", "vulkan", "hip", "quant", "fuse")):
+            return "Touches a performance-sensitive inference backend path that could affect local node throughput or compatibility."
+        return "Relevant llama.cpp implementation movement; read only if it touches your serving path."
+    if "ollama releases" in source.name.lower():
+        return "Operational release for the local serving stack; check notes for compatibility, model support, and multi-GPU changes."
+    if "simon willison atom" in source.name.lower():
+        return "High-signal workflow or tooling note from a builder who often surfaces practical patterns before they spread."
+    if "simon willison github activity" in source.name.lower() and "released" in title:
+        return "A concrete tool release from Simon, usually more useful than routine GitHub activity."
+    if "karpathy" in source.name.lower():
+        return "Direct Karpathy-adjacent signal; useful when it reflects workflow shifts, repo movement, or vocabulary changes."
+    return why_it_matters(source, item)
+
+
+def ai_summary_enabled() -> bool:
+    return os.getenv("SWEEP_AI_SUMMARY_ENABLED", "false").strip().lower() == "true"
+
+
+def synthesize_ai_summary(profile: str, run_date: date, entries: list[dict[str, Any]], failures: list[str]) -> str:
+    model = os.getenv("SWEEP_AI_SUMMARY_MODEL", "").strip()
+    if not model:
+        return ""
+    endpoint = os.getenv("SWEEP_AI_SUMMARY_URL", "http://127.0.0.1:11434/api/generate").strip()
+    top_entries = sorted(entries, key=entry_rank)[:12]
+    prompt_lines = [
+        f"Summarize this AI infrastructure/newsletter sweep for {run_date.isoformat()} ({profile}).",
+        "Write 3-5 tight bullet points for a technical operator.",
+        "Prioritize concrete developments that matter for local inference, multi-GPU rigs, workflows, and builder signal.",
+        "Ignore routine GitHub churn. Mention uncertainty if sources were degraded.",
+        "",
+        "Top items:",
+    ]
+    for entry in top_entries:
+        prompt_lines.append(
+            f"- [{entry['lane']}] {entry['title']} | source={entry['source']} | why={entry['why']}"
+        )
+    if failures:
+        prompt_lines.extend(["", "Fetch issues:"])
+        for failure in failures[:5]:
+            prompt_lines.append(f"- {failure}")
+
+    payload = {
+        "model": model,
+        "prompt": "\n".join(prompt_lines),
+        "stream": False,
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return ""
+    response_text = data.get("response", "")
+    response_text = re.sub(r"\r\n?", "\n", response_text).strip()
+    return response_text
+
+
+def write_digest(
+    profile: str,
+    run_date: date,
+    entries: list[dict[str, Any]],
+    failures: list[str],
+    ai_summary: str = "",
+) -> Path:
     suffix = "" if profile == "core" else f".{profile}"
     path = DAILY_DIR / f"{run_date.isoformat()}{suffix}.md"
     lines = [
@@ -656,6 +887,9 @@ def write_digest(profile: str, run_date: date, entries: list[dict[str, str]], fa
         for entry in top_entries:
             lines.append(f"- [{entry['lane']}] {markdown_escape(entry['title'])} ({entry['source']})")
         lines.append("")
+
+    if ai_summary:
+        lines.extend(["## AI Summary", "", ai_summary, ""])
 
     if failures:
         lines.extend(["## Fetch Issues", ""])
@@ -765,6 +999,11 @@ def parse_args() -> argparse.Namespace:
         default=8,
         help="Maximum concurrent fetch workers.",
     )
+    parser.add_argument(
+        "--skip-ai-summary",
+        action="store_true",
+        help="Do not generate optional AI summary even if enabled by environment.",
+    )
     return parser.parse_args()
 
 
@@ -841,7 +1080,15 @@ def main() -> int:
             new_items = []
             failures.append(f"{source.name}: bootstrapped state from current snapshot, no prior diff available")
 
-        for item in new_items[:10]:
+        filtered_items: list[dict[str, str]] = []
+        for item in new_items:
+            if is_stale_item(run_date, item):
+                continue
+            if "llama.cpp commits" in source.name.lower() and not is_high_signal_commit(item["title"]):
+                continue
+            filtered_items.append(item)
+
+        for item in filtered_items[:10]:
             raw_urls = extract_urls(item["title"], item["summary"])
             followup_urls: list[dict[str, str]] = []
             if source.confidence == "social-primary":
@@ -879,7 +1126,7 @@ def main() -> int:
                     "confidence": source.confidence,
                     "novelty": novelty_for_source(source),
                     "action": action_for_lane(source.lane),
-                    "why": why_it_matters(source, item),
+                    "why": infer_specific_why(source, item),
                     "validation_status": status,
                     "followup_urls": followup_urls,
                 }
@@ -909,8 +1156,13 @@ def main() -> int:
         if not args.dry_run:
             save_state(source.id, items[:50])
 
+    entries = collapse_github_activity(entries)
+    entries = collapse_release_trains(entries)
     entries.sort(key=lambda entry: (entry["lane"], -sort_stamp(entry["published"]), entry["source"]))
-    digest_path = write_digest(args.profile, run_date, entries, failures)
+    ai_summary = ""
+    if entries and not args.skip_ai_summary and ai_summary_enabled():
+        ai_summary = synthesize_ai_summary(args.profile, run_date, entries, failures)
+    digest_path = write_digest(args.profile, run_date, entries, failures, ai_summary=ai_summary)
     write_validation_queue(args.profile, run_date, validation_queue)
     write_health_report(args.profile, run_date, health_statuses)
     write_weekly_rollup_stub(args.profile, run_date)
