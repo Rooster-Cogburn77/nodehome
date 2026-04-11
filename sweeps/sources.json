@@ -645,6 +645,17 @@
       "timeout_seconds": 20,
       "retries": 2,
       "bluesky_handle": "servethehome.com.web.brid.gy"
+    },
+    {
+      "id": "x-email-notifications",
+      "name": "X Email Notifications",
+      "lane": "scene",
+      "kind": "local_jsonl",
+      "url": "docs/sweeps/inbox/x_email_posts.jsonl",
+      "confidence": "social-primary",
+      "profile": "core",
+      "timeout_seconds": 5,
+      "retries": 1
     }
   ]
 }

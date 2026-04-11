@@ -30,6 +30,7 @@ WEEKLY_DIR = SWEEPS_DIR / "weekly"
 VALIDATION_DIR = SWEEPS_DIR / "validation"
 HEALTH_DIR = SWEEPS_DIR / "health"
 STATE_DIR = SWEEPS_DIR / "state"
+INBOX_DIR = SWEEPS_DIR / "inbox"
 DEGRADED_PATH = SWEEPS_DIR / "health" / "degraded_sources.json"
 RAW_DIR = ROOT / "docs" / "wiki" / "raw"
 MANIFEST_PATH = ROOT / "sweeps" / "sources.json"
@@ -77,7 +78,7 @@ class Source:
 
 
 def ensure_dirs() -> None:
-    for directory in (DAILY_DIR, WEEKLY_DIR, VALIDATION_DIR, HEALTH_DIR, STATE_DIR):
+    for directory in (DAILY_DIR, WEEKLY_DIR, VALIDATION_DIR, HEALTH_DIR, STATE_DIR, INBOX_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -315,6 +316,38 @@ def parse_page(html_bytes: bytes, url: str) -> list[dict[str, str]]:
     ]
 
 
+def read_local_jsonl(source: Source) -> list[dict[str, str]]:
+    path = Path(source.url)
+    if not path.is_absolute():
+        path = ROOT / path
+    if not path.exists():
+        return []
+
+    items: list[dict[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        item_id = normalize_text(str(raw.get("id", "")))
+        title = normalize_text(str(raw.get("title", "")))
+        link = normalize_text(str(raw.get("link", "")))
+        if not item_id or not title:
+            continue
+        items.append(
+            {
+                "id": item_id,
+                "title": title,
+                "link": link,
+                "published": normalize_text(str(raw.get("published", ""))),
+                "summary": normalize_text(str(raw.get("summary", ""))) or title,
+            }
+        )
+    return items
+
+
 def fetch_page_title(url: str) -> str:
     try:
         body = fetch_url_with_retry(url, timeout_seconds=10, attempts=1)
@@ -354,6 +387,8 @@ def fetch_source(source: Source) -> dict[str, Any]:
             items = fetch_x_user_timeline(source)
         elif source.kind == "bluesky":
             items = fetch_bluesky_author_feed(source)
+        elif source.kind == "local_jsonl":
+            items = read_local_jsonl(source)
         else:
             body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
             if source.kind == "feed":

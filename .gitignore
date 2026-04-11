@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 site/public/
 nul
+docs/sweeps/inbox/*.jsonl
