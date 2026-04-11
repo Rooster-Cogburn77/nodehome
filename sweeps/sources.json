@@ -4,298 +4,298 @@
       "id": "x-karpathy",
       "name": "X: @karpathy",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/karpathy",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-simonw",
       "name": "X: @simonw",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/simonw",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-fchollet",
       "name": "X: @fchollet",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/fchollet",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-vllm-project",
       "name": "X: @vllm_project",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/vllm_project",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-lmsysorg",
       "name": "X: @lmsysorg",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/lmsysorg",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-soumithchintala",
       "name": "X: @soumithchintala",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/soumithchintala",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-ggerganov",
       "name": "X: @ggerganov",
       "lane": "hardware",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/ggerganov",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-theblokeai",
       "name": "X: @TheBlokeAI",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/TheBlokeAI",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-technomancers-ai",
       "name": "X: @technomancers_ai",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/technomancers_ai",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-concat-ai",
       "name": "X: @concat_ai",
       "lane": "infra",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/concat_ai",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-hardmaru",
       "name": "X: @hardmaru",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/hardmaru",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-serve-the-home",
       "name": "X: @ServeTheHome",
       "lane": "hardware",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/ServeTheHome",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-level1techs",
       "name": "X: @Level1Techs",
       "lane": "hardware",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/Level1Techs",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-akhaliq",
       "name": "X: @_akhaliq",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/_akhaliq",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-rasbt",
       "name": "X: @rasbt",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/rasbt",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-ollama",
       "name": "X: @ollama",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/ollama",
       "confidence": "social-primary",
       "profile": "core",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-ai-at-meta",
       "name": "X: @AIatMeta",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/AIatMeta",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-huggingface",
       "name": "X: @huggingface",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/huggingface",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-jeremyphoward",
       "name": "X: @jeremyphoward",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/jeremyphoward",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-arankomatsuzaki",
       "name": "X: @arankomatsuzaki",
       "lane": "workflow",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/arankomatsuzaki",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-ericjang11",
       "name": "X: @ericjang11",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/ericjang11",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-alibaba-qwen",
       "name": "X: @Alibaba_Qwen",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/Alibaba_Qwen",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-openwebui",
       "name": "X: @OpenWebUI",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/OpenWebUI",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-lmstudio",
       "name": "X: @lmstudio",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/lmstudio",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-geerlingguy",
       "name": "X: @geerlingguy",
       "lane": "hardware",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/geerlingguy",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-videocardz",
       "name": "X: @VideoCardz",
       "lane": "hardware",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/VideoCardz",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "x-prince-canuma",
       "name": "X: @Prince_Canuma",
       "lane": "scene",
-      "kind": "feed",
+      "kind": "x_user",
       "url": "https://openrss.org/feed/x.com/Prince_Canuma",
       "confidence": "social-primary",
       "profile": "extended",
-      "timeout_seconds": 8,
-      "retries": 1
+      "timeout_seconds": 20,
+      "retries": 2
     },
     {
       "id": "karpathy-blog",
@@ -435,6 +435,116 @@
       "lane": "workflow",
       "kind": "feed",
       "url": "https://github.com/karpathy/nanochat/commits/master.atom",
+      "confidence": "primary",
+      "profile": "core",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "rasbt-blog",
+      "name": "Sebastian Raschka - Ahead of AI",
+      "lane": "workflow",
+      "kind": "feed",
+      "url": "https://magazine.sebastianraschka.com/feed",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "fastai-blog",
+      "name": "fast.ai Blog",
+      "lane": "workflow",
+      "kind": "feed",
+      "url": "https://www.fast.ai/index.xml",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "answerai-blog",
+      "name": "Answer.AI Blog",
+      "lane": "workflow",
+      "kind": "feed",
+      "url": "https://www.answer.ai/index.xml",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "geerlingguy-blog",
+      "name": "Jeff Geerling Blog",
+      "lane": "hardware",
+      "kind": "feed",
+      "url": "https://www.jeffgeerling.com/blog.xml",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "geerlingguy-youtube",
+      "name": "Jeff Geerling YouTube",
+      "lane": "hardware",
+      "kind": "feed",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCR-DXc1voovS8nhAvccRZhg",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "servethehome-blog",
+      "name": "ServeTheHome Blog",
+      "lane": "hardware",
+      "kind": "feed",
+      "url": "https://www.servethehome.com/feed/",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "servethehome-youtube",
+      "name": "ServeTheHome YouTube",
+      "lane": "hardware",
+      "kind": "feed",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCv6J_jJa8GJqFwQNgNrMuww",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "level1techs-youtube",
+      "name": "Level1Techs YouTube",
+      "lane": "hardware",
+      "kind": "feed",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC4w1YQAJMWOz4qtxinq55LQ",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "geohot-blog",
+      "name": "George Hotz Blog",
+      "lane": "workflow",
+      "kind": "feed",
+      "url": "https://geohot.github.io/blog/feed.xml",
+      "confidence": "primary",
+      "profile": "core",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "tinygrad-releases",
+      "name": "tinygrad Releases",
+      "lane": "infra",
+      "kind": "feed",
+      "url": "https://github.com/tinygrad/tinygrad/releases.atom",
       "confidence": "primary",
       "profile": "core",
       "timeout_seconds": 20,

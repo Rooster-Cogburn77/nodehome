@@ -68,6 +68,7 @@ class Source:
     profile: str = "core"
     timeout_seconds: int = 20
     retries: int = 2
+    x_username: str = ""
 
 
 def ensure_dirs() -> None:
@@ -102,6 +103,68 @@ def fetch_url_with_retry(
                 time.sleep(delay_seconds)
     assert last_error is not None
     raise last_error
+
+
+def fetch_x_json(path: str, params: dict[str, str]) -> dict[str, Any]:
+    token = os.getenv("X_BEARER_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("X_BEARER_TOKEN is not set")
+    url = f"https://api.x.com{path}"
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def username_from_source(source: Source) -> str:
+    if source.x_username:
+        return source.x_username.lstrip("@")
+    match = re.search(r"x\.com/([^/?#]+)", source.url)
+    if match:
+        return match.group(1)
+    return source.name.replace("X:", "").strip().lstrip("@")
+
+
+def fetch_x_user_timeline(source: Source) -> list[dict[str, str]]:
+    username = username_from_source(source)
+    user = fetch_x_json(
+        f"/2/users/by/username/{urllib.parse.quote(username)}",
+        {"user.fields": "username,name"},
+    )
+    user_id = user.get("data", {}).get("id", "")
+    if not user_id:
+        raise RuntimeError(f"X user lookup returned no id for @{username}")
+
+    timeline = fetch_x_json(
+        f"/2/users/{user_id}/tweets",
+        {
+            "max_results": "20",
+            "tweet.fields": "created_at,conversation_id,public_metrics,referenced_tweets",
+        },
+    )
+    items = []
+    for tweet in timeline.get("data", []):
+        tweet_id = str(tweet.get("id", ""))
+        text = normalize_text(tweet.get("text", ""))
+        if not tweet_id or not text:
+            continue
+        items.append(
+            {
+                "id": tweet_id,
+                "title": text,
+                "link": f"https://x.com/{username}/status/{tweet_id}",
+                "published": normalize_text(tweet.get("created_at", "")),
+                "summary": text,
+            }
+        )
+    return items
 
 
 def resolve_url(url: str) -> str:
@@ -235,25 +298,42 @@ def fetch_page_description(url: str) -> str:
 
 
 def fetch_source(source: Source) -> dict[str, Any]:
-    is_openrss = "openrss.org" in source.url
+    is_openrss = "openrss.org" in source.url and source.kind != "x_user"
     if is_openrss:
         _openrss_semaphore.acquire()
         time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
     try:
-        body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
-        if source.kind == "feed":
-            items = parse_feed(body)
-        elif source.kind == "page":
-            items = parse_page(body, source.url)
+        if source.kind == "x_user":
+            items = fetch_x_user_timeline(source)
         else:
-            raise ValueError(f"Unsupported source kind: {source.kind}")
+            body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
+            if source.kind == "feed":
+                items = parse_feed(body)
+            elif source.kind == "page":
+                items = parse_page(body, source.url)
+            else:
+                raise ValueError(f"Unsupported source kind: {source.kind}")
         return {"ok": True, "items": items, "error": ""}
     except Exception as exc:  # noqa: BLE001
+        if source.kind == "x_user" and source.url:
+            fallback_is_openrss = "openrss.org" in source.url
+            try:
+                if fallback_is_openrss:
+                    _openrss_semaphore.acquire()
+                    time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
+                body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
+                if fallback_is_openrss:
+                    items = parse_feed(body)
+                    return {"ok": True, "items": items, "error": ""}
+            except Exception as fallback_exc:  # noqa: BLE001
+                return {"ok": False, "items": [], "error": f"{exc}; OpenRSS fallback failed: {fallback_exc}"}
+            finally:
+                if fallback_is_openrss:
+                    _openrss_semaphore.release()
         return {"ok": False, "items": [], "error": str(exc)}
     finally:
         if is_openrss:
             _openrss_semaphore.release()
-
 
 def load_state_items(source_id: str) -> list[dict[str, str]]:
     path = state_path(source_id)
