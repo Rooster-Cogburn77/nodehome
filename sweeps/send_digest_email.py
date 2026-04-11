@@ -187,6 +187,7 @@ def _render_top_signals(signals: list[str]) -> str:
 def _render_fetch_issues(issues: list[str]) -> str:
     if not issues:
         return ""
+    issues = _compact_fetch_issues(issues)
     items_html = "".join(
         f'<li style="font-size:12px;color:{_MUTED};line-height:1.5;margin:1px 0;">{_esc(i)}</li>'
         for i in issues
@@ -199,6 +200,25 @@ def _render_fetch_issues(issues: list[str]) -> str:
         f'<ul style="margin:6px 0 0;padding-left:14px;list-style:none;">{items_html}</ul>'
         f'</div>'
     )
+
+
+def _compact_fetch_issues(issues: list[str]) -> list[str]:
+    x_issues = [issue for issue in issues if issue.startswith("X:")]
+    other_issues = [issue for issue in issues if not issue.startswith("X:")]
+    if not x_issues:
+        return issues
+
+    timeout_count = sum(1 for issue in x_issues if "timed out" in issue)
+    cached_count = sum(1 for issue in x_issues if "using cached state" in issue)
+    if timeout_count == len(x_issues):
+        x_summary = f"X/OpenRSS: {len(x_issues)} social feeds timed out"
+    else:
+        x_summary = f"X/OpenRSS: {len(x_issues)} social feed fetches failed"
+        if timeout_count:
+            x_summary += f", including {timeout_count} timeouts"
+    if cached_count:
+        x_summary += f"; cached state used for {cached_count}"
+    return [f"{x_summary}.", *other_issues]
 
 
 def _format_date_short(raw: str) -> str:
