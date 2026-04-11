@@ -380,22 +380,60 @@ def action_for_lane(lane: str) -> str:
 
 
 def why_it_matters(source: Source, item: dict[str, str]) -> str:
-    title = item["title"].lower()
+    """Generate a why-it-matters line from the item title. Tries keyword matching
+    for specificity; only falls back to a generic lane phrase as last resort."""
+    title = item["title"]
+    t = title.lower()
+
+    # ── keyword-driven signals (checked before lane fallback) ──
+    if any(w in t for w in ("quantiz", "quant", "gguf", "ggml", "awq", "gptq", "exl2")):
+        return f"Quantization-related: may affect model compatibility or VRAM efficiency on the 3x3090 stack."
+    if any(w in t for w in ("tensor parallel", "multi-gpu", "multi gpu", "split", "pipeline parallel")):
+        return f"Multi-GPU inference topic — directly relevant to the 3-card topology."
+    if any(w in t for w in ("vram", "memory", "oom", "offload", "kv cache")):
+        return f"Memory management signal — matters for fitting large models across 72GB total VRAM."
+    if any(w in t for w in ("benchmark", "perf", "throughput", "tok/s", "tokens per second", "latency")):
+        return f"Performance data that could inform model selection or serving config."
+    if any(w in t for w in ("fine-tun", "finetun", "lora", "qlora", "adapter", "training")):
+        return f"Fine-tuning or training technique — relevant if local training becomes part of the workflow."
+    if any(w in t for w in ("cuda", "rocm", "vulkan", "hip", "metal", "triton")):
+        return f"GPU compute backend change — check if it affects CUDA serving on the 3090s."
+    if any(w in t for w in ("docker", "container", "podman", "compose")):
+        return f"Container tooling update — relevant to the Docker-based serving stack."
+    if any(w in t for w in ("pcie", "nvme", "ssd", "nvlink", "bandwidth")):
+        return f"Bus or storage bandwidth topic — relevant to the H12SSL-i's PCIe 4.0 layout."
+    if any(w in t for w in ("3090", "a100", "4090", "5090", "h100", "blower", "turbo")):
+        return f"GPU hardware mention — directly relevant to the build or resale market."
+    if any(w in t for w in ("epyc", "threadripper", "supermicro", "server board", "ecc")):
+        return f"Server platform hardware — directly relevant to the H12SSL-i / EPYC stack."
+    if any(w in t for w in ("power", "watt", "psu", "thermal", "cooling", "temp", "fan")):
+        return f"Power or thermal topic — relevant to the 1600W PSU and blower cooling config."
+    if any(w in t for w in ("release", "released", "v0.", "v1.", "v2.", "v3.", "v4.")):
+        return f"New release — check changelog for breaking changes or features that affect the local stack."
+    if any(w in t for w in ("rag", "retrieval", "embedding", "vector", "search")):
+        return f"RAG or embedding pipeline development — potential local workflow pattern."
+    if any(w in t for w in ("agent", "tool use", "function call", "mcp")):
+        return f"Agent or tool-use pattern — relevant to local AI workflow automation."
+    if any(w in t for w in ("llama", "mistral", "qwen", "gemma", "phi", "deepseek")):
+        return f"Model family update — check if it changes what's worth running locally."
+    if any(w in t for w in ("openai", "anthropic", "claude", "gpt-4", "gpt-5", "closed")):
+        return f"Cloud/closed-model news — context for the local-first value proposition."
+    if any(w in t for w in ("open source", "open-source", "license", "apache", "mit ")):
+        return f"Open-source licensing or release — affects what can run on owned hardware."
+    if any(w in t for w in ("10gbe", "10g", "switch", "network", "ethernet", "infiniband")):
+        return f"Networking hardware — relevant if scaling beyond single-node."
+
+    # ── social-primary fallback (X feeds) ──
     if source.confidence == "social-primary":
-        if source.lane == "workflow":
-            return "Early workflow discovery from a curated X source; validate if it implies a repeatable pattern."
-        if source.lane == "infra":
-            return "Early infra or release signal from X; confirm via repo, release notes, or docs."
-        return "Early scene signal from X; useful for discovery, not enough alone for a decision."
-    if source.lane == "workflow":
-        return "Potential workflow or reasoning-pattern signal relevant to the Karpathy loop."
-    if source.lane == "infra":
-        if "release" in title or title.startswith("v"):
-            return "Could change local serving capability, compatibility, or performance."
-        return "Relevant to local inference stack evolution."
-    if source.lane == "hardware":
-        return "May affect performance, tuning, or operational behavior of the physical node."
-    return "Useful for tracking local-first builder patterns and early ideas."
+        return f"Social signal from {source.name.replace('X: ', '')} — treat as discovery, verify before acting."
+
+    # ── lane fallback (last resort, kept short) ──
+    return {
+        "workflow": "Workflow or tooling signal — skim for patterns worth adopting.",
+        "infra": "Infrastructure development — check if it touches the local serving stack.",
+        "hardware": "Hardware news — evaluate relevance to the current build.",
+        "scene": "Scene signal — useful for context on where the ecosystem is heading.",
+    }.get(source.lane, "General AI signal — skim for relevance.")
 
 
 def extract_urls(*values: str) -> list[str]:
@@ -763,22 +801,51 @@ def collapse_github_activity(entries: list[dict[str, Any]]) -> list[dict[str, An
 
 def infer_specific_why(source: Source, item: dict[str, str]) -> str:
     title = item["title"].lower()
-    if "llama.cpp releases" in source.name.lower():
-        return "llama.cpp moved again; check whether this release train includes multi-GPU, quantization, or backend changes."
-    if "llama.cpp commits" in source.name.lower():
+    sname = source.name.lower()
+
+    # ── source-specific overrides ──
+    if "llama.cpp releases" in sname:
+        return "llama.cpp release — check for multi-GPU, quantization, or backend changes."
+    if "llama.cpp commits" in sname:
         if "tensor parallel" in title or "split-mode tensor" in title:
-            return "Directly relevant to awkward multi-GPU topologies like 3x3090 builds and worth tracking against current stack assumptions."
-        if any(token in title for token in ("cuda", "vulkan", "hip", "quant", "fuse")):
-            return "Touches a performance-sensitive inference backend path that could affect local node throughput or compatibility."
-        return "Relevant llama.cpp implementation movement; read only if it touches your serving path."
-    if "ollama releases" in source.name.lower():
-        return "Operational release for the local serving stack; check notes for compatibility, model support, and multi-GPU changes."
-    if "simon willison atom" in source.name.lower():
-        return "High-signal workflow or tooling note from a builder who often surfaces practical patterns before they spread."
-    if "simon willison github activity" in source.name.lower() and "released" in title:
-        return "A concrete tool release from Simon, usually more useful than routine GitHub activity."
-    if "karpathy" in source.name.lower():
-        return "Direct Karpathy-adjacent signal; useful when it reflects workflow shifts, repo movement, or vocabulary changes."
+            return "Directly relevant to 3x3090 multi-GPU topology."
+        if any(w in title for w in ("cuda", "vulkan", "hip", "quant", "fuse")):
+            return "Performance-sensitive backend path — could affect local throughput."
+        return "llama.cpp commit — read only if it touches your serving path."
+    if "ollama releases" in sname:
+        return "Ollama release — check for model support, multi-GPU, and compatibility."
+    if "ollama blog" in sname:
+        return "Official Ollama announcement — usually documents new model support or features."
+    if "vllm" in sname:
+        if "release" in sname:
+            return "vLLM release — check for tensor parallelism, memory, and throughput changes."
+        return "vLLM development signal — relevant to the production serving layer."
+    if "george hotz" in sname or "geohot" in sname:
+        return "Geohot take — high-signal on open-source AI, tinygrad, and builder philosophy."
+    if "tinygrad" in sname:
+        return "tinygrad release — alternative inference engine with strong AMD support."
+    if "servethehome" in sname:
+        return "ServeTheHome coverage — server hardware reviews and benchmarks from a trusted source."
+    if "jeff geerling" in sname or "geerlingguy" in sname:
+        return "Geerling content — practical hardware testing, often with Linux and ARM angles."
+    if "level1techs" in sname:
+        return "Level1Techs — deep-dive hardware and Linux content for builder types."
+    if "simon willison" in sname:
+        if "github" in sname and "released" in title:
+            return "Simon Willison tool release — usually practical and worth evaluating."
+        return "Simon Willison signal — surfaces practical patterns before they spread."
+    if "karpathy" in sname:
+        return "Karpathy signal — watch for workflow shifts, repo movement, or vocabulary changes."
+    if "hugging face blog" in sname:
+        return "Hugging Face blog post — check for new model releases, library updates, or ecosystem shifts."
+    if "raschka" in sname or "rasbt" in sname:
+        return "Sebastian Raschka — deep technical writing on training, evaluation, and model internals."
+    if "fast.ai" in sname:
+        return "fast.ai signal — practical deep learning patterns from Howard's crew."
+    if "answer.ai" in sname:
+        return "Answer.AI signal — Jeremy Howard's lab, focused on making AI practical and accessible."
+
+    # ── fall through to keyword-based matching ──
     return why_it_matters(source, item)
 
 
@@ -1067,6 +1134,27 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
     return " ".join(sentences[:6]).replace("â€”", "-").replace("—", "-")
 
 
+def format_fetch_issues(failures: list[str]) -> list[str]:
+    """Keep known X/OpenRSS outages compact without hiding non-social failures."""
+    x_failures = [failure for failure in failures if failure.startswith("X:")]
+    other_failures = [failure for failure in failures if not failure.startswith("X:")]
+    if not x_failures:
+        return failures
+
+    timeout_count = sum(1 for failure in x_failures if "timed out" in failure)
+    cached_count = sum(1 for failure in x_failures if "using cached state" in failure)
+    if timeout_count == len(x_failures):
+        x_summary = f"X/OpenRSS: {len(x_failures)} social feeds timed out"
+    else:
+        x_summary = f"X/OpenRSS: {len(x_failures)} social feed fetches failed"
+        if timeout_count:
+            x_summary += f", including {timeout_count} timeouts"
+    if cached_count:
+        x_summary += f"; cached state used for {cached_count}"
+    x_summary += "."
+    return [x_summary, *other_failures]
+
+
 def write_digest(
     profile: str,
     run_date: date,
@@ -1098,7 +1186,7 @@ def write_digest(
 
     if failures:
         lines.extend(["## Fetch Issues", ""])
-        for failure in failures:
+        for failure in format_fetch_issues(failures):
             lines.append(f"- {failure}")
         lines.append("")
 
