@@ -57,6 +57,10 @@ LLAMACPP_COMMIT_KEYWORDS = (
 )
 
 
+def openrss_fallback_enabled() -> bool:
+    return os.getenv("SWEEP_OPENRSS_FALLBACK_ENABLED", "false").strip().lower() == "true"
+
+
 @dataclass
 class Source:
     id: str
@@ -69,6 +73,7 @@ class Source:
     timeout_seconds: int = 20
     retries: int = 2
     x_username: str = ""
+    bluesky_handle: str = ""
 
 
 def ensure_dirs() -> None:
@@ -161,6 +166,48 @@ def fetch_x_user_timeline(source: Source) -> list[dict[str, str]]:
                 "title": text,
                 "link": f"https://x.com/{username}/status/{tweet_id}",
                 "published": normalize_text(tweet.get("created_at", "")),
+                "summary": text,
+            }
+        )
+    return items
+
+
+def bluesky_handle_from_source(source: Source) -> str:
+    if source.bluesky_handle:
+        return source.bluesky_handle
+    return source.url.replace("at://", "").strip()
+
+
+def fetch_bluesky_author_feed(source: Source) -> list[dict[str, str]]:
+    handle = bluesky_handle_from_source(source)
+    params = urllib.parse.urlencode({"actor": handle, "limit": "30", "filter": "posts_with_replies"})
+    url = f"https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?{params}"
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=source.timeout_seconds) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    items = []
+    for row in data.get("feed", []):
+        post = row.get("post", {})
+        record = post.get("record", {})
+        external = post.get("embed", {}).get("external", {})
+        text = normalize_text(
+            record.get("text", "")
+            or external.get("title", "")
+            or external.get("description", "")
+            or record.get("bridgyOriginalText", "")
+        )
+        uri = post.get("uri", "")
+        post_id = uri.rsplit("/", 1)[-1] if uri else ""
+        if not text or not post_id:
+            continue
+        link = external.get("uri") or f"https://bsky.app/profile/{handle}/post/{post_id}"
+        items.append(
+            {
+                "id": uri or f"{handle}:{post_id}",
+                "title": text,
+                "link": link,
+                "published": normalize_text(record.get("createdAt", "")),
                 "summary": text,
             }
         )
@@ -305,6 +352,8 @@ def fetch_source(source: Source) -> dict[str, Any]:
     try:
         if source.kind == "x_user":
             items = fetch_x_user_timeline(source)
+        elif source.kind == "bluesky":
+            items = fetch_bluesky_author_feed(source)
         else:
             body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
             if source.kind == "feed":
@@ -316,6 +365,12 @@ def fetch_source(source: Source) -> dict[str, Any]:
         return {"ok": True, "items": items, "error": ""}
     except Exception as exc:  # noqa: BLE001
         if source.kind == "x_user" and source.url:
+            if not openrss_fallback_enabled():
+                return {
+                    "ok": False,
+                    "items": [],
+                    "error": f"{exc}; OpenRSS fallback disabled",
+                }
             fallback_is_openrss = "openrss.org" in source.url
             try:
                 if fallback_is_openrss:
