@@ -549,6 +549,102 @@
       "profile": "core",
       "timeout_seconds": 20,
       "retries": 2
+    },
+    {
+      "id": "bsky-simonw",
+      "name": "Bluesky: @simonwillison.net",
+      "lane": "workflow",
+      "kind": "bluesky",
+      "url": "at://simonwillison.net",
+      "confidence": "social-primary",
+      "profile": "core",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "simonwillison.net"
+    },
+    {
+      "id": "bsky-rasbt",
+      "name": "Bluesky: @rasbt.bsky.social",
+      "lane": "workflow",
+      "kind": "bluesky",
+      "url": "at://rasbt.bsky.social",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "rasbt.bsky.social"
+    },
+    {
+      "id": "bsky-hardmaru",
+      "name": "Bluesky: @hardmaru.bsky.social",
+      "lane": "workflow",
+      "kind": "bluesky",
+      "url": "at://hardmaru.bsky.social",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "hardmaru.bsky.social"
+    },
+    {
+      "id": "bsky-geerlingguy",
+      "name": "Bluesky: @jeffgeerling.com",
+      "lane": "hardware",
+      "kind": "bluesky",
+      "url": "at://jeffgeerling.com",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "jeffgeerling.com"
+    },
+    {
+      "id": "bsky-jeremyphoward",
+      "name": "Bluesky: @howard.fm",
+      "lane": "workflow",
+      "kind": "bluesky",
+      "url": "at://howard.fm",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "howard.fm"
+    },
+    {
+      "id": "bsky-videocardz",
+      "name": "Bluesky: @videocardz.com",
+      "lane": "hardware",
+      "kind": "bluesky",
+      "url": "at://videocardz.com",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "videocardz.com"
+    },
+    {
+      "id": "bsky-soumithchintala",
+      "name": "Bluesky: @soumithchintala.bsky.social",
+      "lane": "infra",
+      "kind": "bluesky",
+      "url": "at://soumithchintala.bsky.social",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "soumithchintala.bsky.social"
+    },
+    {
+      "id": "bsky-servethehome",
+      "name": "Bluesky: @servethehome.com.web.brid.gy",
+      "lane": "hardware",
+      "kind": "bluesky",
+      "url": "at://servethehome.com.web.brid.gy",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2,
+      "bluesky_handle": "servethehome.com.web.brid.gy"
     }
   ]
 }
