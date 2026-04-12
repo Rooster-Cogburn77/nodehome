@@ -1014,6 +1014,8 @@ def infer_specific_why(source: Source, item: dict[str, str]) -> str:
         return "fast.ai signal — practical deep learning patterns from Howard's crew."
     if "answer.ai" in sname:
         return "Answer.AI signal — Jeremy Howard's lab, focused on making AI practical and accessible."
+    if "steve hanov" in sname or "stevehanov" in sname:
+        return "Steve Hanov — lean infra, SQLite, local LLMs, solo-founder running real revenue on minimal stack."
 
     # ── fall through to keyword-based matching ──
     return why_it_matters(source, item)
