@@ -3,17 +3,25 @@
 **Status:** Not yet implemented. Hardware build in progress.
 
 ## OS
-- **Ubuntu Server 22.04/24.04 LTS** (likely) or similar Linux
+- **Ubuntu Server 24.04 LTS**
 - Headless operation, SSH access
 - NVIDIA driver + CUDA toolkit
 
 ## Model Serving
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| **Ollama** | Simple model management & serving | Easy model downloads, API compatible |
-| **vLLM** | High-performance inference server | Better throughput for production use |
-| **llama.cpp** | Direct GGUF inference | Low-level, maximum control |
+| **Ollama** | First inference path and convenience serving | Easy model downloads, API compatible, good for smoke tests and small/single-GPU models; layer-split experiments are allowed but not the serious TP path |
+| **vLLM** | Primary multi-GPU serving experiment path | Validate `TENSOR_PARALLEL_SIZE=3`; test CPU KV cache offload with 128GB RAM |
+| **llama.cpp** | Direct GGUF benchmark/watch path | Track CUDA, quantization, tensor, and split-mode changes; do not make experimental tensor/split-mode a day-one dependency |
 | **ExLlamaV2** | Optimized quantized inference | Best performance for GPTQ/EXL2 models |
+
+Day-one serving posture:
+
+- Start with Ollama to get working local inference quickly.
+- Move to vLLM after baseline inference is stable and treat TP=3 as a benchmark/validation item, not a solved assumption.
+- Test vLLM CPU KV cache offload because the node has 128GB RAM and only 72GB total VRAM.
+- Before relying on Gemma4 in Ollama, run a flash-attention compatibility gate on RTX 3090/Ampere. If it fails, test with `OLLAMA_FLASH_ATTENTION=0`.
+- Keep direct llama.cpp tensor/split-mode in the watch/benchmark lane while upstream marks it experimental.
 
 ## Agent / Orchestration
 | Tool | Purpose | Notes |
@@ -44,6 +52,13 @@ This is a useful way to think about MCP vs skills in the Sovereign Node stack: n
 | **LLM weekly synthesis** | Future local rollup generation | Once Ollama is online, use local inference to synthesize weekly sweep rollups from daily digests |
 
 Key public builders to watch in this stack: Georgi Gerganov / `llama.cpp`, Tim J. Baek / Open WebUI, and the LM Studio team.
+
+Current W15 stack signals:
+
+- `llama.cpp` split-mode/tensor work is active but still experimental, so it informs benchmarks rather than the day-one install plan.
+- `vLLM` CPU KV cache offload is worth testing against the 3x RTX 3090 + 128GB RAM topology.
+- Ollama remains the target first-run serving layer; Gemma4 needs an FA compatibility gate before being treated as stable on the node.
+- Cheap 10GbE switching is bookmarked for future multi-node expansion, not a day-one purchase.
 
 ## Target Models (Day 1)
 
