@@ -6,7 +6,7 @@ import sqlite3
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from sweeps.fact_notebook import DEFAULT_DB, connect, init_db
+from sweeps.fact_notebook import DEFAULT_DB, connect, followup_reason, followup_rows, init_db
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -167,24 +167,6 @@ def article_candidates(conn: sqlite3.Connection, start: str, end: str, profile: 
     )
 
 
-def gap_candidates(conn: sqlite3.Connection, start: str, end: str, profile: str) -> list[sqlite3.Row]:
-    extra, params = profile_filter(profile)
-    return fetch_rows(
-        conn,
-        f"""
-        SELECT topic, source_name, claim_text, source_url, entity, change_type, implication, stack_relevance
-        FROM facts
-        WHERE substr(first_seen, 1, 10) BETWEEN ? AND ?
-        AND confidence = 'social-primary'
-        AND source_url NOT LIKE 'https://github.com/%'
-        {extra}
-        ORDER BY topic ASC, source_name ASC
-        LIMIT 10
-        """,
-        [start, end, *params],
-    )
-
-
 def render_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     suffix = ""
     meta = []
@@ -206,6 +188,15 @@ def render_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     return f"- [{row['topic']}] {row['claim_text']} — {row['source_name']}{suffix}{implication}"
 
 
+def render_followup(row: sqlite3.Row) -> str:
+    source = f" ({row['source_url']})" if row["source_url"] else ""
+    implication = f" Implication: {row['implication']}" if row["implication"] else ""
+    return (
+        f"- [{row['entity'] or 'unknown'} | {row['change_type']} | stack:{row['stack_relevance']} | "
+        f"{followup_reason(row)}] {row['claim_text']} — {row['source_name']}{source}{implication}"
+    )
+
+
 def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Path:
     WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
     output_path = output_path_for(run_date, profile)
@@ -220,7 +211,7 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     node_impact = sovereign_node_impact(conn, start, end, profile)
     new_items = new_facts(conn, start, end, profile)
     candidates = article_candidates(conn, start, end, profile)
-    gaps = gap_candidates(conn, start, end, profile)
+    gaps = followup_rows(conn, profile, 12)
     conn.close()
 
     lines = [
@@ -269,9 +260,9 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     lines.extend(["", "## Gaps / Follow-Up", ""])
     if gaps:
         for row in gaps:
-            lines.append(render_fact(row))
+            lines.append(render_followup(row))
     else:
-        lines.append("- No social-primary claims needing follow-up detected.")
+        lines.append("- No structured follow-up candidates detected.")
 
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path

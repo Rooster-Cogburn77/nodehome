@@ -404,6 +404,76 @@ def print_query(conn: sqlite3.Connection, topic: str, source: str, limit: int) -
         print(f"[{row_topic}] {source_name}: {claim_text}")
 
 
+def followup_reason(row: sqlite3.Row) -> str:
+    reasons = []
+    if row["needs_followup"]:
+        reasons.append("needs_followup")
+    if row["stack_relevance"] == "high":
+        reasons.append("stack:high")
+    if row["change_type"] in {"breaking_change", "deprecation", "architecture"}:
+        reasons.append(f"change:{row['change_type']}")
+    if row["confidence"] == "social-primary":
+        reasons.append("social-primary")
+    return ", ".join(reasons) or "review"
+
+
+def followup_rows(conn: sqlite3.Connection, profile: str = "all", limit: int = 20) -> list[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    profile_clause = ""
+    params: list[str | int] = []
+    if profile != "all":
+        profile_clause = "AND profile = ?"
+        params.append(profile)
+    params.append(limit)
+    return conn.execute(
+        f"""
+        SELECT
+            entity,
+            change_type,
+            stack_relevance,
+            needs_followup,
+            confidence,
+            topic,
+            source_name,
+            source_url,
+            claim_text,
+            implication,
+            seen_count,
+            last_seen
+        FROM facts
+        WHERE (
+            needs_followup = 1
+            OR stack_relevance = 'high'
+            OR change_type IN ('breaking_change', 'deprecation', 'architecture')
+        )
+        {profile_clause}
+        ORDER BY
+            COALESCE(entity, 'unknown') ASC,
+            CASE stack_relevance WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END,
+            CASE change_type WHEN 'breaking_change' THEN 0 WHEN 'deprecation' THEN 1 WHEN 'architecture' THEN 2 ELSE 3 END,
+            seen_count DESC,
+            last_seen DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+
+
+def print_followup(conn: sqlite3.Connection, profile: str, limit: int) -> None:
+    current_entity = None
+    for row in followup_rows(conn, profile, limit):
+        entity = row["entity"] or "unknown"
+        if entity != current_entity:
+            print(f"\n[{entity}]")
+            current_entity = entity
+        detail = f"{row['change_type']} / stack:{row['stack_relevance']} / {followup_reason(row)}"
+        print(f"- {detail}: {row['claim_text']}")
+        if row["implication"]:
+            print(f"  Implication: {row['implication']}")
+        if row["source_url"]:
+            print(f"  Source: {row['source_url']}")
+
+
 def print_stats(conn: sqlite3.Connection) -> None:
     total = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
     print(f"facts: {total}")
@@ -469,6 +539,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topic", default="", help="Print facts for a topic.")
     parser.add_argument("--source", default="", help="Print facts matching a source name.")
     parser.add_argument("--stats", action="store_true", help="Print fact notebook counts.")
+    parser.add_argument("--followup", action="store_true", help="Print actionable follow-up queue.")
     return parser.parse_args()
 
 
@@ -488,6 +559,11 @@ def main() -> int:
 
     if args.stats:
         print_stats(conn)
+        conn.close()
+        return 0
+
+    if args.followup:
+        print_followup(conn, args.profile, args.limit or 20)
         conn.close()
         return 0
 
