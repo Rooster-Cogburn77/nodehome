@@ -26,6 +26,14 @@ Script:
 - `sweeps/run_workflow.py`
 - `sweeps/email_env.example`
 
+## Environment
+
+Workflow env is loaded automatically from `.env` and then `sweeps/.env` if those files exist.
+Already-set shell or Task Scheduler environment variables win over both files, and root `.env` wins over `sweeps/.env`.
+
+Copy `sweeps/email_env.example` to `.env` or `sweeps/.env` and fill in real values locally.
+Do not commit real `.env` files.
+
 ## Example
 
 ```powershell
