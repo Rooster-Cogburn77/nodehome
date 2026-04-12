@@ -1,5 +1,7 @@
 .claude/
 .wrangler/
+.env
+sweeps/.env
 __pycache__/
 *.pyc
 site/public/

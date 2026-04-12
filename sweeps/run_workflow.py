@@ -17,6 +17,33 @@ FACT_NOTEBOOK = ROOT / "sweeps" / "fact_notebook.py"
 BUILD_WEEKLY = ROOT / "sweeps" / "build_weekly.py"
 
 
+def load_env_file(path: Path) -> int:
+    if not path.exists():
+        return 0
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+        loaded += 1
+    if loaded:
+        print(f"Loaded {loaded} env values from {path}")
+    return loaded
+
+
+def load_workflow_env() -> None:
+    load_env_file(ROOT / ".env")
+    load_env_file(ROOT / "sweeps" / ".env")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run daily sweep workflow and optionally send digest email.")
     parser.add_argument("--profile", choices=("core", "extended", "all"), default="core")
@@ -35,6 +62,7 @@ def iso_week_label(run_date: date) -> str:
 
 
 def main() -> int:
+    load_workflow_env()
     args = parse_args()
     python_exe = sys.executable
 

@@ -66,6 +66,8 @@ schtasks /Delete /TN SovereignNodeSweepWeekly /F
 ## Notes
 
 - Tasks are created with `/F`, so rerunning the registration script updates them.
+- The workflow runner loads `.env` and `sweeps/.env` automatically, so Task Scheduler does not need secrets embedded in the task command.
+- Already-set environment variables win over `.env` values; root `.env` wins over `sweeps/.env`.
 - Output files are written under `docs/sweeps/daily/`.
 - `core` writes `YYYY-MM-DD.md`.
 - `extended` writes `YYYY-MM-DD.extended.md`.
