@@ -261,6 +261,17 @@ def init_db(conn: sqlite3.Connection) -> None:
             ingested_at TEXT NOT NULL,
             fact_count INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS fact_actions (
+            fact_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL CHECK (status IN ('open', 'reviewing', 'done', 'ignored')),
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (fact_id) REFERENCES facts(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fact_actions_status ON fact_actions(status);
         """
     )
     existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
@@ -428,6 +439,7 @@ def followup_rows(conn: sqlite3.Connection, profile: str = "all", limit: int = 2
     return conn.execute(
         f"""
         SELECT
+            facts.id,
             entity,
             change_type,
             stack_relevance,
@@ -439,13 +451,17 @@ def followup_rows(conn: sqlite3.Connection, profile: str = "all", limit: int = 2
             claim_text,
             implication,
             seen_count,
-            last_seen
+            last_seen,
+            COALESCE(fact_actions.status, 'open') AS action_status,
+            COALESCE(fact_actions.note, '') AS action_note
         FROM facts
+        LEFT JOIN fact_actions ON fact_actions.fact_id = facts.id
         WHERE (
             needs_followup = 1
             OR stack_relevance = 'high'
             OR change_type IN ('breaking_change', 'deprecation', 'architecture')
         )
+        AND COALESCE(fact_actions.status, 'open') NOT IN ('done', 'ignored')
         {profile_clause}
         ORDER BY
             COALESCE(entity, 'unknown') ASC,
@@ -466,12 +482,56 @@ def print_followup(conn: sqlite3.Connection, profile: str, limit: int) -> None:
         if entity != current_entity:
             print(f"\n[{entity}]")
             current_entity = entity
-        detail = f"{row['change_type']} / stack:{row['stack_relevance']} / {followup_reason(row)}"
+        detail = f"{row['id']} / {row['change_type']} / stack:{row['stack_relevance']} / {followup_reason(row)}"
         print(f"- {detail}: {row['claim_text']}")
         if row["implication"]:
             print(f"  Implication: {row['implication']}")
         if row["source_url"]:
             print(f"  Source: {row['source_url']}")
+
+
+def mark_action(conn: sqlite3.Connection, fact_id: str, status: str, note: str) -> None:
+    now = datetime.now(UTC).isoformat()
+    if status == "open" and note.lower() == "reset":
+        note = ""
+    cur = conn.execute("SELECT id FROM facts WHERE id = ?", (fact_id,))
+    if not cur.fetchone():
+        raise RuntimeError(f"Unknown fact_id: {fact_id}")
+    conn.execute(
+        """
+        INSERT INTO fact_actions (fact_id, status, note, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(fact_id) DO UPDATE SET
+            status = excluded.status,
+            note = excluded.note,
+            updated_at = excluded.updated_at
+        """,
+        (fact_id, status, note, now, now),
+    )
+    conn.commit()
+
+
+def print_actions(conn: sqlite3.Connection, limit: int) -> None:
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """
+        SELECT fact_actions.fact_id, fact_actions.status, fact_actions.note, fact_actions.updated_at,
+               facts.entity, facts.change_type, facts.stack_relevance, facts.claim_text
+        FROM fact_actions
+        JOIN facts ON facts.id = fact_actions.fact_id
+        ORDER BY fact_actions.updated_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    for row in rows:
+        print(
+            f"- {row['fact_id']} [{row['status']}] "
+            f"{row['entity'] or 'unknown'} / {row['change_type']} / stack:{row['stack_relevance']}: "
+            f"{row['claim_text']}"
+        )
+        if row["note"]:
+            print(f"  Note: {row['note']}")
 
 
 def print_stats(conn: sqlite3.Connection) -> None:
@@ -540,6 +600,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", default="", help="Print facts matching a source name.")
     parser.add_argument("--stats", action="store_true", help="Print fact notebook counts.")
     parser.add_argument("--followup", action="store_true", help="Print actionable follow-up queue.")
+    parser.add_argument("--mark", dest="mark_fact_id", help="Mark a fact action by fact_id.")
+    parser.add_argument("--status", choices=("open", "reviewing", "done", "ignored"), default="reviewing")
+    parser.add_argument("--note", default="", help="Action note for --mark.")
+    parser.add_argument("--actions", action="store_true", help="Print recent fact actions.")
     return parser.parse_args()
 
 
@@ -564,6 +628,17 @@ def main() -> int:
 
     if args.followup:
         print_followup(conn, args.profile, args.limit or 20)
+        conn.close()
+        return 0
+
+    if args.mark_fact_id:
+        mark_action(conn, args.mark_fact_id, args.status, args.note)
+        print({"marked": args.mark_fact_id, "status": args.status})
+        conn.close()
+        return 0
+
+    if args.actions:
+        print_actions(conn, args.limit or 20)
         conn.close()
         return 0
 
