@@ -138,22 +138,28 @@ Do this on the motherboard box. Validates components before you stuff them in th
 - [ ] Install: `curl -fsSL https://ollama.com/install.sh | sh`
 - [ ] Configure multi-GPU: set `CUDA_VISIBLE_DEVICES=0,1,2` and `OLLAMA_NUM_GPU=999`
 - [ ] Quick test (single GPU): `ollama pull gemma2:2b && ollama run gemma2:2b "Hello"`
-- [ ] Multi-GPU test: `ollama pull llama3.3:70b-instruct-q4_K_M`
+- [ ] Multi-GPU layer-split experiment: `ollama pull llama3.3:70b-instruct-q4_K_M`
 - [ ] Verify all 3 GPUs active: `watch -n 1 nvidia-smi` while running inference
 - [ ] Test Gemma 4 26B MoE on single GPU (cognitive core candidate)
+- [ ] Gemma4 FA gate: if Gemma4 crashes or produces bad output on the RTX 3090s, set `OLLAMA_FLASH_ATTENTION=0` in the Ollama systemd override and retest
 
-### vLLM (Later, For Performance)
-- [ ] Install: `pip install vllm`
-- [ ] Run with pipeline parallelism: `--pipeline-parallel-size 3`
+### vLLM (After Ollama Baseline, For Multi-GPU Serving)
+- [ ] Use the bootstrap Docker helper: `/opt/nodehome/vllm/launch_vllm.sh`
+- [ ] Validate `TENSOR_PARALLEL_SIZE=3`; do not assume it works for every model
+- [ ] Test CPU KV cache offload: `CPU_OFFLOAD_GB=32 /opt/nodehome/vllm/launch_vllm.sh`
 - [ ] Benchmark vs Ollama on same model
+
+### llama.cpp Direct (Watch / Benchmark Only)
+- [ ] Track tensor/split-mode changes from the sweep notebook
+- [ ] Do not make direct llama.cpp tensor/split-mode a day-one serving dependency while upstream marks it experimental
 
 ### Ollama vs vLLM Quick Reference
 | | Ollama | vLLM |
 |--|--------|------|
 | Setup | One-liner | Python env |
-| 3-GPU method | Layer splitting (works) | Pipeline parallel (works), tensor parallel (doesn't with 3 GPUs) |
+| 3-GPU method | Layer splitting experiments | TP=3 validation target; model-dependent |
 | Speed | ~15-17 t/s | ~21-25 t/s |
-| Best for | Testing, personal use | Max throughput, production |
+| Best for | First inference, convenience, small/single-GPU models | Multi-GPU serving experiments, throughput |
 
 ---
 

@@ -18,6 +18,7 @@ Edit the tunables at the top of `bootstrap.sh` first:
 - `OLLAMA_TEST_MODEL`
 - `VLLM_MODEL`
 - `VLLM_TENSOR_PARALLEL_SIZE`
+- `VLLM_CPU_OFFLOAD_GB`
 
 Run:
 
@@ -37,6 +38,14 @@ The script installs/configures:
 - Ollama bound to `0.0.0.0:11434`
 - small Ollama test model
 - vLLM Docker launch helper
+
+## Day-One Serving Posture
+
+- **Ollama first:** use it for the first working local inference path, smoke tests, convenience serving, and small/single-GPU models.
+- **vLLM second:** use it for serious multi-GPU serving experiments after Ollama is stable.
+- **llama.cpp direct:** benchmark/watch path only while tensor/split-mode remains experimental upstream.
+- **TP=3 is validation, not an assumption:** the default helper uses `TENSOR_PARALLEL_SIZE=3`, but model architecture still decides whether it works.
+- **Gemma4 FA gate:** before relying on Gemma4 in Ollama, test it on the RTX 3090s. If it crashes or produces bad output, set `OLLAMA_FLASH_ATTENTION=0` in the Ollama systemd override and retest.
 
 ## Static IP Safety
 
@@ -65,8 +74,16 @@ After bootstrap:
 Override defaults at runtime:
 
 ```bash
-MODEL=Qwen/Qwen2.5-7B-Instruct TENSOR_PARALLEL_SIZE=1 PORT=8000 /opt/nodehome/vllm/launch_vllm.sh
+MODEL=Qwen/Qwen2.5-7B-Instruct TENSOR_PARALLEL_SIZE=3 PORT=8000 /opt/nodehome/vllm/launch_vllm.sh
 ```
+
+CPU KV cache offload test:
+
+```bash
+CPU_OFFLOAD_GB=32 MODEL=<70B-model> TENSOR_PARALLEL_SIZE=3 /opt/nodehome/vllm/launch_vllm.sh
+```
+
+Use this to test whether 128GB system RAM can buy useful context/model headroom beyond the 72GB VRAM ceiling. Measure throughput against the no-offload run before treating it as a default.
 
 The repo wrapper is:
 
@@ -90,6 +107,19 @@ bash scripts/proxmox-warning.sh
 nvidia-smi
 docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu24.04 nvidia-smi
 ollama run qwen2:1.5b "hello"
+```
+
+Additional stack gates:
+
+```bash
+# Gemma4/Ollama FA gate
+ollama run <gemma4-model-tag> "Say hello in one sentence."
+
+# vLLM TP=3 validation
+TENSOR_PARALLEL_SIZE=3 /opt/nodehome/vllm/launch_vllm.sh
+
+# vLLM CPU KV offload validation
+CPU_OFFLOAD_GB=32 TENSOR_PARALLEL_SIZE=3 /opt/nodehome/vllm/launch_vllm.sh
 ```
 
 If the NVIDIA driver was newly installed, reboot before final GPU validation.

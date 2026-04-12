@@ -36,15 +36,25 @@ CUDA_KEYRING_DEB_URL="https://developer.download.nvidia.com/compute/cuda/repos/u
 CUDA_TOOLKIT_PACKAGE="cuda-toolkit-12-4"
 
 # Ollama:
+# Sweep data (2026-04-10): v0.20.5 stable. v0.20.4-rc2 added FA disable
+# for older GPUs (3090 = Ampere, may be affected). Ollama auto-updates via
+# install script so pinning isn't needed, but verify version after install.
+# Day-one posture: Ollama first for smoke tests, convenience serving, and
+# possible layer-split experiments. Do not treat it as the serious TP path.
 OLLAMA_HOST_BIND="0.0.0.0:11434"
 OLLAMA_TEST_MODEL="qwen2:1.5b"
 INSTALL_OLLAMA_TEST_MODEL="true"
+OLLAMA_GEMMA4_TEST_MODEL="<gemma4-model-tag>"
 
 # vLLM helper script defaults:
+# Sweep data (2026-04-10): v0.19.0 stable includes CPU KV cache offloading
+# (spill beyond 72GB VRAM) and Gemma4 cleanup. Pin to stable, not latest.
+# Day-one posture: validate TP=3; do not assume it works for every model.
 VLLM_DIR="/opt/nodehome/vllm"
-VLLM_IMAGE="vllm/vllm-openai:latest"
-VLLM_MODEL="Qwen/Qwen2.5-1.5B-Instruct"
-VLLM_TENSOR_PARALLEL_SIZE="1"
+VLLM_IMAGE="vllm/vllm-openai:v0.19.0"
+VLLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+VLLM_TENSOR_PARALLEL_SIZE="3"
+VLLM_CPU_OFFLOAD_GB="0"
 VLLM_PORT="8000"
 
 ###############################################################################
@@ -275,8 +285,14 @@ set -euo pipefail
 VLLM_IMAGE="\${VLLM_IMAGE:-${VLLM_IMAGE}}"
 MODEL="\${MODEL:-${VLLM_MODEL}}"
 TENSOR_PARALLEL_SIZE="\${TENSOR_PARALLEL_SIZE:-${VLLM_TENSOR_PARALLEL_SIZE}}"
+CPU_OFFLOAD_GB="\${CPU_OFFLOAD_GB:-${VLLM_CPU_OFFLOAD_GB}}"
 PORT="\${PORT:-${VLLM_PORT}}"
 HF_HOME="\${HF_HOME:-\$HOME/.cache/huggingface}"
+EXTRA_ARGS=()
+
+if [[ "\${CPU_OFFLOAD_GB}" != "0" && "\${CPU_OFFLOAD_GB}" != "" ]]; then
+  EXTRA_ARGS+=(--cpu-offload-gb "\${CPU_OFFLOAD_GB}")
+fi
 
 mkdir -p "\${HF_HOME}"
 
@@ -288,7 +304,8 @@ docker run --rm -it \\
   "\${VLLM_IMAGE}" \\
   --host 0.0.0.0 \\
   --model "\${MODEL}" \\
-  --tensor-parallel-size "\${TENSOR_PARALLEL_SIZE}"
+  --tensor-parallel-size "\${TENSOR_PARALLEL_SIZE}" \\
+  "\${EXTRA_ARGS[@]}"
 EOF
   chmod 0755 "${VLLM_DIR}/launch_vllm.sh"
   chown -R "${ADMIN_USER}:${ADMIN_USER}" "${VLLM_DIR}"
@@ -334,6 +351,13 @@ Post-run checks:
   docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu24.04 nvidia-smi
   ollama run ${OLLAMA_TEST_MODEL} "hello"
   ${VLLM_DIR}/launch_vllm.sh
+
+Day-one stack validation:
+  1. Keep Ollama as the first inference path. Verify a small model before vLLM.
+  2. Before relying on Gemma4 in Ollama, test ${OLLAMA_GEMMA4_TEST_MODEL}. If it crashes or misbehaves, add OLLAMA_FLASH_ATTENTION=0 to the Ollama systemd override and retest.
+  3. Treat vLLM TENSOR_PARALLEL_SIZE=3 as a validation target, not a proven assumption.
+  4. Test CPU KV offload with: CPU_OFFLOAD_GB=32 ${VLLM_DIR}/launch_vllm.sh
+  5. Treat direct llama.cpp tensor/split-mode as benchmark/watch only while upstream marks it experimental.
 
 If Docker group membership was just added, log out and back in before running docker as ${ADMIN_USER}.
 EOF
