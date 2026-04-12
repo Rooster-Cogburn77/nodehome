@@ -12,46 +12,6 @@ from sweeps.fact_notebook import DEFAULT_DB, connect, init_db
 ROOT = Path(__file__).resolve().parent.parent
 WEEKLY_DIR = ROOT / "docs" / "sweeps" / "weekly"
 
-SOVEREIGN_NODE_TERMS = (
-    "llama.cpp",
-    "ollama",
-    "vllm",
-    "epyc",
-    "3090",
-    "rtx 3090",
-    "tensor parallel",
-    "pipeline parallel",
-    "multi-gpu",
-    "cuda",
-    "pcie",
-    "blower",
-    "nvme",
-    "kv cache",
-    "offload",
-    "qwen",
-    "gemma",
-    "ggml",
-)
-
-HIGH_IMPACT_TERMS = (
-    "tensor parallel",
-    "pipeline parallel",
-    "multi-gpu",
-    "split-mode",
-    "cuda",
-    "kv cache",
-    "offload",
-    "3090",
-    "rtx 3090",
-    "pcie",
-    "blower",
-    "10gbe",
-    "gemma4",
-    "gemma 4",
-    "qwen",
-)
-
-
 def iso_week_label(run_date: date) -> str:
     year, week, _ = run_date.isocalendar()
     return f"{year}-W{week:02d}"
@@ -105,7 +65,7 @@ def reinforced_signals(conn: sqlite3.Connection, start: str, end: str, profile: 
     return fetch_rows(
         conn,
         f"""
-        SELECT topic, source_name, claim_text, source_url, seen_count
+        SELECT topic, source_name, claim_text, source_url, seen_count, entity, change_type, implication, stack_relevance
         FROM facts
         WHERE substr(last_seen, 1, 10) BETWEEN ? AND ?
         AND seen_count > 1
@@ -122,7 +82,7 @@ def new_facts(conn: sqlite3.Connection, start: str, end: str, profile: str) -> l
     return fetch_rows(
         conn,
         f"""
-        SELECT topic, source_name, claim_text, source_url, confidence
+        SELECT topic, source_name, claim_text, source_url, confidence, entity, change_type, implication, stack_relevance
         FROM facts
         WHERE substr(first_seen, 1, 10) BETWEEN ? AND ?
         {extra}
@@ -138,15 +98,13 @@ def new_facts(conn: sqlite3.Connection, start: str, end: str, profile: str) -> l
 
 def sovereign_node_impact(conn: sqlite3.Connection, start: str, end: str, profile: str) -> list[sqlite3.Row]:
     extra, params = profile_filter(profile)
-    term_clauses = " OR ".join("lower(claim_text) LIKE ?" for _term in HIGH_IMPACT_TERMS)
-    term_params = [f"%{term}%" for term in HIGH_IMPACT_TERMS]
     return fetch_rows(
         conn,
         f"""
-        SELECT topic, source_name, claim_text, source_url, seen_count
+        SELECT topic, source_name, claim_text, source_url, seen_count, entity, change_type, implication, stack_relevance
         FROM facts
         WHERE substr(first_seen, 1, 10) BETWEEN ? AND ?
-        AND ({term_clauses})
+        AND stack_relevance = 'high'
         AND NOT (
             (claim_text GLOB 'b[0-9]*' OR claim_text GLOB 'v[0-9]*')
             AND instr(claim_text, ':') = 0
@@ -169,29 +127,27 @@ def sovereign_node_impact(conn: sqlite3.Connection, start: str, end: str, profil
             source_name ASC
         LIMIT 12
         """,
-        [start, end, *term_params, *params],
+        [start, end, *params],
     )
 
 
 def article_candidates(conn: sqlite3.Connection, start: str, end: str, profile: str) -> list[sqlite3.Row]:
     extra, params = profile_filter(profile)
-    high_impact_clauses = " OR ".join("lower(claim_text) LIKE ?" for _term in HIGH_IMPACT_TERMS)
-    high_impact_params = [f"%{term}%" for term in HIGH_IMPACT_TERMS]
     return fetch_rows(
         conn,
         f"""
-        SELECT topic, source_name, claim_text, source_url, seen_count
+        SELECT topic, source_name, claim_text, source_url, seen_count, entity, change_type, implication, stack_relevance
         FROM facts
         WHERE substr(first_seen, 1, 10) BETWEEN ? AND ?
         AND (
             confidence = 'social-primary'
             OR seen_count > 1
-            OR {high_impact_clauses}
+            OR stack_relevance = 'high'
         )
         AND NOT (
             (claim_text GLOB 'b[0-9]*' OR claim_text GLOB 'v[0-9]*')
             AND instr(claim_text, ':') = 0
-            AND NOT ({high_impact_clauses})
+            AND stack_relevance != 'high'
         )
         {extra}
         ORDER BY
@@ -207,7 +163,7 @@ def article_candidates(conn: sqlite3.Connection, start: str, end: str, profile: 
             source_name ASC
         LIMIT 12
         """,
-        [start, end, *high_impact_params, *high_impact_params, *params],
+        [start, end, *params],
     )
 
 
@@ -216,7 +172,7 @@ def gap_candidates(conn: sqlite3.Connection, start: str, end: str, profile: str)
     return fetch_rows(
         conn,
         f"""
-        SELECT topic, source_name, claim_text, source_url
+        SELECT topic, source_name, claim_text, source_url, entity, change_type, implication, stack_relevance
         FROM facts
         WHERE substr(first_seen, 1, 10) BETWEEN ? AND ?
         AND confidence = 'social-primary'
@@ -231,11 +187,23 @@ def gap_candidates(conn: sqlite3.Connection, start: str, end: str, profile: str)
 
 def render_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     suffix = ""
+    meta = []
+    if "entity" in row.keys() and row["entity"]:
+        meta.append(row["entity"])
+    if "change_type" in row.keys() and row["change_type"]:
+        meta.append(row["change_type"])
+    if "stack_relevance" in row.keys() and row["stack_relevance"]:
+        meta.append(f"stack:{row['stack_relevance']}")
+    if meta:
+        suffix += f" [{', '.join(meta)}]"
     if row["source_url"]:
         suffix += f" ({row['source_url']})"
     if include_seen and "seen_count" in row.keys():
         suffix += f" — seen {row['seen_count']}x"
-    return f"- [{row['topic']}] {row['claim_text']} — {row['source_name']}{suffix}"
+    implication = ""
+    if "implication" in row.keys() and row["implication"]:
+        implication = f" Implication: {row['implication']}"
+    return f"- [{row['topic']}] {row['claim_text']} — {row['source_name']}{suffix}{implication}"
 
 
 def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Path:

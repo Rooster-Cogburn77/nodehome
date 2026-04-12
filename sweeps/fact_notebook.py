@@ -15,6 +15,17 @@ from sweeps.send_digest_email import _parse_digest
 ROOT = Path(__file__).resolve().parent.parent
 NOTEBOOK_DIR = ROOT / "docs" / "sweeps" / "notebook"
 DEFAULT_DB = NOTEBOOK_DIR / "facts.sqlite"
+CHANGE_TYPES = {
+    "release",
+    "feature",
+    "deprecation",
+    "bugfix",
+    "benchmark",
+    "architecture",
+    "compatibility",
+    "breaking_change",
+}
+STACK_RELEVANCE = {"high", "medium", "low", "none"}
 
 
 def digest_path(profile: str, run_date: date) -> Path:
@@ -64,6 +75,104 @@ def claim_from_item(section: str, item: dict[str, Any]) -> str:
     return title
 
 
+def entity_for_item(title: str, source_name: str) -> str:
+    text = f"{title} {source_name}".lower()
+    entities = (
+        ("llama.cpp", ("llama.cpp", "ggml")),
+        ("Ollama", ("ollama",)),
+        ("vLLM", ("vllm",)),
+        ("RTX 3090", ("3090", "rtx 3090")),
+        ("CUDA", ("cuda",)),
+        ("Gemma", ("gemma", "gemma4")),
+        ("Qwen", ("qwen",)),
+        ("ServeTheHome", ("servethehome",)),
+        ("Simon Willison", ("simon willison", "simonw")),
+        ("Karpathy", ("karpathy",)),
+        ("Hugging Face", ("hugging face",)),
+    )
+    for entity, needles in entities:
+        if any(needle in text for needle in needles):
+            return entity
+    return source_name or "unknown"
+
+
+def change_type_for_item(title: str) -> str:
+    text = title.lower()
+    if any(token in text for token in ("breaking", "remove ", "removed", "incompatible")):
+        return "breaking_change"
+    if any(token in text for token in ("deprecat", "obsolete")):
+        return "deprecation"
+    if any(token in text for token in ("fix", "repair", "bug", "regression", "where it doesn't work")):
+        return "bugfix"
+    if any(token in text for token in ("benchmark", "leaderboard", "perf", "throughput", "latency", "tokens/s")):
+        return "benchmark"
+    if any(token in text for token in ("tensor parallel", "pipeline parallel", "kv cache", "offload", "architecture", "ralph loop", "notebook")):
+        return "architecture"
+    if any(token in text for token in ("compat", "support", "cuda", "vulkan", "hip", "older gpus", "gpu")):
+        return "compatibility"
+    if any(token in text for token in ("release", "released", "v0.", "v1.", "v2.", "v3.", "b8")):
+        return "release"
+    return "feature"
+
+
+def stack_relevance_for_item(title: str, source_name: str, topic: str) -> str:
+    text = f"{title} {source_name}".lower()
+    high_terms = (
+        "tensor parallel",
+        "pipeline parallel",
+        "multi-gpu",
+        "split-mode",
+        "cuda",
+        "kv cache",
+        "offload",
+        "3090",
+        "rtx 3090",
+        "pcie",
+        "blower",
+        "10gbe",
+        "gemma4",
+    )
+    medium_terms = ("ollama", "vllm", "llama.cpp", "ggml", "qwen", "gemma", "nvme", "switch", "server")
+    if any(term in text for term in high_terms):
+        return "high"
+    if any(term in text for term in medium_terms) or topic in {"local-inference", "multi-gpu", "hardware"}:
+        return "medium"
+    if topic in {"workflow", "model-release"}:
+        return "low"
+    return "none"
+
+
+def implication_for_item(title: str, source_name: str, topic: str, change_type: str, stack_relevance: str) -> str:
+    text = f"{title} {source_name}".lower()
+    if "tensor parallel" in text or "multi-gpu" in text or "split-mode" in text:
+        return "May affect 3x3090 serving topology or split strategy."
+    if "kv cache" in text or "offload" in text:
+        return "May let the node trade CPU/RAM for larger context or larger served models."
+    if "cuda" in text:
+        return "May affect CUDA throughput or compatibility on RTX 3090."
+    if "gemma4" in text or "older gpus" in text:
+        return "Check compatibility with Ampere GPUs before upgrading."
+    if "10gbe" in text:
+        return "Potential rack/networking candidate for node-adjacent infrastructure."
+    if stack_relevance == "high":
+        return "Directly relevant to the Sovereign Node stack."
+    if change_type == "release":
+        return "Check release notes before changing local serving versions."
+    if topic == "workflow":
+        return "Potential workflow pattern for the sweep/wiki loop."
+    return ""
+
+
+def needs_followup_for_item(confidence: str, stack_relevance: str, change_type: str) -> int:
+    if stack_relevance == "high":
+        return 1
+    if confidence == "social-primary":
+        return 1
+    if change_type in {"breaking_change", "deprecation"}:
+        return 1
+    return 0
+
+
 def extract_facts(markdown: str, profile: str, run_date: date) -> list[dict[str, str]]:
     digest = _parse_digest(markdown)
     facts: list[dict[str, str]] = []
@@ -79,6 +188,12 @@ def extract_facts(markdown: str, profile: str, run_date: date) -> list[dict[str,
             published = normalize_text(meta.get("Published", ""))
             topic = topic_for_item(lane, item.get("title", ""), source_name)
             confidence = normalize_text(meta.get("Confidence", "")) or "unknown"
+            title = item.get("title", "")
+            entity = entity_for_item(title, source_name)
+            change_type = change_type_for_item(title)
+            stack_relevance = stack_relevance_for_item(title, source_name, topic)
+            implication = implication_for_item(title, source_name, topic, change_type, stack_relevance)
+            needs_followup = str(needs_followup_for_item(confidence, stack_relevance, change_type))
             facts.append(
                 {
                     "id": fact_id(claim, source_url, source_name),
@@ -92,6 +207,11 @@ def extract_facts(markdown: str, profile: str, run_date: date) -> list[dict[str,
                     "confidence": confidence,
                     "profile": profile,
                     "digest_date": run_date.isoformat(),
+                    "entity": entity,
+                    "change_type": change_type,
+                    "implication": implication,
+                    "stack_relevance": stack_relevance,
+                    "needs_followup": needs_followup,
                 }
             )
     return facts
@@ -121,7 +241,12 @@ def init_db(conn: sqlite3.Connection) -> None:
             profile TEXT NOT NULL,
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
-            seen_count INTEGER NOT NULL DEFAULT 1
+            seen_count INTEGER NOT NULL DEFAULT 1,
+            entity TEXT,
+            change_type TEXT CHECK (change_type IS NULL OR change_type IN ('release', 'feature', 'deprecation', 'bugfix', 'benchmark', 'architecture', 'compatibility', 'breaking_change')),
+            implication TEXT,
+            stack_relevance TEXT CHECK (stack_relevance IS NULL OR stack_relevance IN ('high', 'medium', 'low', 'none')),
+            needs_followup INTEGER CHECK (needs_followup IS NULL OR needs_followup IN (0, 1))
         );
 
         CREATE INDEX IF NOT EXISTS idx_facts_topic ON facts(topic);
@@ -138,6 +263,31 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
+    migrations = {
+        "entity": "ALTER TABLE facts ADD COLUMN entity TEXT",
+        "change_type": (
+            "ALTER TABLE facts ADD COLUMN change_type TEXT "
+            "CHECK (change_type IS NULL OR change_type IN ('release', 'feature', 'deprecation', "
+            "'bugfix', 'benchmark', 'architecture', 'compatibility', 'breaking_change'))"
+        ),
+        "implication": "ALTER TABLE facts ADD COLUMN implication TEXT",
+        "stack_relevance": (
+            "ALTER TABLE facts ADD COLUMN stack_relevance TEXT "
+            "CHECK (stack_relevance IS NULL OR stack_relevance IN ('high', 'medium', 'low', 'none'))"
+        ),
+        "needs_followup": "ALTER TABLE facts ADD COLUMN needs_followup INTEGER CHECK (needs_followup IS NULL OR needs_followup IN (0, 1))",
+    }
+    for column, sql in migrations.items():
+        if column not in existing_columns:
+            conn.execute(sql)
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity);
+        CREATE INDEX IF NOT EXISTS idx_facts_change_type ON facts(change_type);
+        CREATE INDEX IF NOT EXISTS idx_facts_stack_relevance ON facts(stack_relevance);
+        """
+    )
     conn.commit()
 
 
@@ -152,7 +302,8 @@ def upsert_facts(conn: sqlite3.Connection, facts: list[dict[str, str]], seen_at:
                 """
                 UPDATE facts
                 SET claim_text = ?, published_at = ?, topic = ?, lane = ?, confidence = ?,
-                    profile = ?, last_seen = ?, seen_count = seen_count + 1
+                    profile = ?, entity = ?, change_type = ?, implication = ?, stack_relevance = ?,
+                    needs_followup = ?, last_seen = ?, seen_count = seen_count + 1
                 WHERE id = ?
                 """,
                 (
@@ -162,6 +313,11 @@ def upsert_facts(conn: sqlite3.Connection, facts: list[dict[str, str]], seen_at:
                     fact["lane"],
                     fact["confidence"],
                     fact["profile"],
+                    fact["entity"],
+                    fact["change_type"],
+                    fact["implication"],
+                    fact["stack_relevance"],
+                    int(fact["needs_followup"]),
                     seen_at,
                     fact["id"],
                 ),
@@ -172,8 +328,9 @@ def upsert_facts(conn: sqlite3.Connection, facts: list[dict[str, str]], seen_at:
                 """
                 INSERT INTO facts (
                     id, claim_text, claim_norm, source_url, source_name, published_at,
-                    topic, lane, confidence, profile, first_seen, last_seen, seen_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    topic, lane, confidence, profile, first_seen, last_seen, seen_count,
+                    entity, change_type, implication, stack_relevance, needs_followup
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
                 """,
                 (
                     fact["id"],
@@ -188,6 +345,11 @@ def upsert_facts(conn: sqlite3.Connection, facts: list[dict[str, str]], seen_at:
                     fact["profile"],
                     seen_at,
                     seen_at,
+                    fact["entity"],
+                    fact["change_type"],
+                    fact["implication"],
+                    fact["stack_relevance"],
+                    int(fact["needs_followup"]),
                 ),
             )
             inserted += 1
@@ -248,6 +410,16 @@ def print_stats(conn: sqlite3.Connection) -> None:
     print("topics:")
     for topic, count in conn.execute("SELECT topic, COUNT(*) FROM facts GROUP BY topic ORDER BY COUNT(*) DESC, topic"):
         print(f"- {topic}: {count}")
+    print("stack relevance:")
+    for relevance, count in conn.execute(
+        "SELECT COALESCE(stack_relevance, 'unknown'), COUNT(*) FROM facts GROUP BY stack_relevance ORDER BY COUNT(*) DESC"
+    ):
+        print(f"- {relevance}: {count}")
+    print("change types:")
+    for change_type, count in conn.execute(
+        "SELECT COALESCE(change_type, 'unknown'), COUNT(*) FROM facts GROUP BY change_type ORDER BY COUNT(*) DESC"
+    ):
+        print(f"- {change_type}: {count}")
     print("sources:")
     for source_name, count in conn.execute(
         "SELECT source_name, COUNT(*) FROM facts GROUP BY source_name ORDER BY COUNT(*) DESC, source_name LIMIT 12"
