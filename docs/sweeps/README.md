@@ -38,6 +38,8 @@ python sweeps/run_daily.py --profile all
 python sweeps/build_weekly.py --date 2026-04-07 --profile core
 python sweeps/send_digest_email.py --profile core --date 2026-04-07 --dry-run
 python sweeps/run_workflow.py --profile core
+python sweeps/run_workflow.py --profile all --weekly --skip-email
+python sweeps/run_workflow.py --profile all --weekly --send-weekly
 ```
 
 The script is intentionally narrow:
@@ -57,6 +59,8 @@ The script is intentionally narrow:
 - weekly rollup stubs under `docs/sweeps/weekly/`
 - optional Resend email delivery as a separate send step
 - optional AI summary block when a local summary model is configured
+- optional weekly rollup generation from the workflow via `--weekly`
+- weekly rollup email is gated behind `--send-weekly` or `DIGEST_WEEKLY_EMAIL_ENABLED=true`
 
 Output filenames:
 
@@ -103,6 +107,7 @@ Recommended schedule:
 - `extended` once later in the day or on a separate schedule
 - `all` only when you want a full sweep
 - scheduled workflow now follows `generate -> optional send`
+- weekly workflow follows `daily sweep -> fact notebook -> weekly rollup -> optional weekly send`
 
 See also:
 

@@ -301,6 +301,13 @@ def _render_item_card(item: dict) -> str:
     )
 
 
+def _render_loose_bullet(text: str) -> str:
+    return (
+        f'<div style="padding:8px 0;border-bottom:1px dotted {_LINE};'
+        f'font-size:14px;color:{_FG};line-height:1.5;">{_esc(text)}</div>'
+    )
+
+
 def _render_summary(lines: list[str]) -> str:
     if not lines:
         return ""
@@ -331,6 +338,8 @@ def markdown_to_html(markdown: str) -> str:
         body_parts.append(_render_section_header(section["name"]))
         for item in section["items"]:
             body_parts.append(_render_item_card(item))
+        for bullet in section.get("loose_bullets", []):
+            body_parts.append(_render_loose_bullet(bullet))
 
     # fetch issues — demoted to bottom, subdued box
     body_parts.append(_render_fetch_issues(d["fetch_issues"]))
@@ -427,6 +436,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", dest="input_path", help="Explicit digest file path.")
     parser.add_argument("--profile", choices=("core", "extended", "all"), default="core")
     parser.add_argument("--date", dest="run_date", help="Digest date in YYYY-MM-DD format.")
+    parser.add_argument("--subject", help="Override email subject.")
     parser.add_argument("--dry-run", action="store_true", help="Render and validate without sending.")
     return parser.parse_args()
 
@@ -455,7 +465,7 @@ def main() -> int:
     from_email = getenv_required("DIGEST_FROM_EMAIL")
     from_name = getenv_required("DIGEST_FROM_NAME")
     api_key = getenv_required("RESEND_API_KEY")
-    subject = f"Daily Sweep - {path.stem}"
+    subject = args.subject or f"Daily Sweep - {path.stem}"
 
     if args.dry_run:
         print(json.dumps({"subject": subject, "to": recipients, "input": str(path)}, indent=2))

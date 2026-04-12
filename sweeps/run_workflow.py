@@ -14,6 +14,7 @@ RUN_DAILY = ROOT / "sweeps" / "run_daily.py"
 SEND_EMAIL = ROOT / "sweeps" / "send_digest_email.py"
 INGEST_X_EMAIL = ROOT / "sweeps" / "ingest_x_email.py"
 FACT_NOTEBOOK = ROOT / "sweeps" / "fact_notebook.py"
+BUILD_WEEKLY = ROOT / "sweeps" / "build_weekly.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,7 +24,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-x-email-ingest", action="store_true", help="Do not ingest X notification emails first.")
     parser.add_argument("--skip-fact-notebook", action="store_true", help="Do not update the sweep fact notebook.")
     parser.add_argument("--skip-email", action="store_true", help="Do not run the email send step.")
+    parser.add_argument("--weekly", action="store_true", help="Build the current ISO-week rollup after daily ingest.")
+    parser.add_argument("--send-weekly", action="store_true", help="Send the weekly rollup email when --weekly is used.")
     return parser.parse_args()
+
+
+def iso_week_label(run_date: date) -> str:
+    year, week, _ = run_date.isocalendar()
+    return f"{year}-W{week:02d}"
 
 
 def main() -> int:
@@ -55,17 +63,48 @@ def main() -> int:
         subprocess.run(notebook_cmd, check=True)
 
     if args.skip_email:
-        return 0
+        if not args.weekly:
+            return 0
 
     email_enabled = os.getenv("DIGEST_EMAIL_ENABLED", "false").strip().lower() == "true"
-    if not email_enabled:
+    if not args.skip_email and not email_enabled:
         print("DIGEST_EMAIL_ENABLED is not true; skipping email step.")
-        return 0
+    elif not args.skip_email:
+        email_cmd = [python_exe, str(SEND_EMAIL), "--profile", args.profile]
+        if args.run_date:
+            email_cmd.extend(["--date", args.run_date])
+        subprocess.run(email_cmd, check=True)
 
-    email_cmd = [python_exe, str(SEND_EMAIL), "--profile", args.profile]
-    if args.run_date:
-        email_cmd.extend(["--date", args.run_date])
-    subprocess.run(email_cmd, check=True)
+    if args.weekly:
+        weekly_date = date.fromisoformat(args.run_date) if args.run_date else date.today()
+        weekly_cmd = [python_exe, str(BUILD_WEEKLY), "--profile", args.profile, "--date", weekly_date.isoformat()]
+        weekly_result = subprocess.run(weekly_cmd, check=True, capture_output=True, text=True)
+        weekly_path = weekly_result.stdout.strip().splitlines()[-1]
+        print(f"Weekly rollup: {weekly_path}")
+
+        weekly_email_enabled = (
+            not args.skip_email
+            and (
+                args.send_weekly
+                or os.getenv("DIGEST_WEEKLY_EMAIL_ENABLED", "false").strip().lower() == "true"
+            )
+        )
+        if not weekly_email_enabled:
+            print("Weekly email disabled; set DIGEST_WEEKLY_EMAIL_ENABLED=true or pass --send-weekly to send it.")
+            return 0
+        if not email_enabled:
+            print("DIGEST_EMAIL_ENABLED is not true; skipping weekly email send.")
+            return 0
+        weekly_subject = f"Weekly Sweep - {iso_week_label(weekly_date)}"
+        weekly_email_cmd = [
+            python_exe,
+            str(SEND_EMAIL),
+            "--input",
+            weekly_path,
+            "--subject",
+            weekly_subject,
+        ]
+        subprocess.run(weekly_email_cmd, check=True)
     return 0
 
 
