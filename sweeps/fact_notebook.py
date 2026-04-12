@@ -34,8 +34,8 @@ def normalize_claim(value: str) -> str:
     return normalize_text(value)
 
 
-def fact_id(claim: str, source_url: str) -> str:
-    normalized = f"{normalize_claim(claim)}|{source_url.strip().lower()}"
+def fact_id(claim: str, source_url: str, source_name: str) -> str:
+    normalized = f"{normalize_claim(claim)}|{source_url.strip().lower()}|{source_name.strip().lower()}"
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
@@ -81,7 +81,7 @@ def extract_facts(markdown: str, profile: str, run_date: date) -> list[dict[str,
             confidence = normalize_text(meta.get("Confidence", "")) or "unknown"
             facts.append(
                 {
-                    "id": fact_id(claim, source_url),
+                    "id": fact_id(claim, source_url, source_name),
                     "claim_text": claim,
                     "claim_norm": normalize_claim(claim),
                     "source_url": source_url,
@@ -223,6 +223,67 @@ def print_recent(conn: sqlite3.Connection, limit: int) -> None:
         print(f"[{topic}] {source_name}: {claim_text}")
 
 
+def print_query(conn: sqlite3.Connection, topic: str, source: str, limit: int) -> None:
+    where = []
+    params: list[str | int] = []
+    if topic:
+        where.append("topic = ?")
+        params.append(topic)
+    if source:
+        where.append("source_name LIKE ?")
+        params.append(f"%{source}%")
+    sql = "SELECT topic, source_name, claim_text FROM facts"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY last_seen DESC, source_name ASC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
+    for row_topic, source_name, claim_text in rows:
+        print(f"[{row_topic}] {source_name}: {claim_text}")
+
+
+def print_stats(conn: sqlite3.Connection) -> None:
+    total = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+    print(f"facts: {total}")
+    print("topics:")
+    for topic, count in conn.execute("SELECT topic, COUNT(*) FROM facts GROUP BY topic ORDER BY COUNT(*) DESC, topic"):
+        print(f"- {topic}: {count}")
+    print("sources:")
+    for source_name, count in conn.execute(
+        "SELECT source_name, COUNT(*) FROM facts GROUP BY source_name ORDER BY COUNT(*) DESC, source_name LIMIT 12"
+    ):
+        print(f"- {source_name}: {count}")
+
+
+def backfill(conn: sqlite3.Connection, profile: str, limit: int) -> tuple[int, int, int]:
+    daily_dir = ROOT / "docs" / "sweeps" / "daily"
+    paths = sorted(daily_dir.glob("*.md"))
+    if profile != "all":
+        suffix = "" if profile == "core" else f".{profile}"
+        paths = [path for path in paths if path.stem.endswith(suffix)]
+        if profile == "core":
+            paths = [path for path in paths if "." not in path.stem]
+    if limit:
+        paths = paths[-limit:]
+
+    total_inserted = 0
+    total_updated = 0
+    processed = 0
+    for path in paths:
+        name = path.stem
+        parts = name.split(".", 1)
+        run_date = date.fromisoformat(parts[0])
+        path_profile = parts[1] if len(parts) > 1 else "core"
+        facts = extract_facts(path.read_text(encoding="utf-8"), path_profile, run_date)
+        seen_at = datetime.now(UTC).isoformat()
+        inserted, updated = upsert_facts(conn, facts, seen_at)
+        record_ingest(conn, path, path_profile, run_date, seen_at, len(facts))
+        total_inserted += inserted
+        total_updated += updated
+        processed += 1
+    return processed, total_inserted, total_updated
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the sweep fact notebook from daily digest markdown.")
     parser.add_argument("--input", dest="input_path", help="Explicit digest markdown path.")
@@ -231,11 +292,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db", default=str(DEFAULT_DB), help="SQLite notebook path.")
     parser.add_argument("--dry-run", action="store_true", help="Extract facts without writing SQLite.")
     parser.add_argument("--recent", type=int, default=0, help="Print recent facts after ingest.")
+    parser.add_argument("--backfill", action="store_true", help="Ingest existing daily digest markdown files.")
+    parser.add_argument("--limit", type=int, default=0, help="Limit rows for query/backfill commands.")
+    parser.add_argument("--topic", default="", help="Print facts for a topic.")
+    parser.add_argument("--source", default="", help="Print facts matching a source name.")
+    parser.add_argument("--stats", action="store_true", help="Print fact notebook counts.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    db_path = Path(args.db)
+    if not db_path.is_absolute():
+        db_path = ROOT / db_path
+    conn = connect(db_path)
+    init_db(conn)
+
+    if args.backfill:
+        processed, inserted, updated = backfill(conn, args.profile, args.limit)
+        print({"digests": processed, "inserted": inserted, "updated": updated, "db": str(db_path)})
+        conn.close()
+        return 0
+
+    if args.stats:
+        print_stats(conn)
+        conn.close()
+        return 0
+
+    if args.topic or args.source:
+        print_query(conn, args.topic, args.source, args.limit or 20)
+        conn.close()
+        return 0
+
     run_date = date.fromisoformat(args.run_date) if args.run_date else date.today()
     path = Path(args.input_path) if args.input_path else digest_path(args.profile, run_date)
     if not path.is_absolute():
@@ -249,13 +337,9 @@ def main() -> int:
         print({"facts": len(facts), "input": str(path)})
         for fact in facts[:10]:
             print(f"[{fact['topic']}] {fact['claim_text']}")
+        conn.close()
         return 0
 
-    db_path = Path(args.db)
-    if not db_path.is_absolute():
-        db_path = ROOT / db_path
-    conn = connect(db_path)
-    init_db(conn)
     seen_at = datetime.now(UTC).isoformat()
     inserted, updated = upsert_facts(conn, facts, seen_at)
     record_ingest(conn, path, args.profile, run_date, seen_at, len(facts))

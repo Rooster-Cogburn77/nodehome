@@ -1,7 +1,7 @@
 # Daily Research Sweeps
 
-**Date:** 2026-04-07  
-**Status:** Proposed
+**Date:** 2026-04-10
+**Status:** Operational
 
 ## Goal
 
@@ -17,31 +17,31 @@ This is not a general news feed. It should answer:
 
 ## Core Orientation
 
-This should be an `X-first discovery system`.
+This is a `fact accumulation system`: source feeds are inputs, the notebook is the product, and the digest/email are views into that notebook.
 
-For the lanes we care about, especially:
+For the lanes we care about — AI workflows, local-node infra, hardware, and the builder scene — the first appearance of an idea is often on X. X posts, replies, quote posts, screenshots, and offhand comments are primary ideation artifacts, not replaceable by blogs/GitHub/Bluesky. The operational problem is that free X access is unreliable, not that X is unimportant.
 
-- AI workflows
-- early local-node ideas
-- strange but useful emerging practices
+The intended stack is:
 
-the first appearance is often on X, not in a blog post or release note.
-
-So the intended stack is:
-
-- `X` = primary discovery layer
+- `X` = primary ideation layer when available (posts, replies, quote context, early vocabulary)
+- `X email notifications` = automated low-risk capture path for selected X notifications
+- `blogs/RSS/YouTube` = durable artifact layer (long-form writeups and official announcements)
+- `Bluesky` = parallel public social signal for accounts that cross-post there
 - `GitHub` = code / implementation validation layer
-- `blogs/releases` = durable explanation layer
-- `wiki` = internal synthesis layer
+- `SQLite fact notebook` = durable memory layer
+- `wiki` = curated synthesis / article layer
+
+Durable feeds and Bluesky are redundancy layers, not substitutes for X. When X is dark, they keep the system from going blind. When X works, it remains the best source for early thought and social context.
 
 ## Design Principles
 
 - Prefer primary sources over commentary.
 - Track diffs, not just headlines.
-- Separate durable feeds from fragile sources like X.
+- Treat X as primary ideation but operationally fragile.
 - Produce a short operator digest, not an unread pile of links.
-- Promote only the top items into the knowledge base.
+- Accumulate durable facts even when an item is not promoted into a full wiki note.
 - Separate "what the field is converging on" from "what might become important early."
+- Design for bounded local-model context: extract small facts, reset context, persist memory outside the model.
 
 ## Output Shape
 
@@ -91,16 +91,32 @@ Examples:
 - Google Gemma announcements
 - Qwen announcements
 
-### Tier 3: Fragile / Manual Sources
+### Tier 2.5: Durable Fallbacks for X-Heavy Sources
 
-These are valuable but operationally annoying.
+These feeds cover the same people/orgs tracked via X, but through their blog, newsletter, or YouTube channel. They produce the long-form artifacts that X posts often point to. When X is dark, these keep coverage alive.
 
-- X accounts
-- YouTube channels without clean feeds or transcripts
+| Source | Feed | Lane | Covers |
+|--------|------|------|--------|
+| Sebastian Raschka | `magazine.sebastianraschka.com/feed` | workflow | Ahead of AI newsletter — LLM architecture, coding agents, attention variants |
+| fast.ai | `www.fast.ai/index.xml` | workflow | Jeremy Howard + Rachel Thomas — AI education, practical deep learning |
+| Answer.AI | `www.answer.ai/index.xml` | workflow | Jeremy Howard's research lab — applied AI R&D, tool use, agents |
+| Jeff Geerling | `www.jeffgeerling.com/blog.xml` | hardware | Homelab builds, SBCs, Linux hardware, DRAM/storage market |
+| Jeff Geerling | YouTube (`UCR-DXc1voovS8nhAvccRZhg`) | hardware | Same coverage as blog, video format |
+| ServeTheHome | `www.servethehome.com/feed/` | hardware | Enterprise/server hardware reviews, AI server builds, cooling |
+| ServeTheHome | YouTube (`UCv6J_jJa8GJqFwQNgNrMuww`) | hardware | Same coverage as blog, video format |
+| Level1Techs | YouTube (`UC4w1YQAJMWOz4qtxinq55LQ`) | hardware | Wendell's GPU/server/homelab content, multi-GPU builds |
+
+These are `confidence: primary` — first-party feeds with reliable uptime. They should never be the only source for a person (X still catches fast-moving chatter), but they guarantee baseline coverage.
+
+### Tier 3: Fragile / Social Sources
+
+These are valuable for early discovery but operationally unreliable.
+
+- X accounts via OpenRSS (intermittent availability, service-level outages)
 - conference talk clips
 - random blogs surfaced by link-chasing
 
-Use these for discovery, not as the foundation.
+Use these for discovery bonus yield, not as the foundation. Every high-value Tier 3 source should eventually get a Tier 2.5 durable fallback where one exists.
 
 ## Sweep Lanes
 
@@ -393,30 +409,68 @@ Keep lane-specific judgment:
 
 ## X / Social Strategy
 
-Make X the center of discovery, but not the center of truth.
+X is primary ideation, not guaranteed transport.
 
-Use it for:
+**Why X transport is unreliable:** OpenRSS is a fragile free X-to-RSS bridge. Nitter instances are dead, RSSHub removed its Twitter route, and RSS Bridge returns 500s. OpenRSS itself has intermittent outages and per-account scraping failures. Even with throttling, success rate for 27 X feeds can range from partial coverage to full outage.
 
-- first sightings
-- vocabulary shifts
+**Operational model:**
+
+- Treat X-originated posts, replies, quote context, screenshots, and offhand comments as primary source material when captured
+- Use official X API only if a safe token/cost posture exists
+- Use X email notifications as the current automated, low-risk capture path
+- Keep OpenRSS as optional fallback only (`SWEEP_OPENRSS_FALLBACK_ENABLED=true`)
+- Add durable fallbacks (blog, YouTube, GitHub, Bluesky) for baseline continuity, not as replacements
+- The quarantine system handles persistent failures automatically (3 consecutive failures = 12h cooldown)
+
+**What X is still good for:**
+
+- first sightings and vocabulary shifts
 - workflow memes that may become real patterns
-- operator reports
-- early architecture sketches
+- operator reports and early architecture sketches
+- replies, quote-posts, and comments where half-formed ideas develop
+- cross-pollination between builders who don't read each other's blogs
 
-Then use GitHub, blogs, releases, benchmarks, and direct testing for validation.
+**Working model:**
 
-Working model:
+- `X email notifications` catch selected X-originated posts automatically
+- `OpenRSS` catches additional X chatter only when explicitly enabled and available
+- `blogs/YouTube/RSS` catch durable artifacts
+- `Bluesky` catches public social cross-posts where accounts participate
+- `GitHub` shows whether an idea is becoming code
+- `SQLite fact notebook` records durable claims and reinforcement over time
+- `wiki` records curated synthesis and article-ready material
 
-- `X` finds the thing
-- `GitHub` shows whether it is becoming code
-- `blogs/releases` explain it cleanly
-- `wiki` records what survived review
+## Fact Notebook Architecture
 
-For the `Local AI Node Scene` lane, X should function as idea radar:
+The sweep should evolve from a feed reader into a fact accumulation engine.
 
-- use it to catch fresh concepts early
-- do not confuse virality with importance
-- require validation before promotion into decisions
+Current flow:
+
+1. Fetch sources.
+2. Render daily digest.
+3. Email the digest.
+4. Parse the digest into facts.
+5. Store facts in `docs/sweeps/notebook/facts.sqlite` with SQLite WAL.
+
+Target flow:
+
+1. Fetch source items.
+2. Extract atomic facts from each item.
+3. Store facts with source URL, source name, published date, lane, topic, confidence, first seen, last seen, and seen count.
+4. Detect reinforcement, gaps, and contradictions from the fact store.
+5. Generate daily digest, weekly rollup, and article candidates as views over the notebook.
+
+The notebook is the durable product. The digest and email are presentation layers.
+
+Local-model implication:
+
+- Do not rely on huge context windows.
+- Process one item or small batches at a time.
+- Extract compact structured facts.
+- Reset context between extraction passes.
+- Merge and dedupe outside the model in SQLite.
+
+This follows the Ralph Loop / laconic lesson from Steve Hanov: treat the context window as disposable and keep memory in the filesystem/database.
 
 ## Guardrails
 
@@ -473,8 +527,10 @@ This is deliberately MVP-level:
 - no external dependencies
 - markdown output
 - simple page hashing fallback for sources without feeds
-- concurrent fetches
+- concurrent fetches with OpenRSS throttling (semaphore, max 2 concurrent, 2-5s stagger delay)
+- XML sanitizer for feeds with invalid bytes (e.g. terminal control characters in Answer.AI feed)
 - profile split: `core` vs `extended`
+- durable fallback feeds for X-heavy extended sources (blogs, YouTube, newsletters)
 
 This means the current code scaffold is still behind the intended design.
 
