@@ -1,6 +1,16 @@
 # Sovereign Node - Session Log
 <!-- At the start of each month, move previous month's entries to docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-04-12 (Session 4)
+**Focus:** Nodehome sweep automation and compounding notebook loop
+**What was done:**
+- Decision logged: weekly rollup should be generated automatically from the fact notebook, but weekly email stays gated until the rollup proves inbox-worthy.
+- Chosen workflow: `daily sweep -> fact notebook -> weekly rollup -> optional weekly send`.
+- Weekly generation should run through `sweeps/run_workflow.py --profile all --weekly`.
+- Weekly email should require explicit opt-in via `--send-weekly` or `DIGEST_WEEKLY_EMAIL_ENABLED=true`, plus normal Resend email env.
+**Commits:** Pending
+**Next:** Wire weekly rollup generation into the workflow runner and scheduler docs.
+
 ## 2026-04-07 (Session 3)
 **Focus:** CPU cooler decision, final component sourcing, Codex build review
 **What was done:**
