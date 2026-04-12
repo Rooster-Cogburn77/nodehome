@@ -551,6 +551,17 @@
       "retries": 2
     },
     {
+      "id": "stevehanov-blog",
+      "name": "Steve Hanov Blog",
+      "lane": "workflow",
+      "kind": "feed",
+      "url": "https://stevehanov.ca/blog/feed",
+      "confidence": "primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
       "id": "bsky-simonw",
       "name": "Bluesky: @simonwillison.net",
       "lane": "workflow",
