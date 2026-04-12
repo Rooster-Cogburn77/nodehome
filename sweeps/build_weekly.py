@@ -207,9 +207,10 @@ def render_followup(row: sqlite3.Row) -> str:
 def render_assumption_pressure(row: sqlite3.Row) -> str:
     source = f" ({row['source_url']})" if row["source_url"] else ""
     implication = f" Implication: {row['implication']}" if row["implication"] else ""
+    assumptions = row["assumption_ids"]
     return (
-        f"- [{row['assumption_entity']} | {row['change_type']} | {row['fact_id']}] "
-        f"{row['assumption_claim']} Pressure: {row['fact_claim']} - {row['source_name']}{source}{implication}"
+        f"- [{row['severity']} | {row['assumption_entity']} | {row['change_type']} | {row['fact_id']}] "
+        f"{row['fact_claim']} - {row['source_name']}{source}. Pressures: {assumptions}.{implication}"
     )
 
 

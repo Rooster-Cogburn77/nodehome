@@ -668,10 +668,9 @@ def assumption_pressure_rows(
     return conn.execute(
         f"""
         SELECT
-            assumptions.id AS assumption_id,
-            assumptions.entity AS assumption_entity,
-            assumptions.claim_text AS assumption_claim,
-            assumptions.source AS assumption_source,
+            GROUP_CONCAT(assumptions.id, ', ') AS assumption_ids,
+            GROUP_CONCAT(assumptions.claim_text, ' || ') AS assumption_claims,
+            MIN(assumptions.entity) AS assumption_entity,
             facts.id AS fact_id,
             facts.claim_text AS fact_claim,
             facts.source_name,
@@ -682,14 +681,32 @@ def assumption_pressure_rows(
             facts.implication,
             facts.seen_count,
             facts.last_seen,
+            CASE
+                WHEN facts.change_type = 'breaking_change' THEN 'act'
+                WHEN facts.change_type = 'deprecation' THEN 'act'
+                WHEN facts.change_type = 'architecture' AND facts.stack_relevance = 'high' THEN 'review'
+                WHEN facts.change_type = 'compatibility' AND facts.stack_relevance = 'high' THEN 'review'
+                ELSE 'watch'
+            END AS severity,
             COALESCE(fact_actions.status, 'open') AS action_status
         FROM assumptions
         JOIN facts ON facts.entity = assumptions.entity
         LEFT JOIN fact_actions ON fact_actions.fact_id = facts.id
         WHERE {" AND ".join(where)}
+        GROUP BY
+            facts.id,
+            facts.claim_text,
+            facts.source_name,
+            facts.source_url,
+            facts.topic,
+            facts.change_type,
+            facts.stack_relevance,
+            facts.implication,
+            facts.seen_count,
+            facts.last_seen,
+            fact_actions.status
         ORDER BY
-            assumptions.entity ASC,
-            assumptions.id ASC,
+            CASE severity WHEN 'act' THEN 0 WHEN 'review' THEN 1 ELSE 2 END,
             CASE facts.change_type WHEN 'release' THEN 0 WHEN 'architecture' THEN 1 WHEN 'breaking_change' THEN 2 WHEN 'deprecation' THEN 3 WHEN 'compatibility' THEN 4 ELSE 5 END,
             facts.seen_count DESC,
             facts.last_seen DESC
@@ -700,14 +717,12 @@ def assumption_pressure_rows(
 
 
 def print_assumption_check(conn: sqlite3.Connection, profile: str, limit: int) -> None:
-    current_assumption = None
     for row in assumption_pressure_rows(conn, profile, limit):
-        assumption = row["assumption_id"]
-        if assumption != current_assumption:
-            print(f"\n[{row['assumption_entity']}] {assumption}: {row['assumption_claim']}")
-            current_assumption = assumption
+        print(f"\n[{row['severity']}] {row['assumption_entity']} / pressures: {row['assumption_ids']}")
         detail = f"{row['fact_id']} / {row['change_type']} / stack:{row['stack_relevance']}"
         print(f"- {detail}: {row['fact_claim']}")
+        for claim in row["assumption_claims"].split(" || "):
+            print(f"  Assumption: {claim}")
         if row["implication"]:
             print(f"  Implication: {row['implication']}")
         if row["source_url"]:
@@ -786,6 +801,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--actions", action="store_true", help="Print recent fact actions.")
     parser.add_argument("--assumptions", action="store_true", help="Print active seed assumptions.")
     parser.add_argument("--assumption-check", action="store_true", help="Print high-relevance facts pressuring active assumptions.")
+    parser.add_argument("--pressure", action="store_true", help="Alias for --assumption-check.")
     return parser.parse_args()
 
 
@@ -829,7 +845,7 @@ def main() -> int:
         conn.close()
         return 0
 
-    if args.assumption_check:
+    if args.assumption_check or args.pressure:
         print_assumption_check(conn, args.profile, args.limit or 20)
         conn.close()
         return 0
