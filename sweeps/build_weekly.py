@@ -6,7 +6,14 @@ import sqlite3
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from sweeps.fact_notebook import DEFAULT_DB, connect, followup_reason, followup_rows, init_db
+from sweeps.fact_notebook import (
+    DEFAULT_DB,
+    assumption_pressure_rows,
+    connect,
+    followup_reason,
+    followup_rows,
+    init_db,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -197,6 +204,15 @@ def render_followup(row: sqlite3.Row) -> str:
     )
 
 
+def render_assumption_pressure(row: sqlite3.Row) -> str:
+    source = f" ({row['source_url']})" if row["source_url"] else ""
+    implication = f" Implication: {row['implication']}" if row["implication"] else ""
+    return (
+        f"- [{row['assumption_entity']} | {row['change_type']} | {row['fact_id']}] "
+        f"{row['assumption_claim']} Pressure: {row['fact_claim']} - {row['source_name']}{source}{implication}"
+    )
+
+
 def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Path:
     WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
     output_path = output_path_for(run_date, profile)
@@ -211,6 +227,7 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     node_impact = sovereign_node_impact(conn, start, end, profile)
     new_items = new_facts(conn, start, end, profile)
     candidates = article_candidates(conn, start, end, profile)
+    pressure = assumption_pressure_rows(conn, profile, 12, start, end)
     gaps = followup_rows(conn, profile, 12)
     conn.close()
 
@@ -256,6 +273,13 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
             lines.append(render_fact(row, include_seen=True))
     else:
         lines.append("- No article candidates yet.")
+
+    lines.extend(["", "## Assumption Pressure", ""])
+    if pressure:
+        for row in pressure:
+            lines.append(render_assumption_pressure(row))
+    else:
+        lines.append("- No active assumptions under pressure this week.")
 
     lines.extend(["", "## Gaps / Follow-Up", ""])
     if gaps:

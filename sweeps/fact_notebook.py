@@ -26,6 +26,50 @@ CHANGE_TYPES = {
     "breaking_change",
 }
 STACK_RELEVANCE = {"high", "medium", "low", "none"}
+SEED_ASSUMPTIONS = (
+    {
+        "id": "vllm-3gpu-tensor-parallel-model-dependent",
+        "entity": "vLLM",
+        "claim_text": "Tensor parallelism with 3 GPUs is model-dependent and needs validation against the selected model.",
+        "source": "sovereign-node-build-plan",
+    },
+    {
+        "id": "llamacpp-backend-tensor-parallel-experimental",
+        "entity": "llama.cpp",
+        "claim_text": "Backend-agnostic tensor parallelism is experimental and should be watched before relying on it.",
+        "source": "sweep-2026-04-10",
+    },
+    {
+        "id": "ollama-gemma4-ampere-fa-compat",
+        "entity": "Ollama",
+        "claim_text": "Gemma4 on Ampere GPUs may need flash-attention compatibility checks or FA disable behavior.",
+        "source": "sweep-2026-04-10",
+    },
+    {
+        "id": "vllm-cpu-kv-offload-useful",
+        "entity": "vLLM",
+        "claim_text": "CPU KV cache offload may help exceed 72GB VRAM constraints by trading CPU/RAM for context or model capacity.",
+        "source": "sweep-2026-04-11",
+    },
+    {
+        "id": "hardware-3x-blower-airflow",
+        "entity": "RTX 3090",
+        "claim_text": "3x blower RTX 3090 airflow depends primarily on GPU exhaust path and chassis intake/exhaust support.",
+        "source": "sovereign-node-build-plan",
+    },
+    {
+        "id": "ollama-target-install-v0205",
+        "entity": "Ollama",
+        "claim_text": "Ollama v0.20.5 is the current target install version for Sovereign Node.",
+        "source": "sweep-2026-04-10",
+    },
+    {
+        "id": "llamacpp-split-mode-tensor-experimental",
+        "entity": "llama.cpp",
+        "claim_text": "llama.cpp split-mode tensor is marked experimental and directly affects 3-card serving assumptions.",
+        "source": "sweep-2026-04-10",
+    },
+)
 
 
 def digest_path(profile: str, run_date: date) -> Path:
@@ -106,7 +150,10 @@ def change_type_for_item(title: str) -> str:
         return "bugfix"
     if any(token in text for token in ("benchmark", "leaderboard", "perf", "throughput", "latency", "tokens/s")):
         return "benchmark"
-    if any(token in text for token in ("tensor parallel", "pipeline parallel", "kv cache", "offload", "architecture", "ralph loop", "notebook")):
+    if any(
+        token in text
+        for token in ("tensor parallel", "pipeline parallel", "split-mode", "kv cache", "offload", "architecture", "ralph loop", "notebook")
+    ):
         return "architecture"
     if any(token in text for token in ("compat", "support", "cuda", "vulkan", "hip", "older gpus", "gpu")):
         return "compatibility"
@@ -272,6 +319,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_fact_actions_status ON fact_actions(status);
+
+        CREATE TABLE IF NOT EXISTS assumptions (
+            id TEXT PRIMARY KEY,
+            entity TEXT NOT NULL,
+            claim_text TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('active', 'revised', 'retired')),
+            source TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_assumptions_entity ON assumptions(entity);
+        CREATE INDEX IF NOT EXISTS idx_assumptions_status ON assumptions(status);
         """
     )
     existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(facts)").fetchall()}
@@ -299,7 +359,32 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_facts_stack_relevance ON facts(stack_relevance);
         """
     )
+    seed_assumptions(conn)
     conn.commit()
+
+
+def seed_assumptions(conn: sqlite3.Connection) -> None:
+    now = datetime.now(UTC).isoformat()
+    for assumption in SEED_ASSUMPTIONS:
+        conn.execute(
+            """
+            INSERT INTO assumptions (id, entity, claim_text, status, source, created_at, updated_at)
+            VALUES (?, ?, ?, 'active', ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                entity = excluded.entity,
+                claim_text = excluded.claim_text,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                assumption["id"],
+                assumption["entity"],
+                assumption["claim_text"],
+                assumption["source"],
+                now,
+                now,
+            ),
+        )
 
 
 def upsert_facts(conn: sqlite3.Connection, facts: list[dict[str, str]], seen_at: str) -> tuple[int, int]:
@@ -534,6 +619,101 @@ def print_actions(conn: sqlite3.Connection, limit: int) -> None:
             print(f"  Note: {row['note']}")
 
 
+def assumption_rows(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    return conn.execute(
+        """
+        SELECT id, entity, claim_text, status, source, updated_at
+        FROM assumptions
+        ORDER BY entity ASC, id ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+
+def print_assumptions(conn: sqlite3.Connection, limit: int) -> None:
+    for row in assumption_rows(conn, limit):
+        print(f"- {row['id']} [{row['status']}] {row['entity']}: {row['claim_text']}")
+        if row["source"]:
+            print(f"  Source: {row['source']}")
+
+
+def assumption_pressure_rows(
+    conn: sqlite3.Connection,
+    profile: str = "all",
+    limit: int = 20,
+    start: str = "",
+    end: str = "",
+) -> list[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    where = [
+        "assumptions.status = 'active'",
+        "("
+        "(facts.stack_relevance = 'high' AND facts.change_type IN ('architecture', 'compatibility', 'breaking_change', 'deprecation')) "
+        "OR (assumptions.id = 'ollama-target-install-v0205' AND facts.change_type = 'release' "
+        "AND facts.claim_text NOT LIKE 'v0.20.5%' AND facts.claim_text NOT LIKE 'v0.20.4%' "
+        "AND facts.claim_text NOT LIKE 'v0.20.3%')"
+        ")",
+        "COALESCE(fact_actions.status, 'open') NOT IN ('done', 'ignored')",
+    ]
+    params: list[str | int] = []
+    if profile != "all":
+        where.append("facts.profile = ?")
+        params.append(profile)
+    if start and end:
+        where.append("substr(facts.first_seen, 1, 10) BETWEEN ? AND ?")
+        params.extend([start, end])
+    params.append(limit)
+    return conn.execute(
+        f"""
+        SELECT
+            assumptions.id AS assumption_id,
+            assumptions.entity AS assumption_entity,
+            assumptions.claim_text AS assumption_claim,
+            assumptions.source AS assumption_source,
+            facts.id AS fact_id,
+            facts.claim_text AS fact_claim,
+            facts.source_name,
+            facts.source_url,
+            facts.topic,
+            facts.change_type,
+            facts.stack_relevance,
+            facts.implication,
+            facts.seen_count,
+            facts.last_seen,
+            COALESCE(fact_actions.status, 'open') AS action_status
+        FROM assumptions
+        JOIN facts ON facts.entity = assumptions.entity
+        LEFT JOIN fact_actions ON fact_actions.fact_id = facts.id
+        WHERE {" AND ".join(where)}
+        ORDER BY
+            assumptions.entity ASC,
+            assumptions.id ASC,
+            CASE facts.change_type WHEN 'release' THEN 0 WHEN 'architecture' THEN 1 WHEN 'breaking_change' THEN 2 WHEN 'deprecation' THEN 3 WHEN 'compatibility' THEN 4 ELSE 5 END,
+            facts.seen_count DESC,
+            facts.last_seen DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+
+
+def print_assumption_check(conn: sqlite3.Connection, profile: str, limit: int) -> None:
+    current_assumption = None
+    for row in assumption_pressure_rows(conn, profile, limit):
+        assumption = row["assumption_id"]
+        if assumption != current_assumption:
+            print(f"\n[{row['assumption_entity']}] {assumption}: {row['assumption_claim']}")
+            current_assumption = assumption
+        detail = f"{row['fact_id']} / {row['change_type']} / stack:{row['stack_relevance']}"
+        print(f"- {detail}: {row['fact_claim']}")
+        if row["implication"]:
+            print(f"  Implication: {row['implication']}")
+        if row["source_url"]:
+            print(f"  Source: {row['source_url']}")
+
+
 def print_stats(conn: sqlite3.Connection) -> None:
     total = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
     print(f"facts: {total}")
@@ -604,6 +784,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--status", choices=("open", "reviewing", "done", "ignored"), default="reviewing")
     parser.add_argument("--note", default="", help="Action note for --mark.")
     parser.add_argument("--actions", action="store_true", help="Print recent fact actions.")
+    parser.add_argument("--assumptions", action="store_true", help="Print active seed assumptions.")
+    parser.add_argument("--assumption-check", action="store_true", help="Print high-relevance facts pressuring active assumptions.")
     return parser.parse_args()
 
 
@@ -639,6 +821,16 @@ def main() -> int:
 
     if args.actions:
         print_actions(conn, args.limit or 20)
+        conn.close()
+        return 0
+
+    if args.assumptions:
+        print_assumptions(conn, args.limit or 20)
+        conn.close()
+        return 0
+
+    if args.assumption_check:
+        print_assumption_check(conn, args.profile, args.limit or 20)
         conn.close()
         return 0
 
