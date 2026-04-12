@@ -5,3 +5,5 @@ __pycache__/
 site/public/
 nul
 docs/sweeps/inbox/*.jsonl
+docs/sweeps/notebook/*.sqlite
+docs/sweeps/notebook/*.sqlite-*
