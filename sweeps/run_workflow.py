@@ -73,14 +73,14 @@ def main() -> int:
     if args.skip_x_email_ingest:
         print("Skipping X email ingest by request.")
     elif x_email_ready:
-        subprocess.run([python_exe, str(INGEST_X_EMAIL)], check=True)
+        subprocess.run([python_exe, str(INGEST_X_EMAIL)], check=True, cwd=ROOT)
     else:
         print("X email ingest not configured; skipping.")
 
     daily_cmd = [python_exe, str(RUN_DAILY), "--profile", args.profile]
     if args.run_date:
         daily_cmd.extend(["--date", args.run_date])
-    subprocess.run(daily_cmd, check=True)
+    subprocess.run(daily_cmd, check=True, cwd=ROOT)
 
     if args.skip_fact_notebook:
         print("Skipping fact notebook ingest by request.")
@@ -88,7 +88,7 @@ def main() -> int:
         notebook_cmd = [python_exe, "-m", "sweeps.fact_notebook", "--profile", args.profile]
         if args.run_date:
             notebook_cmd.extend(["--date", args.run_date])
-        subprocess.run(notebook_cmd, check=True)
+        subprocess.run(notebook_cmd, check=True, cwd=ROOT)
 
     if args.skip_email:
         if not args.weekly:
@@ -101,12 +101,12 @@ def main() -> int:
         email_cmd = [python_exe, str(SEND_EMAIL), "--profile", args.profile]
         if args.run_date:
             email_cmd.extend(["--date", args.run_date])
-        subprocess.run(email_cmd, check=True)
+        subprocess.run(email_cmd, check=True, cwd=ROOT)
 
     if args.weekly:
         weekly_date = date.fromisoformat(args.run_date) if args.run_date else date.today()
-        weekly_cmd = [python_exe, str(BUILD_WEEKLY), "--profile", args.profile, "--date", weekly_date.isoformat()]
-        weekly_result = subprocess.run(weekly_cmd, check=True, capture_output=True, text=True)
+        weekly_cmd = [python_exe, "-m", "sweeps.build_weekly", "--profile", args.profile, "--date", weekly_date.isoformat()]
+        weekly_result = subprocess.run(weekly_cmd, check=True, capture_output=True, text=True, cwd=ROOT)
         weekly_path = weekly_result.stdout.strip().splitlines()[-1]
         print(f"Weekly rollup: {weekly_path}")
 
@@ -132,7 +132,7 @@ def main() -> int:
             "--subject",
             weekly_subject,
         ]
-        subprocess.run(weekly_email_cmd, check=True)
+        subprocess.run(weekly_email_cmd, check=True, cwd=ROOT)
     return 0
 
 
