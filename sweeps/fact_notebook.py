@@ -580,7 +580,18 @@ def mark_action(conn: sqlite3.Connection, fact_id: str, status: str, note: str) 
     if status == "open" and note.lower() == "reset":
         note = ""
     cur = conn.execute("SELECT id FROM facts WHERE id = ?", (fact_id,))
-    if not cur.fetchone():
+    row = cur.fetchone()
+    if row:
+        fact_id = row[0]
+    else:
+        rows = conn.execute("SELECT id FROM facts WHERE id LIKE ? ORDER BY id", (f"{fact_id}%",)).fetchall()
+        if not rows:
+            raise RuntimeError(f"Unknown fact_id: {fact_id}")
+        if len(rows) > 1:
+            matches = ", ".join(row[0] for row in rows[:5])
+            raise RuntimeError(f"Ambiguous fact_id prefix: {fact_id}. Matches: {matches}")
+        fact_id = rows[0][0]
+    if not fact_id:
         raise RuntimeError(f"Unknown fact_id: {fact_id}")
     conn.execute(
         """
@@ -796,6 +807,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stats", action="store_true", help="Print fact notebook counts.")
     parser.add_argument("--followup", action="store_true", help="Print actionable follow-up queue.")
     parser.add_argument("--mark", dest="mark_fact_id", help="Mark a fact action by fact_id.")
+    parser.add_argument("--review", dest="review_fact_id", help="Mark a fact as reviewing by fact_id.")
+    parser.add_argument("--done", dest="done_fact_id", help="Mark a fact as done by fact_id.")
+    parser.add_argument("--ignore", dest="ignore_fact_id", help="Mark a fact as ignored by fact_id.")
     parser.add_argument("--status", choices=("open", "reviewing", "done", "ignored"), default="reviewing")
     parser.add_argument("--note", default="", help="Action note for --mark.")
     parser.add_argument("--actions", action="store_true", help="Print recent fact actions.")
@@ -834,6 +848,18 @@ def main() -> int:
         print({"marked": args.mark_fact_id, "status": args.status})
         conn.close()
         return 0
+
+    action_aliases = (
+        (args.review_fact_id, "reviewing"),
+        (args.done_fact_id, "done"),
+        (args.ignore_fact_id, "ignored"),
+    )
+    for fact_id, status in action_aliases:
+        if fact_id:
+            mark_action(conn, fact_id, status, args.note)
+            print({"marked": fact_id, "status": status})
+            conn.close()
+            return 0
 
     if args.actions:
         print_actions(conn, args.limit or 20)

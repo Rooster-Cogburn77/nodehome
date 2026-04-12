@@ -48,6 +48,9 @@ python sweeps/send_digest_email.py --profile core --date 2026-04-07 --dry-run
 python sweeps/run_workflow.py --profile core
 python sweeps/run_workflow.py --profile all --weekly --skip-email
 python sweeps/run_workflow.py --profile all --weekly --send-weekly
+python -m sweeps.fact_notebook --followup --profile all
+python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
+python -m sweeps.fact_notebook --done <fact_id> --note "handled"
 ```
 
 The script is intentionally narrow:
@@ -69,6 +72,8 @@ The script is intentionally narrow:
 - optional AI summary block when a local summary model is configured
 - optional weekly rollup generation from the workflow via `--weekly`
 - weekly rollup email is gated behind `--send-weekly` or `DIGEST_WEEKLY_EMAIL_ENABLED=true`
+- weekly follow-up rows include `fact_id` and ready-to-run `--review` / `--done` commands
+- follow-up action commands accept unique fact ID prefixes, so the weekly email can use short IDs
 
 Output filenames:
 

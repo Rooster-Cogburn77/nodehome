@@ -187,6 +187,10 @@ def source_suffix(row: sqlite3.Row) -> str:
     return f" Source: {row['source_name']}"
 
 
+def triage_command(action: str, fact_id: str) -> str:
+    return f"python -m sweeps.fact_notebook --{action} {fact_id} --note \"<note>\""
+
+
 def render_brief_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     entity = row["entity"] if "entity" in row.keys() and row["entity"] else row["topic"]
     seen = f" Seen {row['seen_count']}x." if include_seen and "seen_count" in row.keys() else ""
@@ -196,9 +200,13 @@ def render_brief_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
 
 def render_brief_followup(row: sqlite3.Row) -> str:
     implication = f" {row['implication']}" if row["implication"] else ""
+    short_id = row["id"][:12]
+    review = triage_command("review", short_id)
+    done = triage_command("done", short_id)
     return (
         f"- [{row['entity'] or 'unknown'} | {followup_reason(row)}] "
-        f"{clean_claim(row['claim_text'])}.{implication}{source_suffix(row)}"
+        f"{clean_claim(row['claim_text'])}.{implication}{source_suffix(row)} "
+        f"Fact: `{short_id}`. Review: `{review}`. Done: `{done}`."
     )
 
 
