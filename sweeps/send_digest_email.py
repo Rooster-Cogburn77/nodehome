@@ -138,6 +138,8 @@ def _parse_digest(markdown: str) -> dict:
         # plain text (summary, etc.)
         if in_section_name in ("Summary", "AI Summary"):
             result["summary_lines"].append(s)
+        elif current_section is not None and current_item is None:
+            current_section.setdefault("loose_bullets", []).append(s)
 
     _flush_item()
     return result

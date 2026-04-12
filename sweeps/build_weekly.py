@@ -174,6 +174,104 @@ def article_candidates(conn: sqlite3.Connection, start: str, end: str, profile: 
     )
 
 
+def clean_claim(text: str) -> str:
+    for marker in (" â€” ", " — "):
+        if marker in text:
+            return text.split(marker, 1)[0].strip()
+    return text.strip()
+
+
+def source_suffix(row: sqlite3.Row) -> str:
+    if row["source_url"]:
+        return f" Source: {row['source_name']} ({row['source_url']})"
+    return f" Source: {row['source_name']}"
+
+
+def render_brief_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
+    entity = row["entity"] if "entity" in row.keys() and row["entity"] else row["topic"]
+    seen = f" Seen {row['seen_count']}x." if include_seen and "seen_count" in row.keys() else ""
+    implication = f" {row['implication']}" if "implication" in row.keys() and row["implication"] else ""
+    return f"- [{entity}] {clean_claim(row['claim_text'])}.{seen}{implication}{source_suffix(row)}"
+
+
+def render_brief_followup(row: sqlite3.Row) -> str:
+    implication = f" {row['implication']}" if row["implication"] else ""
+    return (
+        f"- [{row['entity'] or 'unknown'} | {followup_reason(row)}] "
+        f"{clean_claim(row['claim_text'])}.{implication}{source_suffix(row)}"
+    )
+
+
+def render_brief_pressure(row: sqlite3.Row) -> str:
+    implication = f" {row['implication']}" if row["implication"] else ""
+    return (
+        f"- [{row['severity']} | {row['assumption_entity']}] "
+        f"{clean_claim(row['fact_claim'])}. Pressures: {row['assumption_ids']}.{implication}{source_suffix(row)}"
+    )
+
+
+def noisy_release_claim(text: str) -> bool:
+    text = clean_claim(text).lower()
+    return text.startswith(("v0.20.4", "v0.20.3", "b87"))
+
+
+def unique_node_rows(rows: list[sqlite3.Row], exclude_claims: set[str], limit: int) -> list[sqlite3.Row]:
+    selected = []
+    seen_entities = set()
+    for row in rows:
+        claim = clean_claim(row["claim_text"])
+        entity = row["entity"] or row["topic"]
+        if claim in exclude_claims or noisy_release_claim(claim):
+            continue
+        if entity in seen_entities and len(selected) >= 3:
+            continue
+        selected.append(row)
+        seen_entities.add(entity)
+        if len(selected) == limit:
+            break
+    return selected
+
+
+def build_briefing(
+    themes: list[sqlite3.Row],
+    node_impact: list[sqlite3.Row],
+    pressure: list[sqlite3.Row],
+    gaps: list[sqlite3.Row],
+) -> str:
+    if not themes and not node_impact and not pressure:
+        return "Quiet week. The notebook did not surface enough new signal to justify a strong read."
+
+    sentences = []
+    if pressure:
+        first = pressure[0]
+        sentences.append(f"The main thing to watch is {first['assumption_entity']}: {clean_claim(first['fact_claim'])}.")
+    elif node_impact:
+        first = node_impact[0]
+        sentences.append(f"The strongest Sovereign Node signal is {clean_claim(first['claim_text'])}.")
+    else:
+        top = themes[0]
+        sentences.append(f"The week was mostly {top['topic']} signal across {top['sources']} sources.")
+
+    if node_impact:
+        entities = []
+        for row in node_impact:
+            entity = row["entity"] or row["topic"]
+            if entity not in entities:
+                entities.append(entity)
+            if len(entities) == 3:
+                break
+        sentences.append(f"Stack-relevant coverage clustered around {', '.join(entities)}.")
+
+    if gaps:
+        sentences.append(f"There are {len(gaps)} open follow-up items worth triaging from the notebook.")
+
+    if themes:
+        top_topics = ", ".join(row["topic"] for row in themes[:3])
+        sentences.append(f"Top lanes this week: {top_topics}.")
+
+    return " ".join(sentences)
+
+
 def render_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     suffix = ""
     meta = []
@@ -226,68 +324,61 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     themes = top_themes(conn, start, end, profile)
     reinforced = reinforced_signals(conn, start, end, profile)
     node_impact = sovereign_node_impact(conn, start, end, profile)
-    new_items = new_facts(conn, start, end, profile)
     candidates = article_candidates(conn, start, end, profile)
     pressure = assumption_pressure_rows(conn, profile, 12, start, end)
     gaps = followup_rows(conn, profile, 12)
     conn.close()
 
+    briefing = build_briefing(themes, node_impact, pressure, gaps)
+    pressure_claims = {clean_claim(row["fact_claim"]) for row in pressure}
+    extra_node_rows = unique_node_rows(node_impact, pressure_claims, 3)
     lines = [
-        f"# Weekly Sweep Rollup - {iso_week_label(run_date)} ({profile})",
+        f"# Weekly Sweep - {iso_week_label(run_date)} ({profile})",
         "",
         f"Generated at {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
         f"Fact window: {start} to {end}",
         "",
-        "## Top Themes",
+        "## Briefing",
+        "",
+        briefing,
+        "",
+        "## What Changed",
         "",
     ]
+    if pressure:
+        for row in pressure[:4]:
+            lines.append(render_brief_pressure(row))
+        for row in extra_node_rows:
+            lines.append(render_brief_fact(row, include_seen=True))
+    elif node_impact:
+        for row in extra_node_rows or node_impact[:6]:
+            lines.append(render_brief_fact(row, include_seen=True))
+    elif candidates:
+        for row in candidates[:4]:
+            lines.append(render_brief_fact(row, include_seen=True))
+    else:
+        lines.append("- No strong weekly changes surfaced.")
+
+    lines.extend(["", "## Assumptions Under Pressure", ""])
+    if pressure:
+        for row in pressure[:6]:
+            lines.append(render_brief_pressure(row))
+    else:
+        lines.append("- No active build assumptions came under pressure this week.")
+
+    lines.extend(["", "## Follow-Up Queue", ""])
+    if gaps:
+        for row in gaps[:6]:
+            lines.append(render_brief_followup(row))
+    else:
+        lines.append("- No structured follow-up candidates detected.")
+
+    lines.extend(["", "## Coverage Map", ""])
     if themes:
         for row in themes:
             lines.append(f"- {row['topic']}: {row['count']} facts across {row['sources']} sources")
     else:
         lines.append("- No notebook facts recorded for this week.")
-
-    lines.extend(["", "## Sovereign Node Impact", ""])
-    if node_impact:
-        for row in node_impact:
-            lines.append(render_fact(row, include_seen=True))
-    else:
-        lines.append("- No direct stack-impact facts found this week.")
-
-    lines.extend(["", "## Reinforced Signals", ""])
-    if reinforced:
-        for row in reinforced:
-            lines.append(render_fact(row, include_seen=True))
-    else:
-        lines.append("- No reinforced facts yet.")
-
-    lines.extend(["", "## New Facts This Week", ""])
-    if new_items:
-        for row in new_items:
-            lines.append(render_fact(row))
-    else:
-        lines.append("- No new facts recorded this week.")
-
-    lines.extend(["", "## Article Candidates", ""])
-    if candidates:
-        for row in candidates:
-            lines.append(render_fact(row, include_seen=True))
-    else:
-        lines.append("- No article candidates yet.")
-
-    lines.extend(["", "## Assumption Pressure", ""])
-    if pressure:
-        for row in pressure:
-            lines.append(render_assumption_pressure(row))
-    else:
-        lines.append("- No active assumptions under pressure this week.")
-
-    lines.extend(["", "## Gaps / Follow-Up", ""])
-    if gaps:
-        for row in gaps:
-            lines.append(render_followup(row))
-    else:
-        lines.append("- No structured follow-up candidates detected.")
 
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
