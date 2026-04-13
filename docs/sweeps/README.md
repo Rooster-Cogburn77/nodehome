@@ -24,6 +24,7 @@ Script:
 - `sweeps/build_weekly.py`
 - `sweeps/send_digest_email.py`
 - `sweeps/run_workflow.py`
+- `sweeps/report_status.py`
 - `sweeps/email_env.example`
 
 ## Environment
@@ -48,6 +49,7 @@ python sweeps/send_digest_email.py --profile core --date 2026-04-07 --dry-run
 python sweeps/run_workflow.py --profile core
 python sweeps/run_workflow.py --profile all --weekly --skip-email
 python sweeps/run_workflow.py --profile all --weekly --send-weekly
+python -m sweeps.report_status --profile all
 python -m sweeps.fact_notebook --followup --profile all
 python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
 python -m sweeps.fact_notebook --done <fact_id> --note "handled"
