@@ -9,3 +9,12 @@ nul
 docs/sweeps/inbox/*.jsonl
 docs/sweeps/notebook/*.sqlite
 docs/sweeps/notebook/*.sqlite-*
+docs/sweeps/daily/*.md
+!docs/sweeps/daily/.gitkeep
+docs/sweeps/health/*.md
+docs/sweeps/health/degraded_sources.json
+docs/sweeps/state/*.json
+!docs/sweeps/state/.gitkeep
+docs/sweeps/validation/*.md
+docs/sweeps/weekly/*.md
+!docs/sweeps/weekly/.gitkeep
