@@ -39,15 +39,14 @@ This is a useful way to think about MCP vs skills in the Sovereign Node stack: n
 ## Knowledge Management
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| **Obsidian** | Knowledge base viewer/editor | Karpathy workflow: raw/ → wiki/ compilation |
-| **Obsidian Web Clipper** | Article → markdown conversion | Feed into raw/ directory |
+| **Obsidian** | Knowledge base viewer/editor | Karpathy workflow: raw/ -> wiki/ compilation |
+| **Obsidian Web Clipper** | Article -> markdown conversion | Feed into raw/ directory |
 
 ## Research Tools
 | Tool | Purpose | Notes |
 |------|---------|-------|
 | **AutoResearch** | Autonomous ML experiments | Karpathy's repo, single-GPU experiments |
-| **Nanochat** | LLM training pipeline | Full pipeline: tokenize → pretrain → finetune → serve |
-
+| **Nanochat** | LLM training pipeline | Full pipeline: tokenize -> pretrain -> finetune -> serve |
 | **Daily research sweeps** | Watch key feeds, repos, and blogs | Proposed: generate digests and promote only top items into `raw/` |
 | **LLM weekly synthesis** | Future local rollup generation | Once Ollama is online, use local inference to synthesize weekly sweep rollups from daily digests |
 
@@ -59,6 +58,12 @@ Current W15 stack signals:
 - `vLLM` CPU KV cache offload is worth testing against the 3x RTX 3090 + 128GB RAM topology.
 - Ollama remains the target first-run serving layer; Gemma4 needs an FA compatibility gate before being treated as stable on the node.
 - Cheap 10GbE switching is bookmarked for future multi-node expansion, not a day-one purchase.
+
+Current 2026-04-14 pressure note:
+
+- Ollama `v0.20.7` and `v0.20.8` landed quickly enough to put pressure on the current `v0.20.5` target-install assumption.
+- The right response is not to churn the bootstrap immediately. Keep `v0.20.5` pinned until the newer releases are reviewed for Gemma4 renderer changes, Ampere behavior, and RTX 3090 compatibility implications.
+- Until that review is done, treat the install target as held under review rather than quietly outdated.
 
 ## Target Models (Day 1)
 
