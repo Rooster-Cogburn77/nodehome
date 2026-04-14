@@ -1,6 +1,17 @@
 # Sovereign Node - Session Log
 <!-- At the start of each month, move previous month's entries to docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-04-14 (Session 5)
+**Focus:** Sweep review, Ollama install-target pressure, software-stack posture
+**What was done:**
+- Reviewed the 2026-04-14 daily sweep for build-relevant signal instead of treating the digest as a changelog dump.
+- Logged the main stack takeaway: Ollama `v0.20.7` and `v0.20.8` now pressure the current `v0.20.5` target-install assumption.
+- Chose the conservative response: keep the bootstrap target at `v0.20.5` until the newer releases are reviewed specifically for Gemma4 renderer changes, Ampere behavior, and RTX 3090 implications.
+- Confirmed that today's sweep does not change the serving hierarchy: Ollama remains the first inference path, vLLM remains the serious multi-GPU experiment path, and direct `llama.cpp` stays in the benchmark/watch lane.
+- Updated current-state and software-stack docs so the install-target review is visible outside the sweep output.
+**Commits:** Pending
+**Next:** Review Ollama `v0.20.7` / `v0.20.8` release notes closely enough to decide whether the bootstrap target should move off `v0.20.5`.
+
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop
 **What was done:**
@@ -16,16 +27,16 @@
 **What was done:**
 - Researched cooler alternatives after 3mm Arctic Freezer 4U-M clearance concern raised
 - Full market sweep: Noctua NH-U9 TR4-SP3 (125mm, 23mm clearance), Supermicro SNK-P0064AP4 (126mm, 22mm), Dynatron A50 (110mm, loud)
-- Caught user about to buy wrong cooler (NH-U9S consumer ≠ NH-U9 TR4-SP3 server)
+- Caught user about to buy wrong cooler (NH-U9S consumer != NH-U9 TR4-SP3 server)
 - Noctua TR4-SP3 out of stock at MSRP everywhere. UK seller cheapest at ~$168. Amazon out of stock.
-- Supermicro SNK-P0064AP4 available at ~$84 but 38 dBA — loudest component at idle in living room
+- Supermicro SNK-P0064AP4 available at ~$84 but 38 dBA - loudest component at idle in living room
 - Final decision: Noctua from Ada (kuaka02) at $150 ($161.29 incl tax). Near-silent at idle matters for living room placement.
 - SilverStone RM400 chassis purchased (Amazon, arriving Sat 2026-04-12)
 - SysRacks 24x24 rack purchased ($75), came with Noctua NF-A12x25 PWM case fan
 - Mobo+CPU (EPYC 7302P + H12SSL-i v2.0) arrived today ($985.08)
-- ALL COMPONENTS NOW PURCHASED — total ~$5,910 incl tax
+- ALL COMPONENTS NOW PURCHASED - total ~$5,910 incl tax
 - MemoryPartner_Deals and quark_12 confirmed same entity (identical messages). Most other GPU sellers said no.
-- Codex reviewed full build spec — validated architecture, flagged 120V circuit concern, airflow critique corrected (blower cards are the airflow)
+- Codex reviewed full build spec - validated architecture, flagged 120V circuit concern, airflow critique corrected (blower cards are the airflow)
 - Updated all docs: cooler change reflected in HANDOVER_ASSEMBLY, HANDOVER_SOURCING, CURRENT_STATE, CLAUDE.md, hardware-spec
 - Card retainer bracket can now likely stay with Noctua (5mm clearance vs Arctic's impossible fit)
 - Logged `Locker` as a possible file-ingest/file-store layer, but explicitly left open whether to adopt it or build a narrower in-house version
