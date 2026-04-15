@@ -18,3 +18,11 @@ docs/sweeps/state/*.json
 docs/sweeps/validation/*.md
 docs/sweeps/weekly/*.md
 !docs/sweeps/weekly/.gitkeep
+docs/wiki/generated/index.md
+docs/wiki/generated/log.md
+docs/wiki/generated/briefings/*.md
+!docs/wiki/generated/briefings/.gitkeep
+docs/wiki/generated/entities/*.md
+!docs/wiki/generated/entities/.gitkeep
+docs/wiki/generated/sources/*.md
+!docs/wiki/generated/sources/.gitkeep

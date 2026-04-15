@@ -25,6 +25,7 @@ Script:
 - `sweeps/send_digest_email.py`
 - `sweeps/run_workflow.py`
 - `sweeps/report_status.py`
+- `sweeps/build_wiki.py`
 - `sweeps/email_env.example`
 
 ## Environment
@@ -53,6 +54,7 @@ python -m sweeps.report_status --profile all
 python -m sweeps.fact_notebook --followup --profile all
 python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
 python -m sweeps.fact_notebook --done <fact_id> --note "handled"
+python -m sweeps.build_wiki --profile all
 ```
 
 The script is intentionally narrow:
@@ -76,6 +78,7 @@ The script is intentionally narrow:
 - weekly rollup email is gated behind `--send-weekly` or `DIGEST_WEEKLY_EMAIL_ENABLED=true`
 - weekly follow-up rows include `fact_id` and ready-to-run `--review` / `--done` commands
 - follow-up action commands accept unique fact ID prefixes, so the weekly email can use short IDs
+- optional generated wiki view under `docs/wiki/generated/` for Obsidian or direct markdown browsing
 
 Output filenames:
 

@@ -9,6 +9,8 @@
 - Chose the conservative response: keep the bootstrap target at `v0.20.5` until the newer releases are reviewed specifically for Gemma4 renderer changes, Ampere behavior, and RTX 3090 implications.
 - Confirmed that today's sweep does not change the serving hierarchy: Ollama remains the first inference path, vLLM remains the serious multi-GPU experiment path, and direct `llama.cpp` stays in the benchmark/watch lane.
 - Updated current-state and software-stack docs so the install-target review is visible outside the sweep output.
+- Added a generated wiki layer under `docs/wiki/generated/` with a builder script that turns the fact notebook into browsable markdown: latest briefing, entity pages, source pages, generated log, and generated index.
+- Kept the architecture repo-first and automation-first: generated wiki pages are a local view layer for Obsidian, not the source of truth.
 **Commits:** Pending
 **Next:** Review Ollama `v0.20.7` / `v0.20.8` release notes closely enough to decide whether the bootstrap target should move off `v0.20.5`.
 
