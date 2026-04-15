@@ -11,6 +11,7 @@
 - Updated current-state and software-stack docs so the install-target review is visible outside the sweep output.
 - Added a generated wiki layer under `docs/wiki/generated/` with a builder script that turns the fact notebook into browsable markdown: latest briefing, entity pages, source pages, generated log, and generated index.
 - Kept the architecture repo-first and automation-first: generated wiki pages are a local view layer for Obsidian, not the source of truth.
+- Wired the generated wiki builder into `sweeps/run_workflow.py` so normal scheduled runs refresh the wiki view automatically after notebook ingest, and again after weekly rollup generation.
 **Commits:** Pending
 **Next:** Review Ollama `v0.20.7` / `v0.20.8` release notes closely enough to decide whether the bootstrap target should move off `v0.20.5`.
 

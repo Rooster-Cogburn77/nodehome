@@ -9,7 +9,7 @@ Use Windows Task Scheduler for the daily sweep jobs.
 - `weekly` on Sunday at `08:30`
 
 This keeps the fast must-watch pass separate from the broader scene pass.
-The weekly task builds the notebook rollup but does not send email by default.
+The weekly task builds the notebook rollup and refreshes the generated wiki view, but does not send email by default.
 
 ## One-Command Registration
 
@@ -69,6 +69,7 @@ schtasks /Delete /TN SovereignNodeSweepWeekly /F
 - The workflow runner loads `.env` and `sweeps/.env` automatically, so Task Scheduler does not need secrets embedded in the task command.
 - Already-set environment variables win over `.env` values; root `.env` wins over `sweeps/.env`.
 - Output files are written under `docs/sweeps/daily/`.
+- The workflow also refreshes the generated wiki view under `docs/wiki/generated/` unless `--skip-wiki` is passed.
 - `core` writes `YYYY-MM-DD.md`.
 - `extended` writes `YYYY-MM-DD.extended.md`.
 - If `DIGEST_EMAIL_ENABLED=true` and Resend env vars are present, the workflow sends the digest after generation.

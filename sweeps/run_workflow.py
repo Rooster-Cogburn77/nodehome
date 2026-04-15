@@ -15,6 +15,7 @@ SEND_EMAIL = ROOT / "sweeps" / "send_digest_email.py"
 INGEST_X_EMAIL = ROOT / "sweeps" / "ingest_x_email.py"
 FACT_NOTEBOOK = ROOT / "sweeps" / "fact_notebook.py"
 BUILD_WEEKLY = ROOT / "sweeps" / "build_weekly.py"
+BUILD_WIKI = ROOT / "sweeps" / "build_wiki.py"
 
 
 def load_env_file(path: Path) -> int:
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--date", dest="run_date", help="Override date in YYYY-MM-DD format.")
     parser.add_argument("--skip-x-email-ingest", action="store_true", help="Do not ingest X notification emails first.")
     parser.add_argument("--skip-fact-notebook", action="store_true", help="Do not update the sweep fact notebook.")
+    parser.add_argument("--skip-wiki", action="store_true", help="Do not rebuild the generated wiki view.")
     parser.add_argument("--skip-email", action="store_true", help="Do not run the email send step.")
     parser.add_argument("--weekly", action="store_true", help="Build the current ISO-week rollup after daily ingest.")
     parser.add_argument("--send-weekly", action="store_true", help="Send the weekly rollup email when --weekly is used.")
@@ -90,6 +92,12 @@ def main() -> int:
             notebook_cmd.extend(["--date", args.run_date])
         subprocess.run(notebook_cmd, check=True, cwd=ROOT)
 
+    if args.skip_wiki:
+        print("Skipping generated wiki rebuild by request.")
+    else:
+        wiki_cmd = [python_exe, "-m", "sweeps.build_wiki", "--profile", args.profile]
+        subprocess.run(wiki_cmd, check=True, cwd=ROOT)
+
     if args.skip_email:
         if not args.weekly:
             return 0
@@ -109,6 +117,12 @@ def main() -> int:
         weekly_result = subprocess.run(weekly_cmd, check=True, capture_output=True, text=True, cwd=ROOT)
         weekly_path = weekly_result.stdout.strip().splitlines()[-1]
         print(f"Weekly rollup: {weekly_path}")
+
+        if args.skip_wiki:
+            print("Skipping generated wiki rebuild after weekly rollup by request.")
+        else:
+            wiki_cmd = [python_exe, "-m", "sweeps.build_wiki", "--profile", args.profile]
+            subprocess.run(wiki_cmd, check=True, cwd=ROOT)
 
         weekly_email_enabled = (
             not args.skip_email
