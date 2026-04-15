@@ -50,6 +50,7 @@ python sweeps/send_digest_email.py --profile core --date 2026-04-07 --dry-run
 python sweeps/run_workflow.py --profile core
 python sweeps/run_workflow.py --profile all --weekly --skip-email
 python sweeps/run_workflow.py --profile all --weekly --send-weekly
+python sweeps/run_workflow.py --profile all --skip-wiki
 python -m sweeps.report_status --profile all
 python -m sweeps.fact_notebook --followup --profile all
 python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
@@ -78,7 +79,8 @@ The script is intentionally narrow:
 - weekly rollup email is gated behind `--send-weekly` or `DIGEST_WEEKLY_EMAIL_ENABLED=true`
 - weekly follow-up rows include `fact_id` and ready-to-run `--review` / `--done` commands
 - follow-up action commands accept unique fact ID prefixes, so the weekly email can use short IDs
-- optional generated wiki view under `docs/wiki/generated/` for Obsidian or direct markdown browsing
+- workflow now rebuilds the generated wiki view under `docs/wiki/generated/` after notebook ingest, and again after weekly rollup generation
+- pass `--skip-wiki` only if you explicitly want to suppress that refresh
 
 Output filenames:
 
