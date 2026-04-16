@@ -65,6 +65,12 @@ Current 2026-04-14 pressure note:
 - The right response is not to churn the bootstrap immediately. Keep `v0.20.5` pinned until the newer releases are reviewed for Gemma4 renderer changes, Ampere behavior, and RTX 3090 compatibility implications.
 - Until that review is done, treat the install target as held under review rather than quietly outdated.
 
+Current 2026-04-16 watch note:
+
+- `llama.cpp` landed CUDA changes around explicit P2P opt-in and NCCL communicator management. That is directly relevant to future multi-GPU benchmarking, but it still argues for caution rather than redesign.
+- Treat these as benchmark variables for direct `llama.cpp` testing on the 3x RTX 3090 node, not as reasons to move day-one serving away from the current `Ollama -> vLLM -> direct llama.cpp benchmark` order.
+- Simon Willison's recent Datasette releases are interesting as lightweight local data-view tooling, but they are workflow-adjacent. They do not change the node bring-up plan.
+
 ## Target Models (Day 1)
 
 ### Primary (Across 3 GPUs)
