@@ -12,6 +12,8 @@
 - Added a generated wiki layer under `docs/wiki/generated/` with a builder script that turns the fact notebook into browsable markdown: latest briefing, entity pages, source pages, generated log, and generated index.
 - Kept the architecture repo-first and automation-first: generated wiki pages are a local view layer for Obsidian, not the source of truth.
 - Wired the generated wiki builder into `sweeps/run_workflow.py` so normal scheduled runs refresh the wiki view automatically after notebook ingest, and again after weekly rollup generation.
+- Reviewed the 2026-04-16 daily sweep and logged a more specific `llama.cpp` multi-GPU watch signal: CUDA P2P now requires explicit opt-in and NCCL communicator handling is still moving, which reinforces direct `llama.cpp` as benchmark/watch territory rather than a day-one dependency.
+- Evaluated Simon Willison's Datasette activity as workflow-interesting rather than node-critical: potentially useful later as a lightweight view layer over notebook data, but not something that should displace the current markdown + SQLite + email loop.
 **Commits:** Pending
 **Next:** Review Ollama `v0.20.7` / `v0.20.8` release notes closely enough to decide whether the bootstrap target should move off `v0.20.5`.
 
