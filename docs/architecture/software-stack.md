@@ -71,6 +71,17 @@ Current 2026-04-16 watch note:
 - Treat these as benchmark variables for direct `llama.cpp` testing on the 3x RTX 3090 node, not as reasons to move day-one serving away from the current `Ollama -> vLLM -> direct llama.cpp benchmark` order.
 - Simon Willison's recent Datasette releases are interesting as lightweight local data-view tooling, but they are workflow-adjacent. They do not change the node bring-up plan.
 
+Current 2026-04-17 candidate note:
+
+- `Qwen3.5-35B-A3B` is worth tracking as a future vLLM benchmark candidate because the MoE shape could be attractive for local serving experiments.
+- Do not let that change the current bring-up order or the day-one model list yet. Treat it as a later test case once the node is stable and the baseline serving stack is validated.
+
+Current 2026-04-17 pressure note:
+
+- `Ollama v0.21.0` materially increases pressure on the current `v0.20.5` install target.
+- The posture is still conservative: do not auto-upgrade the bootstrap target blindly, but review `v0.21.0` before hardware bring-up rather than treating `v0.20.5` as settled.
+- `Qwen3.6-35B-A3B` now looks more credible as a future local-model experiment, but it still belongs in the post-bring-up vLLM benchmark queue, not the day-one default stack.
+
 ## Target Models (Day 1)
 
 ### Primary (Across 3 GPUs)
@@ -78,6 +89,11 @@ Current 2026-04-16 watch note:
 |-------|------|-------------|------|----------|
 | Llama 3.x 70B | 70B | Q6 | ~52GB (3 GPUs) | General intelligence, complex reasoning |
 | DeepSeek-V3 | 70B+ | Q6-Q8 | ~52-70GB (3 GPUs) | Code, math, reasoning |
+
+Future benchmark candidate:
+
+- `Qwen3.5-35B-A3B` - promising MoE experiment for vLLM once the node is stable; not a day-one target
+- `Qwen3.6-35B-A3B` - newer MoE benchmark candidate with encouraging local-use anecdotes; still not a day-one target
 
 ### Cognitive Core (Single GPU)
 | Model | Size | VRAM | Use Case |
