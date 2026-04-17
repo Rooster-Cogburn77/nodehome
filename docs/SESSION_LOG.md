@@ -14,8 +14,11 @@
 - Wired the generated wiki builder into `sweeps/run_workflow.py` so normal scheduled runs refresh the wiki view automatically after notebook ingest, and again after weekly rollup generation.
 - Reviewed the 2026-04-16 daily sweep and logged a more specific `llama.cpp` multi-GPU watch signal: CUDA P2P now requires explicit opt-in and NCCL communicator handling is still moving, which reinforces direct `llama.cpp` as benchmark/watch territory rather than a day-one dependency.
 - Evaluated Simon Willison's Datasette activity as workflow-interesting rather than node-critical: potentially useful later as a lightweight view layer over notebook data, but not something that should displace the current markdown + SQLite + email loop.
+- Logged `Qwen3.5-35B-A3B` as a future vLLM benchmark candidate rather than a day-one target model.
+- Reviewed the 2026-04-17 daily sweep and raised the Ollama install-target pressure again: `v0.21.0` now needs review before hardware bring-up.
+- Logged `Qwen3.6-35B-A3B` as a more credible future vLLM benchmark candidate after fresh local-use signal, while keeping it out of the day-one model plan.
 **Commits:** Pending
-**Next:** Review Ollama `v0.20.7` / `v0.20.8` release notes closely enough to decide whether the bootstrap target should move off `v0.20.5`.
+**Next:** Review Ollama `v0.21.0` release notes closely enough to decide whether the bootstrap target should stay at `v0.20.5` or move before hardware bring-up.
 
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop
