@@ -1,11 +1,12 @@
 # Current State
 
-**Last Updated:** 2026-04-17
+**Last Updated:** 2026-04-18
 
 ## Active Work
 - Parts are arriving and the next real move is staged assembly: inventory, bench POST, chassis install, then GPU bring-up.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
 - Ollama `v0.21.0` now materially pressures the current `v0.20.5` bootstrap target; hold `v0.20.5` until `v0.21.0` is reviewed for Gemma4 / Ampere / RTX 3090 implications.
+- `vLLM v0.19.1` is now worth reviewing before first install, since the stack was already pinned to `v0.19.0`.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
 
@@ -29,7 +30,7 @@
 
 ## Blocking Issues
 - No purchasing blockers.
-- Install-target review remains open: decide whether Ollama should stay pinned to `v0.20.5` or move to `v0.21.0` after release-note review.
+- Install-target review remains open: decide whether Ollama should stay pinned to `v0.20.5` or move to `v0.21.0`, and whether vLLM should stay at `v0.19.0` or bump to `v0.19.1`, after release-note review.
 
 ## Known Failures
 None.
