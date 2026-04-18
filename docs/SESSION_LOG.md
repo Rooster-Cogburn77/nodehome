@@ -17,8 +17,10 @@
 - Logged `Qwen3.5-35B-A3B` as a future vLLM benchmark candidate rather than a day-one target model.
 - Reviewed the 2026-04-17 daily sweep and raised the Ollama install-target pressure again: `v0.21.0` now needs review before hardware bring-up.
 - Logged `Qwen3.6-35B-A3B` as a more credible future vLLM benchmark candidate after fresh local-use signal, while keeping it out of the day-one model plan.
+- Reviewed the 2026-04-18 daily sweep and added `vLLM v0.19.1` to the release-review queue, since the current plan was already pinned to `v0.19.0`.
+- Kept recent `llama.cpp` CUDA graph and Gemma4-shape changes in the benchmark/watch lane only; they do not change the day-one serving order.
 **Commits:** Pending
-**Next:** Review Ollama `v0.21.0` release notes closely enough to decide whether the bootstrap target should stay at `v0.20.5` or move before hardware bring-up.
+**Next:** Review `Ollama v0.21.0` and `vLLM v0.19.1` release notes closely enough to decide whether the pinned install targets should move before hardware bring-up.
 
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop

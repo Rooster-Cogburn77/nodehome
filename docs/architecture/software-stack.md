@@ -82,6 +82,12 @@ Current 2026-04-17 pressure note:
 - The posture is still conservative: do not auto-upgrade the bootstrap target blindly, but review `v0.21.0` before hardware bring-up rather than treating `v0.20.5` as settled.
 - `Qwen3.6-35B-A3B` now looks more credible as a future local-model experiment, but it still belongs in the post-bring-up vLLM benchmark queue, not the day-one default stack.
 
+Current 2026-04-18 pressure note:
+
+- `vLLM v0.19.1` is now worth reviewing because the planned serving stack was already pinned to `v0.19.0`.
+- This does not force a change yet, but it means the first install should choose deliberately between `v0.19.0` and `v0.19.1` instead of treating the earlier pin as settled.
+- Recent `llama.cpp` CUDA graph and Gemma4 model-shape changes are still watch items for later direct benchmarking, not reasons to change day-one serving order.
+
 ## Target Models (Day 1)
 
 ### Primary (Across 3 GPUs)
