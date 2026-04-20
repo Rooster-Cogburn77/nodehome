@@ -28,6 +28,7 @@ Day-one serving posture:
 |------|---------|-------|
 | **Claw-code** | Claude Code agent harness (open-source) | github.com/instructkr/claw-code |
 | **Open WebUI** | Chat interface | Browser-based, multi-model |
+| **Kimi K2.6 (future fallback)** | Low-cost cloud coding/agent fallback candidate | Strong economics and coding benchmarks make it worth testing later; not part of day-one local serving |
 
 Working architectural framing:
 
@@ -87,6 +88,12 @@ Current 2026-04-18 pressure note:
 - `vLLM v0.19.1` is now worth reviewing because the planned serving stack was already pinned to `v0.19.0`.
 - This does not force a change yet, but it means the first install should choose deliberately between `v0.19.0` and `v0.19.1` instead of treating the earlier pin as settled.
 - Recent `llama.cpp` CUDA graph and Gemma4 model-shape changes are still watch items for later direct benchmarking, not reasons to change day-one serving order.
+
+Current 2026-04-20 fallback note:
+
+- `Kimi K2.6` is worth tracking as a future cloud fallback and coding-agent benchmark candidate because the current economics and reported coding performance are materially better than frontier closed-model pricing.
+- That matters for later routing and fallback decisions, not for day-one local-node bring-up.
+- Keep it out of the local model list and treat it as a separate cloud-fallback lane.
 
 ## Target Models (Day 1)
 
