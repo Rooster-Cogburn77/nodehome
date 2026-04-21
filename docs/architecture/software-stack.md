@@ -28,7 +28,7 @@ Day-one serving posture:
 |------|---------|-------|
 | **Claw-code** | Claude Code agent harness (open-source) | github.com/instructkr/claw-code |
 | **Open WebUI** | Chat interface | Browser-based, multi-model |
-| **Kimi K2.6 (future fallback)** | Low-cost cloud coding/agent fallback candidate | Strong economics and coding benchmarks make it worth testing later; not part of day-one local serving |
+| **Kimi K2.6 (future eval)** | Open-source frontier model to track for local/runtime evaluation and fallback economics | Officially supports `vLLM`, `SGLang`, and `KTransformers`; too large to treat as a practical 3x3090 day-one local target |
 
 Working architectural framing:
 
@@ -91,9 +91,9 @@ Current 2026-04-18 pressure note:
 
 Current 2026-04-20 fallback note:
 
-- `Kimi K2.6` is worth tracking as a future cloud fallback and coding-agent benchmark candidate because the current economics and reported coding performance are materially better than frontier closed-model pricing.
-- That matters for later routing and fallback decisions, not for day-one local-node bring-up.
-- Keep it out of the local model list and treat it as a separate cloud-fallback lane.
+- `Kimi K2.6` is open source and important enough to track as both a future local/runtime evaluation target and a cloud fallback candidate.
+- The clean local support path appears to be `vLLM`, `SGLang`, or `KTransformers`; local `Ollama` / `llama.cpp` support is not established.
+- Despite that, it is still not a practical local target for the current 3x3090 + 128GB RAM node because the model is too large to treat as a normal day-one deployment.
 
 ## Target Models (Day 1)
 
@@ -107,6 +107,7 @@ Future benchmark candidate:
 
 - `Qwen3.5-35B-A3B` - promising MoE experiment for vLLM once the node is stable; not a day-one target
 - `Qwen3.6-35B-A3B` - newer MoE benchmark candidate with encouraging local-use anecdotes; still not a day-one target
+- `Kimi K2.6` - serious open frontier model to evaluate later; official local path exists, but it is not practical on the current 3x3090 node
 
 ### Cognitive Core (Single GPU)
 | Model | Size | VRAM | Use Case |
