@@ -1,6 +1,6 @@
 # Current State
 
-**Last Updated:** 2026-04-18
+**Last Updated:** 2026-04-21
 
 ## Active Work
 - Parts are arriving and the next real move is staged assembly: inventory, bench POST, chassis install, then GPU bring-up.
@@ -9,6 +9,7 @@
 - `vLLM v0.19.1` is now worth reviewing before first install, since the stack was already pinned to `v0.19.0`.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
+- `Qwen3.6-Max-Preview` is now logged as a hosted proprietary coding model to watch for future routing/escalation, not a local-node target.
 - `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
 - `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
 
