@@ -29,6 +29,7 @@ Day-one serving posture:
 | **Claw-code** | Claude Code agent harness (open-source) | github.com/instructkr/claw-code |
 | **Open WebUI** | Chat interface | Browser-based, multi-model |
 | **Kimi K2.6 (future eval)** | Open-source frontier model to track for local/runtime evaluation and fallback economics | Officially supports `vLLM`, `SGLang`, and `KTransformers`; too large to treat as a practical 3x3090 day-one local target |
+| **llm-openrouter (future routing)** | Lightweight OpenRouter integration / routing tooling to watch | Relevant if Nodehome later adds a cheap cloud fallback or multi-model routing layer |
 
 Working architectural framing:
 
@@ -94,6 +95,12 @@ Current 2026-04-20 fallback note:
 - `Kimi K2.6` is open source and important enough to track as both a future local/runtime evaluation target and a cloud fallback candidate.
 - The clean local support path appears to be `vLLM`, `SGLang`, or `KTransformers`; local `Ollama` / `llama.cpp` support is not established.
 - Despite that, it is still not a practical local target for the current 3x3090 + 128GB RAM node because the model is too large to treat as a normal day-one deployment.
+
+Current 2026-04-21 routing/watch note:
+
+- `llm-openrouter 0.6` is worth watching as future routing/fallback tooling now that cheap model-routing candidates are becoming more relevant to the broader Nodehome architecture.
+- `llama.cpp` OOM retry behavior and Gemma-4 tensor-parallel fixes are directly relevant to later benchmarking, but they still reinforce the same rule: direct `llama.cpp` remains a benchmark/watch path, not a day-one dependency for the 3x3090 box.
+- `Ollama v0.21.1-rc0` is another sign that the `0.21.x` line is moving fast, but release candidates do not change the install target by themselves.
 
 ## Target Models (Day 1)
 

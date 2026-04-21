@@ -10,6 +10,7 @@
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
 - `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
+- `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
