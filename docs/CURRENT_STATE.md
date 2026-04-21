@@ -9,7 +9,7 @@
 - `vLLM v0.19.1` is now worth reviewing before first install, since the stack was already pinned to `v0.19.0`.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
-- `Kimi K2.6` is now logged as a future cloud fallback / coding-agent benchmark candidate, not part of the day-one local stack.
+- `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
 
 ## Component Status
 | Component | Price (incl tax) | Status |

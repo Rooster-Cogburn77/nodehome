@@ -19,7 +19,7 @@
 - Logged `Qwen3.6-35B-A3B` as a more credible future vLLM benchmark candidate after fresh local-use signal, while keeping it out of the day-one model plan.
 - Reviewed the 2026-04-18 daily sweep and added `vLLM v0.19.1` to the release-review queue, since the current plan was already pinned to `v0.19.0`.
 - Kept recent `llama.cpp` CUDA graph and Gemma4-shape changes in the benchmark/watch lane only; they do not change the day-one serving order.
-- Logged `Kimi K2.6` as a future cloud fallback / coding-agent benchmark candidate based on the current price/performance signal, while keeping it separate from the day-one local-node model plan.
+- Corrected the `Kimi K2.6` framing: open-source model with official local runtime paths worth tracking seriously, but still not practical on the current 3x3090 node, so it remains outside the day-one local-node plan.
 **Commits:** Pending
 **Next:** Review `Ollama v0.21.0` and `vLLM v0.19.1` release notes closely enough to decide whether the pinned install targets should move before hardware bring-up.
 
