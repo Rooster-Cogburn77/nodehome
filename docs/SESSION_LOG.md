@@ -22,6 +22,7 @@
 - Corrected the `Kimi K2.6` framing: open-source model with official local runtime paths worth tracking seriously, but still not practical on the current 3x3090 node, so it remains outside the day-one local-node plan.
 - Reviewed the 2026-04-21 daily sweep and logged `llm-openrouter 0.6` as future routing/fallback tooling worth watching.
 - Kept the new `llama.cpp` OOM retry and Gemma-4 tensor-parallel fixes in the benchmark/watch lane only; they reinforce that direct `llama.cpp` is still moving too quickly to treat as a stable day-one dependency.
+- Logged `Qwen3.6-Max-Preview` as a hosted proprietary coding model to watch for future cloud escalation and routing decisions, while keeping it separate from the local Qwen benchmark queue.
 **Commits:** Pending
 **Next:** Review `Ollama v0.21.0` and `vLLM v0.19.1` release notes closely enough to decide whether the pinned install targets should move before hardware bring-up.
 

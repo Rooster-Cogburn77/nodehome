@@ -29,6 +29,7 @@ Day-one serving posture:
 | **Claw-code** | Claude Code agent harness (open-source) | github.com/instructkr/claw-code |
 | **Open WebUI** | Chat interface | Browser-based, multi-model |
 | **Kimi K2.6 (future eval)** | Open-source frontier model to track for local/runtime evaluation and fallback economics | Officially supports `vLLM`, `SGLang`, and `KTransformers`; too large to treat as a practical 3x3090 day-one local target |
+| **Qwen3.6-Max-Preview (future hosted eval)** | Proprietary hosted coding model to watch for fallback/routing decisions | Alibaba-hosted preview model; relevant to future cloud escalation, not local serving |
 | **llm-openrouter (future routing)** | Lightweight OpenRouter integration / routing tooling to watch | Relevant if Nodehome later adds a cheap cloud fallback or multi-model routing layer |
 
 Working architectural framing:
@@ -102,6 +103,12 @@ Current 2026-04-21 routing/watch note:
 - `llama.cpp` OOM retry behavior and Gemma-4 tensor-parallel fixes are directly relevant to later benchmarking, but they still reinforce the same rule: direct `llama.cpp` remains a benchmark/watch path, not a day-one dependency for the 3x3090 box.
 - `Ollama v0.21.1-rc0` is another sign that the `0.21.x` line is moving fast, but release candidates do not change the install target by themselves.
 
+Current 2026-04-21 hosted-model note:
+
+- `Qwen3.6-Max-Preview` is worth tracking as a hosted proprietary coding model because Qwen is clearly pushing harder into agentic coding and tool-using workflows.
+- It does not belong in the local-node model plan. Treat it as future cloud escalation / routing context rather than a local serving candidate.
+- For local evaluation, `Qwen3.5-35B-A3B` and `Qwen3.6-35B-A3B` remain the relevant Qwen models; `Qwen3.6-Max-Preview` belongs in the hosted-model bucket instead.
+
 ## Target Models (Day 1)
 
 ### Primary (Across 3 GPUs)
@@ -115,6 +122,7 @@ Future benchmark candidate:
 - `Qwen3.5-35B-A3B` - promising MoE experiment for vLLM once the node is stable; not a day-one target
 - `Qwen3.6-35B-A3B` - newer MoE benchmark candidate with encouraging local-use anecdotes; still not a day-one target
 - `Kimi K2.6` - serious open frontier model to evaluate later; official local path exists, but it is not practical on the current 3x3090 node
+- `Qwen3.6-Max-Preview` - hosted proprietary coding model to watch for future routing/escalation decisions; not a local deployment target
 
 ### Cognitive Core (Single GPU)
 | Model | Size | VRAM | Use Case |
