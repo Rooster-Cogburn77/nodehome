@@ -4,7 +4,8 @@ param(
     [string]$ProjectRoot = "C:\Users\bmoor\Local_AI",
     [string]$CoreTime = "07:00",
     [string]$ExtendedTime = "13:00",
-    [string]$WeeklyTime = "08:30"
+    [string]$WeeklyTime = "08:30",
+    [switch]$DisallowBatteryStart
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,20 +26,58 @@ $coreTaskName = "SovereignNodeSweepCore"
 $extendedTaskName = "SovereignNodeSweepExtended"
 $weeklyTaskName = "SovereignNodeSweepWeekly"
 
-$coreCmd = "`"$pythonPath`" `"$runner`" --profile core"
-$extendedCmd = "`"$pythonPath`" `"$runner`" --profile extended"
-$weeklyCmd = "`"$pythonPath`" `"$runner`" --profile all --weekly --skip-email"
+function New-SweepTaskAction {
+    param(
+        [string]$Arguments
+    )
+
+    return New-ScheduledTaskAction -Execute $pythonPath -Argument $Arguments -WorkingDirectory $ProjectRoot
+}
+
+function New-SweepTaskSettings {
+    $params = @{
+        StartWhenAvailable    = $true
+        ExecutionTimeLimit    = (New-TimeSpan -Hours 72)
+        AllowStartIfOnBatteries = (-not $DisallowBatteryStart.IsPresent)
+        DontStopIfGoingOnBatteries = (-not $DisallowBatteryStart.IsPresent)
+    }
+
+    return New-ScheduledTaskSettingsSet @params
+}
+
+function Register-SweepTask {
+    param(
+        [string]$TaskName,
+        [Microsoft.Management.Infrastructure.CimInstance]$Trigger,
+        [string]$Arguments
+    )
+
+    $action = New-SweepTaskAction -Arguments $Arguments
+    $settings = New-SweepTaskSettings
+
+    Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $action `
+        -Trigger $Trigger `
+        -Settings $settings `
+        -User $env:USERNAME `
+        -RunLevel Limited `
+        -Force | Out-Null
+}
 
 if ($PSCmdlet.ShouldProcess($coreTaskName, "Create or update scheduled task")) {
-    schtasks /Create /TN $coreTaskName /SC DAILY /ST $CoreTime /TR $coreCmd /RL LIMITED /F | Out-Null
+    $coreTrigger = New-ScheduledTaskTrigger -Daily -At $CoreTime
+    Register-SweepTask -TaskName $coreTaskName -Trigger $coreTrigger -Arguments "`"$runner`" --profile core"
 }
 
 if ($PSCmdlet.ShouldProcess($extendedTaskName, "Create or update scheduled task")) {
-    schtasks /Create /TN $extendedTaskName /SC DAILY /ST $ExtendedTime /TR $extendedCmd /RL LIMITED /F | Out-Null
+    $extendedTrigger = New-ScheduledTaskTrigger -Daily -At $ExtendedTime
+    Register-SweepTask -TaskName $extendedTaskName -Trigger $extendedTrigger -Arguments "`"$runner`" --profile extended"
 }
 
 if ($PSCmdlet.ShouldProcess($weeklyTaskName, "Create or update scheduled task")) {
-    schtasks /Create /TN $weeklyTaskName /SC WEEKLY /D SUN /ST $WeeklyTime /TR $weeklyCmd /RL LIMITED /F | Out-Null
+    $weeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $WeeklyTime
+    Register-SweepTask -TaskName $weeklyTaskName -Trigger $weeklyTrigger -Arguments "`"$runner`" --profile all --weekly --skip-email"
 }
 
 Write-Output "Created tasks:"

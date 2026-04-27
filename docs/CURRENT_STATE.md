@@ -1,10 +1,11 @@
 # Current State
 
-**Last Updated:** 2026-04-21
+**Last Updated:** 2026-04-27
 
 ## Active Work
 - Parts are arriving and the next real move is staged assembly: inventory, bench POST, chassis install, then GPU bring-up.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
+- The sweep scheduler was repaired on 2026-04-27 after laptop-style task settings caused missed runs and `0x800710E0` refusals; tasks now have a real working directory and `StartWhenAvailable=true`.
 - Ollama `v0.21.0` now materially pressures the current `v0.20.5` bootstrap target; hold `v0.20.5` until `v0.21.0` is reviewed for Gemma4 / Ampere / RTX 3090 implications.
 - `vLLM v0.19.1` is now worth reviewing before first install, since the stack was already pinned to `v0.19.0`.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
