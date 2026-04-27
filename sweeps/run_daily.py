@@ -59,7 +59,12 @@ LLAMACPP_COMMIT_KEYWORDS = (
 
 
 def openrss_fallback_enabled() -> bool:
-    return os.getenv("SWEEP_OPENRSS_FALLBACK_ENABLED", "false").strip().lower() == "true"
+    raw = os.getenv("SWEEP_OPENRSS_FALLBACK_ENABLED", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return not bool(os.getenv("X_BEARER_TOKEN", "").strip())
 
 
 @dataclass
