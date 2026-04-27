@@ -62,11 +62,11 @@ Current W15 stack signals:
 - Ollama remains the target first-run serving layer; Gemma4 needs an FA compatibility gate before being treated as stable on the node.
 - Cheap 10GbE switching is bookmarked for future multi-node expansion, not a day-one purchase.
 
-Current 2026-04-14 pressure note:
+Current 2026-04-27 version decision:
 
-- Ollama `v0.20.7` and `v0.20.8` landed quickly enough to put pressure on the current `v0.20.5` target-install assumption.
-- The right response is not to churn the bootstrap immediately. Keep `v0.20.5` pinned until the newer releases are reviewed for Gemma4 renderer changes, Ampere behavior, and RTX 3090 compatibility implications.
-- Until that review is done, treat the install target as held under review rather than quietly outdated.
+- Ollama stable `v0.21.2` is now the accepted day-one target line. This matches how the bootstrap actually behaves: it installs current stable rather than a hard-pinned historical version.
+- `v0.21.3-rc*` remains watch-only. Release candidates do not belong in the day-one local serving plan.
+- Gemma4 on Ampere still needs the explicit flash-attention gate check after install; accepting `0.21.2` does not remove that validation step.
 
 Current 2026-04-16 watch note:
 
@@ -74,21 +74,19 @@ Current 2026-04-16 watch note:
 - Treat these as benchmark variables for direct `llama.cpp` testing on the 3x RTX 3090 node, not as reasons to move day-one serving away from the current `Ollama -> vLLM -> direct llama.cpp benchmark` order.
 - Simon Willison's recent Datasette releases are interesting as lightweight local data-view tooling, but they are workflow-adjacent. They do not change the node bring-up plan.
 
-Current 2026-04-17 candidate note:
+Current 2026-04-17 model candidate note:
 
 - `Qwen3.5-35B-A3B` is worth tracking as a future vLLM benchmark candidate because the MoE shape could be attractive for local serving experiments.
 - Do not let that change the current bring-up order or the day-one model list yet. Treat it as a later test case once the node is stable and the baseline serving stack is validated.
 
-Current 2026-04-17 pressure note:
+Current 2026-04-17 candidate note:
 
-- `Ollama v0.21.0` materially increases pressure on the current `v0.20.5` install target.
-- The posture is still conservative: do not auto-upgrade the bootstrap target blindly, but review `v0.21.0` before hardware bring-up rather than treating `v0.20.5` as settled.
 - `Qwen3.6-35B-A3B` now looks more credible as a future local-model experiment, but it still belongs in the post-bring-up vLLM benchmark queue, not the day-one default stack.
 
-Current 2026-04-18 pressure note:
+Current 2026-04-18 version decision:
 
-- `vLLM v0.19.1` is now worth reviewing because the planned serving stack was already pinned to `v0.19.0`.
-- This does not force a change yet, but it means the first install should choose deliberately between `v0.19.0` and `v0.19.1` instead of treating the earlier pin as settled.
+- `vLLM v0.19.1` is adopted for the helper image in place of `v0.19.0`.
+- The change is intentionally conservative: `v0.19.1` is a patch-line follow-up with useful fixes and dependency refreshes, not a speculative jump.
 - Recent `llama.cpp` CUDA graph and Gemma4 model-shape changes are still watch items for later direct benchmarking, not reasons to change day-one serving order.
 
 Current 2026-04-20 fallback note:

@@ -37,8 +37,13 @@
 - Fixed `python -m sweeps.report_status` on Windows by making stdout replace unsupported characters instead of crashing on emoji in follow-up text.
 - Fixed the X/OpenRSS fallback default so `x_user` sources automatically use OpenRSS when no `X_BEARER_TOKEN` is configured, while still allowing explicit opt-out.
 - Cleared stale X-only degraded/quarantine state after changing that transport behavior, then reran the sweeps and confirmed source health returned to zero degraded feeds.
+- Reviewed the pending serving-layer release pressure and resolved the version posture instead of leaving the docs in a permanent “under review” state.
+- Chose the current stable Ollama line (`v0.21.2` as of 2026-04-27) as the accepted day-one target because the bootstrap already installs current stable and the `0.21.x` notes do not justify artificially holding the docs at `v0.20.5`.
+- Kept `0.21.3-rc*` in the watch lane only; release candidates do not belong in the day-one plan.
+- Bumped the pinned vLLM helper image from `v0.19.0` to `v0.19.1` after reviewing it as a patch-on-`0.19.0` with useful fixes and no credible downside for the current stack.
+- Updated the fact-notebook seed assumption and pressure logic so weekly assumption pressure stops referring to the obsolete `v0.20.5` install target.
 **Commits:** Pending
-**Next:** Let the repaired scheduler run on its next normal cadence, then review `Ollama v0.21.0` / `vLLM v0.19.1` before hardware bring-up.
+**Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop
