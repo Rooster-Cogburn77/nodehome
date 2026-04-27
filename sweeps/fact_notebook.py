@@ -15,6 +15,7 @@ from sweeps.send_digest_email import _parse_digest
 ROOT = Path(__file__).resolve().parent.parent
 NOTEBOOK_DIR = ROOT / "docs" / "sweeps" / "notebook"
 DEFAULT_DB = NOTEBOOK_DIR / "facts.sqlite"
+MOJIBAKE_MARKERS = ("â", "ð", "Ã", "œ", "€", "ā")
 CHANGE_TYPES = {
     "release",
     "feature",
@@ -77,7 +78,34 @@ def digest_path(profile: str, run_date: date) -> Path:
     return ROOT / "docs" / "sweeps" / "daily" / f"{run_date.isoformat()}{suffix}.md"
 
 
+def repair_text(value: str) -> str:
+    if not value:
+        return ""
+    replacements = {
+        "â€”": "—",
+        "â€“": "–",
+        "â€™": "’",
+        "â€œ": "“",
+        "â€": "”",
+        "â€˜": "‘",
+        "ðŸ¡": "🐡",
+        "ðŸŸ": "🐟",
+        "â€œtrueâ€": "“true”",
+        " ā€” ": " — ",
+    }
+    for bad, good in replacements.items():
+        value = value.replace(bad, good)
+    if not any(marker in value for marker in MOJIBAKE_MARKERS):
+        return value
+    try:
+        repaired = value.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
+    except Exception:  # noqa: BLE001
+        return value
+    return repaired or value
+
+
 def normalize_text(value: str) -> str:
+    value = repair_text(value)
     value = re.sub(r"\s+", " ", value)
     return value.strip()
 
@@ -792,6 +820,54 @@ def backfill(conn: sqlite3.Connection, profile: str, limit: int) -> tuple[int, i
     return processed, total_inserted, total_updated
 
 
+def repair_existing_text(conn: sqlite3.Connection) -> dict[str, int]:
+    conn.row_factory = sqlite3.Row
+    fact_rows = conn.execute(
+        """
+        SELECT id, claim_text, claim_norm, source_name, entity, implication
+        FROM facts
+        """
+    ).fetchall()
+    fact_updates = 0
+    for row in fact_rows:
+        claim_text = normalize_text(row["claim_text"])
+        source_name = normalize_text(row["source_name"])
+        entity = normalize_text(row["entity"])
+        implication = normalize_text(row["implication"])
+        claim_norm = normalize_claim(claim_text)
+        if (
+            claim_text != row["claim_text"]
+            or claim_norm != row["claim_norm"]
+            or source_name != row["source_name"]
+            or entity != row["entity"]
+            or implication != row["implication"]
+        ):
+            conn.execute(
+                """
+                UPDATE facts
+                SET claim_text = ?, claim_norm = ?, source_name = ?, entity = ?, implication = ?
+                WHERE id = ?
+                """,
+                (claim_text, claim_norm, source_name, entity, implication, row["id"]),
+            )
+            fact_updates += 1
+
+    assumption_rows = conn.execute("SELECT id, entity, claim_text FROM assumptions").fetchall()
+    assumption_updates = 0
+    for row in assumption_rows:
+        entity = normalize_text(row["entity"])
+        claim_text = normalize_text(row["claim_text"])
+        if entity != row["entity"] or claim_text != row["claim_text"]:
+            conn.execute(
+                "UPDATE assumptions SET entity = ?, claim_text = ? WHERE id = ?",
+                (entity, claim_text, row["id"]),
+            )
+            assumption_updates += 1
+
+    conn.commit()
+    return {"facts": fact_updates, "assumptions": assumption_updates}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the sweep fact notebook from daily digest markdown.")
     parser.add_argument("--input", dest="input_path", help="Explicit digest markdown path.")
@@ -816,6 +892,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--assumptions", action="store_true", help="Print active seed assumptions.")
     parser.add_argument("--assumption-check", action="store_true", help="Print high-relevance facts pressuring active assumptions.")
     parser.add_argument("--pressure", action="store_true", help="Alias for --assumption-check.")
+    parser.add_argument("--repair-text", action="store_true", help="Repair common mojibake in existing notebook rows.")
     return parser.parse_args()
 
 
@@ -873,6 +950,12 @@ def main() -> int:
 
     if args.assumption_check or args.pressure:
         print_assumption_check(conn, args.profile, args.limit or 20)
+        conn.close()
+        return 0
+
+    if args.repair_text:
+        result = repair_existing_text(conn)
+        print({"repaired": result, "db": str(db_path)})
         conn.close()
         return 0
 
