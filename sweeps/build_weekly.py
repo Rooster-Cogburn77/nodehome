@@ -18,6 +18,8 @@ from sweeps.fact_notebook import (
 
 ROOT = Path(__file__).resolve().parent.parent
 WEEKLY_DIR = ROOT / "docs" / "sweeps" / "weekly"
+MOJIBAKE_MARKERS = ("â", "ð", "Ã", "œ", "€", "ā")
+
 
 def iso_week_label(run_date: date) -> str:
     year, week, _ = run_date.isocalendar()
@@ -174,8 +176,34 @@ def article_candidates(conn: sqlite3.Connection, start: str, end: str, profile: 
     )
 
 
+def repair_text(text: str) -> str:
+    if not text:
+        return ""
+    replacements = {
+        "â€”": "—",
+        "â€“": "–",
+        "â€™": "’",
+        "â€œ": "“",
+        "â€": "”",
+        "â€˜": "‘",
+        "ðŸ¡": "🐡",
+        "ðŸŸ": "🐟",
+        "â€œtrueâ€": "“true”",
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+    if not any(marker in text for marker in MOJIBAKE_MARKERS):
+        return text.strip()
+    try:
+        repaired = text.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
+    except Exception:  # noqa: BLE001
+        return text.strip()
+    return repaired.strip() or text.strip()
+
+
 def clean_claim(text: str) -> str:
-    for marker in (" â€” ", " — "):
+    text = repair_text(text)
+    for marker in (" ā€” ", " — "):
         if marker in text:
             return text.split(marker, 1)[0].strip()
     return text.strip()
@@ -183,23 +211,23 @@ def clean_claim(text: str) -> str:
 
 def source_suffix(row: sqlite3.Row) -> str:
     if row["source_url"]:
-        return f" Source: {row['source_name']} ({row['source_url']})"
-    return f" Source: {row['source_name']}"
+        return f" Source: {repair_text(row['source_name'])} ({row['source_url']})"
+    return f" Source: {repair_text(row['source_name'])}"
 
 
 def triage_command(action: str, fact_id: str) -> str:
-    return f"python -m sweeps.fact_notebook --{action} {fact_id} --note \"<note>\""
+    return f'python -m sweeps.fact_notebook --{action} {fact_id} --note "<note>"'
 
 
 def render_brief_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
     entity = row["entity"] if "entity" in row.keys() and row["entity"] else row["topic"]
     seen = f" Seen {row['seen_count']}x." if include_seen and "seen_count" in row.keys() else ""
-    implication = f" {row['implication']}" if "implication" in row.keys() and row["implication"] else ""
+    implication = f" {repair_text(row['implication'])}" if "implication" in row.keys() and row["implication"] else ""
     return f"- [{entity}] {clean_claim(row['claim_text'])}.{seen}{implication}{source_suffix(row)}"
 
 
 def render_brief_followup(row: sqlite3.Row) -> str:
-    implication = f" {row['implication']}" if row["implication"] else ""
+    implication = f" {repair_text(row['implication'])}" if row["implication"] else ""
     short_id = row["id"][:12]
     review = triage_command("review", short_id)
     done = triage_command("done", short_id)
@@ -211,7 +239,7 @@ def render_brief_followup(row: sqlite3.Row) -> str:
 
 
 def render_brief_pressure(row: sqlite3.Row) -> str:
-    implication = f" {row['implication']}" if row["implication"] else ""
+    implication = f" {repair_text(row['implication'])}" if row["implication"] else ""
     return (
         f"- [{row['severity']} | {row['assumption_entity']}] "
         f"{clean_claim(row['fact_claim'])}. Pressures: {row['assumption_ids']}.{implication}{source_suffix(row)}"
@@ -226,18 +254,46 @@ def noisy_release_claim(text: str) -> bool:
 def unique_node_rows(rows: list[sqlite3.Row], exclude_claims: set[str], limit: int) -> list[sqlite3.Row]:
     selected = []
     seen_entities = set()
+    seen_claims = set(exclude_claims)
     for row in rows:
         claim = clean_claim(row["claim_text"])
         entity = row["entity"] or row["topic"]
-        if claim in exclude_claims or noisy_release_claim(claim):
+        if claim in seen_claims or noisy_release_claim(claim):
             continue
         if entity in seen_entities and len(selected) >= 3:
             continue
         selected.append(row)
         seen_entities.add(entity)
+        seen_claims.add(claim)
         if len(selected) == limit:
             break
     return selected
+
+
+def dedupe_rows(rows: list[sqlite3.Row], claim_key: str, limit: int) -> list[sqlite3.Row]:
+    selected = []
+    seen_claims = set()
+    for row in rows:
+        claim = clean_claim(row[claim_key])
+        if claim in seen_claims:
+            continue
+        selected.append(row)
+        seen_claims.add(claim)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def dedupe_output_lines(lines: list[str]) -> list[str]:
+    deduped = []
+    seen = set()
+    for line in lines:
+        key = repair_text(line) if line.startswith("- [") else line
+        if key in seen:
+            continue
+        deduped.append(repair_text(line))
+        seen.add(key)
+    return deduped
 
 
 def build_briefing(
@@ -297,26 +353,26 @@ def render_fact(row: sqlite3.Row, include_seen: bool = False) -> str:
         suffix += f" — seen {row['seen_count']}x"
     implication = ""
     if "implication" in row.keys() and row["implication"]:
-        implication = f" Implication: {row['implication']}"
-    return f"- [{row['topic']}] {row['claim_text']} — {row['source_name']}{suffix}{implication}"
+        implication = f" Implication: {repair_text(row['implication'])}"
+    return f"- [{row['topic']}] {repair_text(row['claim_text'])} — {repair_text(row['source_name'])}{suffix}{implication}"
 
 
 def render_followup(row: sqlite3.Row) -> str:
     source = f" ({row['source_url']})" if row["source_url"] else ""
-    implication = f" Implication: {row['implication']}" if row["implication"] else ""
+    implication = f" Implication: {repair_text(row['implication'])}" if row["implication"] else ""
     return (
         f"- [{row['entity'] or 'unknown'} | {row['change_type']} | stack:{row['stack_relevance']} | "
-        f"{followup_reason(row)}] {row['claim_text']} — {row['source_name']}{source}{implication}"
+        f"{followup_reason(row)}] {repair_text(row['claim_text'])} — {repair_text(row['source_name'])}{source}{implication}"
     )
 
 
 def render_assumption_pressure(row: sqlite3.Row) -> str:
     source = f" ({row['source_url']})" if row["source_url"] else ""
-    implication = f" Implication: {row['implication']}" if row["implication"] else ""
+    implication = f" Implication: {repair_text(row['implication'])}" if row["implication"] else ""
     assumptions = row["assumption_ids"]
     return (
         f"- [{row['severity']} | {row['assumption_entity']} | {row['change_type']} | {row['fact_id']}] "
-        f"{row['fact_claim']} - {row['source_name']}{source}. Pressures: {assumptions}.{implication}"
+        f"{repair_text(row['fact_claim'])} - {repair_text(row['source_name'])}{source}. Pressures: {assumptions}.{implication}"
     )
 
 
@@ -337,8 +393,10 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     gaps = followup_rows(conn, profile, 12)
     conn.close()
 
-    briefing = build_briefing(themes, node_impact, pressure, gaps)
-    pressure_claims = {clean_claim(row["fact_claim"]) for row in pressure}
+    pressure_rows = dedupe_rows(pressure, "fact_claim", 6)
+    followup_items = dedupe_rows(gaps, "claim_text", 6)
+    briefing = build_briefing(themes, node_impact, pressure_rows, followup_items)
+    pressure_claims = {clean_claim(row["fact_claim"]) for row in pressure_rows}
     extra_node_rows = unique_node_rows(node_impact, pressure_claims, 3)
     lines = [
         f"# Weekly Sweep - {iso_week_label(run_date)} ({profile})",
@@ -353,30 +411,30 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
         "## What Changed",
         "",
     ]
-    if pressure:
-        for row in pressure[:4]:
+    if pressure_rows:
+        for row in pressure_rows[:4]:
             lines.append(render_brief_pressure(row))
         for row in extra_node_rows:
             lines.append(render_brief_fact(row, include_seen=True))
     elif node_impact:
-        for row in extra_node_rows or node_impact[:6]:
+        for row in extra_node_rows or dedupe_rows(node_impact, "claim_text", 6):
             lines.append(render_brief_fact(row, include_seen=True))
     elif candidates:
-        for row in candidates[:4]:
+        for row in dedupe_rows(candidates, "claim_text", 4):
             lines.append(render_brief_fact(row, include_seen=True))
     else:
         lines.append("- No strong weekly changes surfaced.")
 
     lines.extend(["", "## Assumptions Under Pressure", ""])
-    if pressure:
-        for row in pressure[:6]:
+    if pressure_rows:
+        for row in pressure_rows:
             lines.append(render_brief_pressure(row))
     else:
         lines.append("- No active build assumptions came under pressure this week.")
 
     lines.extend(["", "## Follow-Up Queue", ""])
-    if gaps:
-        for row in gaps[:6]:
+    if followup_items:
+        for row in followup_items:
             lines.append(render_brief_followup(row))
     else:
         lines.append("- No structured follow-up candidates detected.")
@@ -388,6 +446,7 @@ def build_weekly(run_date: date, profile: str, db_path: Path = DEFAULT_DB) -> Pa
     else:
         lines.append("- No notebook facts recorded for this week.")
 
+    lines = dedupe_output_lines(lines)
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
 
