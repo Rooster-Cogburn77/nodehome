@@ -35,6 +35,8 @@
 - Re-registered the daily and weekly tasks and verified `Start In` now points at the repo root and task-triggered runs return `Last Result: 0`.
 - Ran manual catch-up workflows so fresh artifacts exist again for `2026-04-27` and `2026-W18`.
 - Fixed `python -m sweeps.report_status` on Windows by making stdout replace unsupported characters instead of crashing on emoji in follow-up text.
+- Fixed the X/OpenRSS fallback default so `x_user` sources automatically use OpenRSS when no `X_BEARER_TOKEN` is configured, while still allowing explicit opt-out.
+- Cleared stale X-only degraded/quarantine state after changing that transport behavior, then reran the sweeps and confirmed source health returned to zero degraded feeds.
 **Commits:** Pending
 **Next:** Let the repaired scheduler run on its next normal cadence, then review `Ollama v0.21.0` / `vLLM v0.19.1` before hardware bring-up.
 

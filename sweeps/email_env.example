@@ -11,5 +11,6 @@ X_EMAIL_IMAP_HOST=imap.example.com
 X_EMAIL_IMAP_PORT=993
 X_EMAIL_IMAP_USERNAME=x-notify@example.com
 X_EMAIL_IMAP_PASSWORD=app-password-or-mailbox-password
+SWEEP_OPENRSS_FALLBACK_ENABLED=
 X_EMAIL_IMAP_MAILBOX=INBOX
 X_EMAIL_FROM_FILTER=x.com,twitter.com

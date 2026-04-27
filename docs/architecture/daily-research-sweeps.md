@@ -418,7 +418,8 @@ X is primary ideation, not guaranteed transport.
 - Treat X-originated posts, replies, quote context, screenshots, and offhand comments as primary source material when captured
 - Use official X API only if a safe token/cost posture exists
 - Use X email notifications as the current automated, low-risk capture path
-- Keep OpenRSS as optional fallback only (`SWEEP_OPENRSS_FALLBACK_ENABLED=true`)
+- Keep OpenRSS as the automatic fallback when no `X_BEARER_TOKEN` is present, or force it explicitly with `SWEEP_OPENRSS_FALLBACK_ENABLED=true`
+- Use `SWEEP_OPENRSS_FALLBACK_ENABLED=false` only if you want to suppress OpenRSS entirely and accept degraded X coverage
 - Add durable fallbacks (blog, YouTube, GitHub, Bluesky) for baseline continuity, not as replacements
 - The quarantine system handles persistent failures automatically (3 consecutive failures = 12h cooldown)
 
