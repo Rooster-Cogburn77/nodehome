@@ -59,10 +59,10 @@ SEED_ASSUMPTIONS = (
         "source": "sovereign-node-build-plan",
     },
     {
-        "id": "ollama-target-install-v0205",
+        "id": "ollama-target-install-v0212",
         "entity": "Ollama",
-        "claim_text": "Ollama v0.20.5 is the current target install version for Sovereign Node.",
-        "source": "sweep-2026-04-10",
+        "claim_text": "Ollama v0.21.2 is the current target install version for Sovereign Node.",
+        "source": "release-review-2026-04-27",
     },
     {
         "id": "llamacpp-split-mode-tensor-experimental",
@@ -393,6 +393,26 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 def seed_assumptions(conn: sqlite3.Connection) -> None:
     now = datetime.now(UTC).isoformat()
+    old_ollama_id = "ollama-target-install-v0205"
+    new_ollama_id = "ollama-target-install-v0212"
+    if conn.execute("SELECT 1 FROM assumptions WHERE id = ?", (old_ollama_id,)).fetchone():
+        if conn.execute("SELECT 1 FROM assumptions WHERE id = ?", (new_ollama_id,)).fetchone():
+            conn.execute("DELETE FROM assumptions WHERE id = ?", (old_ollama_id,))
+        else:
+            conn.execute(
+                """
+                UPDATE assumptions
+                SET id = ?, claim_text = ?, source = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    new_ollama_id,
+                    "Ollama v0.21.2 is the current target install version for Sovereign Node.",
+                    "release-review-2026-04-27",
+                    now,
+                    old_ollama_id,
+                ),
+            )
     for assumption in SEED_ASSUMPTIONS:
         conn.execute(
             """
@@ -690,9 +710,9 @@ def assumption_pressure_rows(
         "assumptions.status = 'active'",
         "("
         "(facts.stack_relevance = 'high' AND facts.change_type IN ('architecture', 'compatibility', 'breaking_change', 'deprecation')) "
-        "OR (assumptions.id = 'ollama-target-install-v0205' AND facts.change_type = 'release' "
-        "AND facts.claim_text NOT LIKE 'v0.20.5%' AND facts.claim_text NOT LIKE 'v0.20.4%' "
-        "AND facts.claim_text NOT LIKE 'v0.20.3%')"
+        "OR (assumptions.id = 'ollama-target-install-v0212' AND facts.change_type = 'release' "
+        "AND facts.claim_text NOT LIKE 'v0.21.2%' AND facts.claim_text NOT LIKE 'v0.21.1%' "
+        "AND facts.claim_text NOT LIKE 'v0.21.0%')"
         ")",
         "COALESCE(fact_actions.status, 'open') NOT IN ('done', 'ignored')",
     ]

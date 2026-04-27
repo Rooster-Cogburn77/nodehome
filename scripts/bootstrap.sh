@@ -36,9 +36,11 @@ CUDA_KEYRING_DEB_URL="https://developer.download.nvidia.com/compute/cuda/repos/u
 CUDA_TOOLKIT_PACKAGE="cuda-toolkit-12-4"
 
 # Ollama:
-# Sweep data (2026-04-10): v0.20.5 stable. v0.20.4-rc2 added FA disable
-# for older GPUs (3090 = Ampere, may be affected). Ollama auto-updates via
-# install script so pinning isn't needed, but verify version after install.
+# Release review (2026-04-27): move the stable target line to v0.21.2.
+# The installer pulls the current stable release, so the practical posture is:
+# accept v0.21.2 for day-one, verify the installed version, and ignore 0.21.3
+# release-candidate churn until it stabilizes. Gemma4 on Ampere still needs an
+# explicit flash-attention gate check after install.
 # Day-one posture: Ollama first for smoke tests, convenience serving, and
 # possible layer-split experiments. Do not treat it as the serious TP path.
 OLLAMA_HOST_BIND="0.0.0.0:11434"
@@ -47,11 +49,12 @@ INSTALL_OLLAMA_TEST_MODEL="true"
 OLLAMA_GEMMA4_TEST_MODEL="<gemma4-model-tag>"
 
 # vLLM helper script defaults:
-# Sweep data (2026-04-10): v0.19.0 stable includes CPU KV cache offloading
-# (spill beyond 72GB VRAM) and Gemma4 cleanup. Pin to stable, not latest.
+# Release review (2026-04-27): adopt v0.19.1. It is a patch-on-v0.19.0 with
+# useful fixes and dependency refreshes, including Gemma4-related cleanup, so
+# there is no good reason to stay on the older image.
 # Day-one posture: validate TP=3; do not assume it works for every model.
 VLLM_DIR="/opt/nodehome/vllm"
-VLLM_IMAGE="vllm/vllm-openai:v0.19.0"
+VLLM_IMAGE="vllm/vllm-openai:v0.19.1"
 VLLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
 VLLM_TENSOR_PARALLEL_SIZE="3"
 VLLM_CPU_OFFLOAD_GB="0"
