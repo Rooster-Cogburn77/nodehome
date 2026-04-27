@@ -26,6 +26,18 @@
 **Commits:** Pending
 **Next:** Review `Ollama v0.21.0` and `vLLM v0.19.1` release notes closely enough to decide whether the pinned install targets should move before hardware bring-up.
 
+## 2026-04-27 (Session 6)
+**Focus:** Recover sweep automation after offline gap
+**What was done:**
+- Diagnosed the sweep scheduler failure as task configuration, not a broken workflow runner or a simple internet outage.
+- Confirmed the refusal code was `0x800710E0` and that the old tasks were created with brittle laptop-unfriendly defaults: `Interactive only`, no working directory, and battery-disallow behavior.
+- Reworked `sweeps/register_tasks.ps1` to register tasks through the Scheduled Tasks API with a real working directory, `StartWhenAvailable=true`, and battery-friendly settings by default.
+- Re-registered the daily and weekly tasks and verified `Start In` now points at the repo root and task-triggered runs return `Last Result: 0`.
+- Ran manual catch-up workflows so fresh artifacts exist again for `2026-04-27` and `2026-W18`.
+- Fixed `python -m sweeps.report_status` on Windows by making stdout replace unsupported characters instead of crashing on emoji in follow-up text.
+**Commits:** Pending
+**Next:** Let the repaired scheduler run on its next normal cadence, then review `Ollama v0.21.0` / `vLLM v0.19.1` before hardware bring-up.
+
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop
 **What was done:**

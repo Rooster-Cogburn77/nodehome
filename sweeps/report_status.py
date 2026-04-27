@@ -5,6 +5,7 @@ import argparse
 import json
 import sqlite3
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -136,6 +137,9 @@ def print_rows(title: str, rows: list[sqlite3.Row], limit: int) -> None:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
     args = parse_args()
     db_path = resolve_db(args.db)
 
