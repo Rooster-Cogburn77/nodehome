@@ -31,6 +31,7 @@ Day-one serving posture:
 | **Kimi K2.6 (future eval)** | Open-source frontier model to track for local/runtime evaluation and fallback economics | Officially supports `vLLM`, `SGLang`, and `KTransformers`; too large to treat as a practical 3x3090 day-one local target |
 | **Qwen3.6-Max-Preview (future hosted eval)** | Proprietary hosted coding model to watch for fallback/routing decisions | Alibaba-hosted preview model; relevant to future cloud escalation, not local serving |
 | **llm-openrouter (future routing)** | Lightweight OpenRouter integration / routing tooling to watch | Relevant if Nodehome later adds a cheap cloud fallback or multi-model routing layer |
+| **Conductor-style orchestration (future pattern)** | Learned manager-of-models workflow layer | Sakana's `Conductor` is a real signal that RL-trained orchestration may become a practical local-first workflow pattern later, but it is not part of the day-one node plan |
 
 Working architectural framing:
 

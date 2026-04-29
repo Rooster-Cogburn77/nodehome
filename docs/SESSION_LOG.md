@@ -44,6 +44,9 @@
 - Updated the fact-notebook seed assumption and pressure logic so weekly assumption pressure stops referring to the obsolete `v0.20.5` install target.
 - Re-reviewed the new `Ollama 0.22.x` pressure on 2026-04-29 and kept the pin at `v0.21.2`: `0.22.0` is mostly new-model churn and `0.22.1-rc0` is mostly MLX / launch work, not a strong enough reason to move the Linux RTX 3090 target before hardware bring-up.
 - Fixed the repo-level inconsistency by explicitly pinning `OLLAMA_VERSION=0.21.2` in `scripts/bootstrap.sh` instead of silently following latest stable.
+- Verified the extended 2026-04-29 Sakana `Conductor` signal instead of treating it as just another social post: the paper is real and is worth tracking as a future Nodehome orchestration pattern, especially for a local-first “manager of models” workflow layer.
+- Kept that signal in the right bucket: meaningful for future agent/workflow architecture, but not a reason to change the physical node build or day-one serving stack.
+- Verified the XikeStor USB 10GbE review and logged it as non-actionable for this box: useful as a portable adapter idea, not relevant to the H12SSL-i rack node which already has better native networking options.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 
