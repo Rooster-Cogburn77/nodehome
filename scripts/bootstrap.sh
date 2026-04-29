@@ -36,11 +36,13 @@ CUDA_KEYRING_DEB_URL="https://developer.download.nvidia.com/compute/cuda/repos/u
 CUDA_TOOLKIT_PACKAGE="cuda-toolkit-12-4"
 
 # Ollama:
-# Release review (2026-04-27): move the stable target line to v0.21.2.
-# The installer pulls the current stable release, so the practical posture is:
-# accept v0.21.2 for day-one, verify the installed version, and ignore 0.21.3
-# release-candidate churn until it stabilizes. Gemma4 on Ampere still needs an
-# explicit flash-attention gate check after install.
+# Release review (2026-04-29): keep the day-one target pinned to v0.21.2.
+# Ollama 0.22.0 added new models, and 0.22.1-rc0 adds mostly MLX/launch
+# changes, but neither release line yet justifies moving the Linux RTX 3090
+# target. Pin explicitly so the bootstrap does not silently follow latest.
+# Gemma4 on Ampere still needs an explicit flash-attention gate check after
+# install.
+OLLAMA_VERSION="0.21.2"
 # Day-one posture: Ollama first for smoke tests, convenience serving, and
 # possible layer-split experiments. Do not treat it as the serious TP path.
 OLLAMA_HOST_BIND="0.0.0.0:11434"
@@ -261,7 +263,7 @@ EOF
 
 install_ollama() {
   log "Installing and configuring Ollama."
-  curl -fsSL https://ollama.com/install.sh | sh
+  curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION="${OLLAMA_VERSION}" sh
   install -d /etc/systemd/system/ollama.service.d
   cat > /etc/systemd/system/ollama.service.d/override.conf <<EOF
 [Service]

@@ -7,8 +7,9 @@
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
 - The sweep scheduler was repaired on 2026-04-27 after laptop-style task settings caused missed runs and `0x800710E0` refusals; tasks now have a real working directory and `StartWhenAvailable=true`.
 - X/OpenRSS source health was also recovered on 2026-04-27 by auto-enabling OpenRSS fallback when no `X_BEARER_TOKEN` exists and clearing stale X-only quarantine state.
-- Release-note review is resolved: accept the current stable Ollama line (`v0.21.2` as of 2026-04-27) for day-one install, and ignore `0.21.3-rc*` until it stabilizes.
+- Release-note review remains resolved in favor of `Ollama v0.21.2` for day-one install, and the bootstrap now pins that version explicitly instead of following latest stable.
 - `vLLM` is now deliberately pinned to `v0.19.1` instead of `v0.19.0`.
+- `Ollama 0.22.0` / `0.22.1-rc0` now pressure the target again, but current evidence says they are mostly new-model / MLX / launch changes rather than Linux RTX 3090 must-haves, so the pin stays at `0.21.2` for now.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
 - `Qwen3.6-Max-Preview` is now logged as a hosted proprietary coding model to watch for future routing/escalation, not a local-node target.
@@ -35,7 +36,7 @@
 
 ## Blocking Issues
 - No purchasing blockers.
-- No software version blocker. Current day-one targets are Ollama stable `v0.21.2` and `vLLM v0.19.1`.
+- No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
 
 ## Known Failures
 None.

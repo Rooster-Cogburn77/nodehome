@@ -64,9 +64,15 @@ Current W15 stack signals:
 
 Current 2026-04-27 version decision:
 
-- Ollama stable `v0.21.2` is now the accepted day-one target line. This matches how the bootstrap actually behaves: it installs current stable rather than a hard-pinned historical version.
+- Ollama `v0.21.2` remains the accepted day-one target line.
 - `v0.21.3-rc*` remains watch-only. Release candidates do not belong in the day-one local serving plan.
 - Gemma4 on Ampere still needs the explicit flash-attention gate check after install; accepting `0.21.2` does not remove that validation step.
+
+Current 2026-04-29 pressure note:
+
+- `Ollama 0.22.0` and `0.22.1-rc0` immediately put pressure on the `0.21.2` target again.
+- The review result is still conservative: keep the pin at `0.21.2` because the visible `0.22.x` changes are dominated by new-model additions and MLX / launch work, not Linux RTX 3090 fixes that justify churn before bring-up.
+- Unlike the previous review cycle, the bootstrap is now explicitly pinned, so the repo and the actual install path stay aligned.
 
 Current 2026-04-16 watch note:
 
