@@ -42,6 +42,8 @@
 - Kept `0.21.3-rc*` in the watch lane only; release candidates do not belong in the day-one plan.
 - Bumped the pinned vLLM helper image from `v0.19.0` to `v0.19.1` after reviewing it as a patch-on-`0.19.0` with useful fixes and no credible downside for the current stack.
 - Updated the fact-notebook seed assumption and pressure logic so weekly assumption pressure stops referring to the obsolete `v0.20.5` install target.
+- Re-reviewed the new `Ollama 0.22.x` pressure on 2026-04-29 and kept the pin at `v0.21.2`: `0.22.0` is mostly new-model churn and `0.22.1-rc0` is mostly MLX / launch work, not a strong enough reason to move the Linux RTX 3090 target before hardware bring-up.
+- Fixed the repo-level inconsistency by explicitly pinning `OLLAMA_VERSION=0.21.2` in `scripts/bootstrap.sh` instead of silently following latest stable.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 
