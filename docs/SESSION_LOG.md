@@ -57,8 +57,11 @@
 - Motherboard inspection checkpoint: board removed to the anti-static-bag stage, CPU confirmed installed (`AMD EPYC` visible), and BMC details recorded (`905A0878716D`, password `SYZIFLTPAK`).
 - Current hardware status is still intentionally conservative: no cooler/RAM/power connections yet, and bench POST has not started.
 - Explicitly logged the build reminder: this is the first time through a dense EPYC + 3x3090 rack build, so fitment mistakes, cable surprises, or a small follow-up parts order should be treated as normal learning rather than evidence that the build is going badly.
+- Hardware safety rule tightened after the first live bench-power session: no intentional pin shorting, no guessed header operations, and no undocumented power-control steps. Future hardware guidance must stay on labeled connectors, documented headers, or approved vendor tools/adapters only.
+- Live bench-power checkpoint completed successfully: board powered cleanly on the motherboard box, 24-pin plus both CPU power connected, 4 DIMMs installed, cooler mounted, both cooler fans connected, standby remained stable for several minutes, and no immediate electrical fault surfaced.
+- Host power-on / POST is still not proved. BMC MAC `90:5A:08:78:71:6D` was recorded earlier, Ethernet link came up on a rear RJ45 port, but the BMC did not appear in Windows `arp -a` during this session.
 **Commits:** Pending
-**Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
+**Next:** Positively identify the board's documented host power-control path and BMC/LAN behavior before attempting POST again; do not improvise at the front-panel header.
 
 ## 2026-04-12 (Session 4)
 **Focus:** Nodehome sweep automation and compounding notebook loop

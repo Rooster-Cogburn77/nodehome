@@ -4,6 +4,7 @@
 
 ## Active Work
 - Hardware bring-up has started at the inspection stage: PSU/cable inventory is done, motherboard inspection has started, and bench POST is still pending.
+- Hardware safety rule for this project is now explicit: no intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up. Only labeled connectors, documented headers, or approved vendor tools/adapters are allowed.
 - This is the first full server build in this configuration. It is expected that some parts may not fit perfectly on the first attempt and that an extra cable, bracket, adapter, or replacement part may still be needed to finish cleanly.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
 - Sweep workflow now also produces a generated daily operator brief (`docs/sweeps/operator/`) so triage does not require pasting digests into chat.
@@ -42,7 +43,7 @@
 ## Blocking Issues
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
-- Emotional/operational blocker only: bench POST has not started yet.
+- Bench POST host-power step is blocked until the board's documented power-control method is positively identified.
 - Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 
 ## Known Failures

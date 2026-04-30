@@ -9,6 +9,14 @@
 
 ## CRITICAL WARNINGS (Read Before Touching Hardware)
 
+### 0. No Improvised Header Operations
+Do **not** intentionally short motherboard pins or guess at front-panel header behavior during bring-up. Only use:
+- labeled connectors,
+- documented header pinouts that have been positively matched to the physical board, or
+- approved vendor tools/adapters/switch leads.
+
+If the host power-control path is not positively identified, stop and verify it first.
+
 ### 1. Drive Cage MUST Be Removed
 RTX 3090 blower cards are ~267mm long. RM400 only allows 220mm with the 3.5" drive cage. **Remove the drive cage** to get 339mm clearance. This means NVMe-only storage (your GM7 2TB in the M.2 slot).
 
@@ -51,8 +59,9 @@ Do this on the motherboard box. Validates components before you stuff them in th
 3. [ ] Install 1x 32GB DIMM in slot **DIMMA1** only
 4. [ ] Install 1x RTX 3090 in first x16 slot
 5. [ ] Connect PSU: 24-pin ATX, 8-pin CPU, 1x PCIe power to GPU
-6. [ ] Connect Ethernet to IPMI port
-7. [ ] Power on - enter BIOS (Delete key)
+6. [ ] Connect Ethernet to the documented management path for this board/revision
+7. [ ] Positively identify the board's host power-control method before trying to start the system
+8. [ ] Power on - enter BIOS (Delete key)
 
 ### BIOS Configuration
 - [ ] Update BMC firmware first if below V1.00.32
