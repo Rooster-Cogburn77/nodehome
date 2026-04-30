@@ -16,6 +16,7 @@
 - `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
 - `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
 - Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later “manager of models” workflow layer, but not to the immediate hardware build.
+- Cloudflare's new agent provisioning flow is now logged as a real future “agent-operated infrastructure” signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
 
 ## Component Status
 | Component | Price (incl tax) | Status |

@@ -32,6 +32,7 @@ Day-one serving posture:
 | **Qwen3.6-Max-Preview (future hosted eval)** | Proprietary hosted coding model to watch for fallback/routing decisions | Alibaba-hosted preview model; relevant to future cloud escalation, not local serving |
 | **llm-openrouter (future routing)** | Lightweight OpenRouter integration / routing tooling to watch | Relevant if Nodehome later adds a cheap cloud fallback or multi-model routing layer |
 | **Conductor-style orchestration (future pattern)** | Learned manager-of-models workflow layer | Sakana's `Conductor` is a real signal that RL-trained orchestration may become a practical local-first workflow pattern later, but it is not part of the day-one node plan |
+| **Agent-operated infrastructure (future pattern)** | Agents provision accounts, domains, and credentials on behalf of users | Cloudflare + Stripe Projects is a concrete signal that agents are becoming first-class infrastructure operators; relevant to a later Nodehome orchestration/product layer, not the day-one node |
 
 Working architectural framing:
 
