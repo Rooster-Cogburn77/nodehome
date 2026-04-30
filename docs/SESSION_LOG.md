@@ -51,6 +51,7 @@
 - Logged that in the same long-term bucket as the Conductor signal: meaningful for future Nodehome “agent-operated infrastructure” and orchestration patterns, but not a reason to change the immediate local-node hardware or serving plan.
 - Added a generated daily operator brief under `docs/sweeps/operator/` so the system can classify each run into `Act now`, `Watch`, `Future architecture`, and `Suppressed` without requiring manual digest pastes into chat.
 - Wired the operator brief into `sweeps/run_workflow.py` and `sweeps/report_status.py`, keeping the wide collection layer intact while fixing the feedback loop problem above it.
+- Tightened the operator brief for scale: added clearer recommendation output, per-source and per-entity caps, suppression of already-triaged items, and more robust text cleanup so the brief is less likely to turn into another noisy digest as the notebook grows.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 

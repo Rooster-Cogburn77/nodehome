@@ -23,6 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 OPERATOR_DIR = ROOT / "docs" / "sweeps" / "operator"
 OLLAMA_TARGETS = ("v0.21.2", "v0.21.1", "v0.21.0")
 VLLM_TARGETS = ("v0.19.1", "v0.19.0")
+SECTION_LIMIT = 6
+FUTURE_SOURCE_LIMIT = 2
+WATCH_ENTITY_LIMIT = 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,7 +51,7 @@ def output_path_for(run_date: date, profile: str) -> Path:
 
 def clean_text(value: str) -> str:
     value = repair_text(" ".join((value or "").split()))
-    for marker in (" Ã¢â‚¬â€ ", " â€” ", " ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â "):
+    for marker in (" — ", " – ", " Ã¢â‚¬â€ ", " Ã¢â‚¬â€œ ", " ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ", " ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬â€œ "):
         if marker in value:
             return value.split(marker, 1)[0].strip()
     return value.strip()
@@ -60,12 +63,6 @@ def short_id(value: str) -> str:
 
 def triage_command(action: str, fact_id: str) -> str:
     return f'python -m sweeps.fact_notebook --{action} {fact_id} --note "<note>"'
-
-
-def profile_filter(profile: str) -> tuple[str, list[str]]:
-    if profile == "all":
-        return "", []
-    return "AND profile = ?", [profile]
 
 
 def fetch_issue_lines(markdown: str) -> list[str]:
@@ -150,9 +147,7 @@ def future_architecture_candidate(row: sqlite3.Row) -> bool:
         "reasoning models",
         "llm 0.32",
     )
-    if any(needle in text for needle in needles):
-        return True
-    return False
+    return any(needle in text for needle in needles)
 
 
 def release_pressure_candidate(row: sqlite3.Row) -> bool:
@@ -180,6 +175,25 @@ def render_fact(row: sqlite3.Row, extra: str = "") -> str:
     return f"{detail}{action}"
 
 
+def recommendation_line(
+    act_now: list[tuple[sqlite3.Row, str]],
+    watch: list[tuple[sqlite3.Row, str]],
+    future: list[tuple[sqlite3.Row, str]],
+    fetch_issues: list[str],
+) -> str:
+    if act_now:
+        return "- Recommendation: review the `Act now` items before changing pins or build assumptions."
+    if watch:
+        return "- Recommendation: no immediate action; note the `Watch` items and continue with the hardware plan."
+    if future and fetch_issues:
+        return "- Recommendation: no current stack action; log the future-architecture items and treat this run as partially degraded."
+    if future:
+        return "- Recommendation: no current stack action; only future-architecture items surfaced."
+    if fetch_issues:
+        return "- Recommendation: no stack action from content; monitor transport health because this run had fetch issues."
+    return "- Recommendation: no meaningful operator action from this run."
+
+
 def classify(
     fact_rows: list[sqlite3.Row],
     pressure_rows: list[sqlite3.Row],
@@ -191,8 +205,9 @@ def classify(
     future: list[tuple[sqlite3.Row, str]] = []
     suppressed = {"release_churn": 0, "social_noise": 0, "background": 0}
     future_counts: dict[str, int] = {}
-
+    watch_counts: dict[str, int] = {}
     seen_claims: set[str] = set()
+
     for row in sorted(fact_rows, key=rank_value):
         claim = clean_text(row["claim_text"]).lower()
         if claim in seen_claims:
@@ -200,30 +215,54 @@ def classify(
             continue
         seen_claims.add(claim)
 
+        if row["action_status"] in {"reviewing", "done", "ignored"}:
+            suppressed["background"] += 1
+            continue
+
         pressure = pressure_by_id.get(row["id"])
         if pressure and pressure["severity"] == "act":
             act_now.append((row, f"Pressures active build assumptions: {pressure['assumption_ids']} ({pressure['severity']})."))
             continue
         if pressure and pressure["severity"] in {"review", "watch"}:
+            entity = row["entity"] or row["source_name"] or "unknown"
+            if watch_counts.get(entity, 0) >= WATCH_ENTITY_LIMIT:
+                suppressed["background"] += 1
+                continue
+            watch_counts[entity] = watch_counts.get(entity, 0) + 1
             watch.append((row, f"Pressures active build assumptions: {pressure['assumption_ids']} ({pressure['severity']})."))
             continue
+
         if release_pressure_candidate(row):
             act_now.append((row, "Release pressure against a pinned serving version; review before changing targets."))
             continue
+
         if row["id"] in followup_fact_ids and row["stack_relevance"] == "high":
-            watch.append((row, f"High stack relevance and already in the follow-up queue ({followup_reason(row)})."))
-            continue
-        if row["stack_relevance"] == "high" and row["change_type"] in {"architecture", "compatibility", "benchmark"}:
-            watch.append((row, "High-relevance infra/backend change worth watching against the node plan."))
-            continue
-        if future_architecture_candidate(row):
             entity = row["entity"] or row["source_name"] or "unknown"
-            if future_counts.get(entity, 0) >= 2:
+            if watch_counts.get(entity, 0) >= WATCH_ENTITY_LIMIT:
                 suppressed["background"] += 1
                 continue
-            future_counts[entity] = future_counts.get(entity, 0) + 1
+            watch_counts[entity] = watch_counts.get(entity, 0) + 1
+            watch.append((row, f"High stack relevance and already in the follow-up queue ({followup_reason(row)})."))
+            continue
+
+        if row["stack_relevance"] == "high" and row["change_type"] in {"architecture", "compatibility", "benchmark"}:
+            entity = row["entity"] or row["source_name"] or "unknown"
+            if watch_counts.get(entity, 0) >= WATCH_ENTITY_LIMIT:
+                suppressed["background"] += 1
+                continue
+            watch_counts[entity] = watch_counts.get(entity, 0) + 1
+            watch.append((row, "High-relevance infra/backend change worth watching against the node plan."))
+            continue
+
+        if future_architecture_candidate(row):
+            source = row["source_name"] or row["entity"] or "unknown"
+            if future_counts.get(source, 0) >= FUTURE_SOURCE_LIMIT:
+                suppressed["background"] += 1
+                continue
+            future_counts[source] = future_counts.get(source, 0) + 1
             future.append((row, "Future architecture / workflow-layer signal, not a current hardware or serving action."))
             continue
+
         if row["confidence"] == "social-primary" and row["stack_relevance"] in {"none", "low"}:
             suppressed["social_noise"] += 1
             continue
@@ -232,7 +271,7 @@ def classify(
             continue
         suppressed["background"] += 1
 
-    return act_now[:6], watch[:6], future[:6], suppressed
+    return act_now[:SECTION_LIMIT], watch[:SECTION_LIMIT], future[:SECTION_LIMIT], suppressed
 
 
 def build_brief(run_date: date, profile: str, db_path: Path, digest_md: str) -> str:
@@ -271,6 +310,7 @@ def build_brief(run_date: date, profile: str, db_path: Path, digest_md: str) -> 
     ]
     if fetch_issues:
         lines.append(f"- Fetch issues: {len(fetch_issues)}")
+    lines.append(recommendation_line(act_now, watch, future, fetch_issues))
     lines.append("")
 
     lines.extend(["## Act Now", ""])
