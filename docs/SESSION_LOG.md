@@ -55,6 +55,7 @@
 - Started the physical build process at the lowest-risk point: PSU box opened and cable inventory recorded before touching the motherboard.
 - PSU inventory checkpoint: motherboard cable present (`1600T/2000 MB`), two CPU/EPS cables present, and multiple GPU/VGA harnesses present. No obvious cable blocker surfaced for the planned 3x3090 build.
 - Current hardware status is still intentionally conservative: motherboard has not been opened yet, and bench POST has not started.
+- Explicitly logged the build reminder: this is the first time through a dense EPYC + 3x3090 rack build, so fitment mistakes, cable surprises, or a small follow-up parts order should be treated as normal learning rather than evidence that the build is going badly.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 
