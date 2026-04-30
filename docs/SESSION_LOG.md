@@ -52,6 +52,9 @@
 - Added a generated daily operator brief under `docs/sweeps/operator/` so the system can classify each run into `Act now`, `Watch`, `Future architecture`, and `Suppressed` without requiring manual digest pastes into chat.
 - Wired the operator brief into `sweeps/run_workflow.py` and `sweeps/report_status.py`, keeping the wide collection layer intact while fixing the feedback loop problem above it.
 - Tightened the operator brief for scale: added clearer recommendation output, per-source and per-entity caps, suppression of already-triaged items, and more robust text cleanup so the brief is less likely to turn into another noisy digest as the notebook grows.
+- Started the physical build process at the lowest-risk point: PSU box opened and cable inventory recorded before touching the motherboard.
+- PSU inventory checkpoint: motherboard cable present (`1600T/2000 MB`), two CPU/EPS cables present, and multiple GPU/VGA harnesses present. No obvious cable blocker surfaced for the planned 3x3090 build.
+- Current hardware status is still intentionally conservative: motherboard has not been opened yet, and bench POST has not started.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 

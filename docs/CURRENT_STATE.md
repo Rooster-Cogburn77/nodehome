@@ -1,9 +1,9 @@
 # Current State
 
-**Last Updated:** 2026-04-27
+**Last Updated:** 2026-04-30
 
 ## Active Work
-- Parts are arriving and the next real move is staged assembly: inventory, bench POST, chassis install, then GPU bring-up.
+- Hardware bring-up has started at the inventory stage: PSU and cable inventory is in progress, with bench POST still pending.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
 - Sweep workflow now also produces a generated daily operator brief (`docs/sweeps/operator/`) so triage does not require pasting digests into chat.
 - The operator brief now has basic scaling guards: recommendation line, source/entity caps, and suppression of already-triaged rows.
@@ -41,6 +41,7 @@
 ## Blocking Issues
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
+- Emotional/operational blocker only: motherboard is not opened yet, so no bench POST progress has started.
 
 ## Known Failures
 None.
