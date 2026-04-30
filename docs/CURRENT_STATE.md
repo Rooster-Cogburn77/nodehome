@@ -4,6 +4,7 @@
 
 ## Active Work
 - Hardware bring-up has started at the inventory stage: PSU and cable inventory is in progress, with bench POST still pending.
+- This is the first full server build in this configuration. It is expected that some parts may not fit perfectly on the first attempt and that an extra cable, bracket, adapter, or replacement part may still be needed to finish cleanly.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
 - Sweep workflow now also produces a generated daily operator brief (`docs/sweeps/operator/`) so triage does not require pasting digests into chat.
 - The operator brief now has basic scaling guards: recommendation line, source/entity caps, and suppression of already-triaged rows.
@@ -42,6 +43,7 @@
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
 - Emotional/operational blocker only: motherboard is not opened yet, so no bench POST progress has started.
+- Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 
 ## Known Failures
 None.
