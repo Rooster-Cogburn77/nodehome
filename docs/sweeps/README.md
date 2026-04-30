@@ -7,6 +7,7 @@ Daily and weekly internet sweep outputs live here.
 - `daily/` - one markdown digest per day and profile
 - `health/` - source health for each run (`ok`, `cached`, `failed`)
 - `validation/` - follow-up queue for social discoveries with outbound links
+- `operator/` - generated daily operator briefs with `Act now / Watch / Future architecture / Suppressed`
 - `weekly/` - weekly rollups
 - `state/` - cached source snapshots for diffing
 - `health/degraded_sources.json` - rolling source degradation state across runs
@@ -26,6 +27,7 @@ Script:
 - `sweeps/run_workflow.py`
 - `sweeps/report_status.py`
 - `sweeps/build_wiki.py`
+- `sweeps/build_operator_brief.py`
 - `sweeps/email_env.example`
 
 ## Environment
@@ -56,6 +58,7 @@ python -m sweeps.fact_notebook --followup --profile all
 python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
 python -m sweeps.fact_notebook --done <fact_id> --note "handled"
 python -m sweeps.build_wiki --profile all
+python -m sweeps.build_operator_brief --profile all
 ```
 
 The script is intentionally narrow:
@@ -80,7 +83,9 @@ The script is intentionally narrow:
 - weekly follow-up rows include `fact_id` and ready-to-run `--review` / `--done` commands
 - follow-up action commands accept unique fact ID prefixes, so the weekly email can use short IDs
 - workflow now rebuilds the generated wiki view under `docs/wiki/generated/` after notebook ingest, and again after weekly rollup generation
+- workflow now also rebuilds a generated operator brief under `docs/sweeps/operator/` after notebook ingest
 - pass `--skip-wiki` only if you explicitly want to suppress that refresh
+- pass `--skip-operator` only if you explicitly want to suppress that refresh
 
 Output filenames:
 

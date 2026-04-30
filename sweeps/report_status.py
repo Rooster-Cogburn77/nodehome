@@ -150,6 +150,7 @@ def main() -> int:
     print(file_line("latest daily core", latest_file(SWEEPS_DIR / "daily", "????-??-??.md")))
     print(file_line("latest daily extended", latest_file(SWEEPS_DIR / "daily", "*.extended.md")))
     print(file_line("latest daily all", latest_file(SWEEPS_DIR / "daily", "*.all.md")))
+    print(file_line("latest operator brief", latest_file(SWEEPS_DIR / "operator", "*.md")))
     print(file_line("latest weekly", latest_file(SWEEPS_DIR / "weekly", "*.md")))
 
     print("\n## Scheduled Tasks")

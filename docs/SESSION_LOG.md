@@ -49,6 +49,8 @@
 - Verified the XikeStor USB 10GbE review and logged it as non-actionable for this box: useful as a portable adapter idea, not relevant to the H12SSL-i rack node which already has better native networking options.
 - Verified Cloudflare's new agent provisioning flow with Stripe Projects and logged it as a stronger architecture signal than the earlier generic Cloudflare AI posts: agents can now create accounts, start paid subscriptions, register domains, and receive deployable API credentials with human approval in the loop.
 - Logged that in the same long-term bucket as the Conductor signal: meaningful for future Nodehome “agent-operated infrastructure” and orchestration patterns, but not a reason to change the immediate local-node hardware or serving plan.
+- Added a generated daily operator brief under `docs/sweeps/operator/` so the system can classify each run into `Act now`, `Watch`, `Future architecture`, and `Suppressed` without requiring manual digest pastes into chat.
+- Wired the operator brief into `sweeps/run_workflow.py` and `sweeps/report_status.py`, keeping the wide collection layer intact while fixing the feedback loop problem above it.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 

@@ -5,6 +5,7 @@
 ## Active Work
 - Parts are arriving and the next real move is staged assembly: inventory, bench POST, chassis install, then GPU bring-up.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
+- Sweep workflow now also produces a generated daily operator brief (`docs/sweeps/operator/`) so triage does not require pasting digests into chat.
 - The sweep scheduler was repaired on 2026-04-27 after laptop-style task settings caused missed runs and `0x800710E0` refusals; tasks now have a real working directory and `StartWhenAvailable=true`.
 - X/OpenRSS source health was also recovered on 2026-04-27 by auto-enabling OpenRSS fallback when no `X_BEARER_TOKEN` exists and clearing stale X-only quarantine state.
 - Release-note review remains resolved in favor of `Ollama v0.21.2` for day-one install, and the bootstrap now pins that version explicitly instead of following latest stable.
