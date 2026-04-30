@@ -47,6 +47,8 @@
 - Verified the extended 2026-04-29 Sakana `Conductor` signal instead of treating it as just another social post: the paper is real and is worth tracking as a future Nodehome orchestration pattern, especially for a local-first “manager of models” workflow layer.
 - Kept that signal in the right bucket: meaningful for future agent/workflow architecture, but not a reason to change the physical node build or day-one serving stack.
 - Verified the XikeStor USB 10GbE review and logged it as non-actionable for this box: useful as a portable adapter idea, not relevant to the H12SSL-i rack node which already has better native networking options.
+- Verified Cloudflare's new agent provisioning flow with Stripe Projects and logged it as a stronger architecture signal than the earlier generic Cloudflare AI posts: agents can now create accounts, start paid subscriptions, register domains, and receive deployable API credentials with human approval in the loop.
+- Logged that in the same long-term bucket as the Conductor signal: meaningful for future Nodehome “agent-operated infrastructure” and orchestration patterns, but not a reason to change the immediate local-node hardware or serving plan.
 **Commits:** Pending
 **Next:** Hardware bring-up remains the main job: inventory, bench POST, chassis install, then GPU validation.
 
