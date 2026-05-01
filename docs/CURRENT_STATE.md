@@ -1,9 +1,10 @@
 # Current State
 
-**Last Updated:** 2026-04-30
+**Last Updated:** 2026-05-01
 
 ## Active Work
-- Hardware bring-up has started at the inspection stage: PSU/cable inventory is done, motherboard inspection has started, and bench POST is still pending.
+- Hardware bring-up has progressed past inspection into a safe bench-power checkpoint: PSU/cable inventory was completed, the motherboard/CPU/RAM/cooler were powered on safely, and no immediate electrical fault was observed.
+- Repo-truth hardware limit: the latest durable repo evidence does **not** prove current in-chassis wiring state, current BMC/KVM state, or a successful host POST. The latest proved blocker remains host power / POST verification.
 - Hardware safety rule for this project is now explicit: no intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up. Only labeled connectors, documented headers, or approved vendor tools/adapters are allowed.
 - This is the first full server build in this configuration. It is expected that some parts may not fit perfectly on the first attempt and that an extra cable, bracket, adapter, or replacement part may still be needed to finish cleanly.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
@@ -19,19 +20,19 @@
 - `Qwen3.6-Max-Preview` is now logged as a hosted proprietary coding model to watch for future routing/escalation, not a local-node target.
 - `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
 - `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
-- Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later “manager of models” workflow layer, but not to the immediate hardware build.
-- Cloudflare's new agent provisioning flow is now logged as a real future “agent-operated infrastructure” signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
+- Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later "manager of models" workflow layer, but not to the immediate hardware build.
+- Cloudflare's new agent provisioning flow is now logged as a real future "agent-operated infrastructure" signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
 |-----------|-----------------|--------|
-| 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142, FedEx air ETA Apr 16-28 |
+| 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142 |
 | EPYC 7302P + H12SSL-i v2.0 | $985 | Arrived 2026-04-07 |
 | PSU 1600W Titanium | $241 | Purchased |
-| RAM 128GB DDR4-2133 ECC | $455 | Purchased, order #03-14469-02999, shipping from CA |
+| RAM 128GB DDR4-2133 ECC | $455 | Purchased, order #03-14469-02999 |
 | SSD Acer GM7 2TB | $291 | Purchased |
-| SilverStone RM400 chassis | ~$260 | Purchased, arriving Sat 2026-04-12 |
-| Noctua NH-U9 TR4-SP3 cooler | $161 | Purchased from kuaka02 (Ada), shipping from China |
+| SilverStone RM400 chassis | ~$260 | Purchased |
+| Noctua NH-U9 TR4-SP3 cooler | $161 | Purchased from kuaka02 (Ada) |
 | Noctua NF-A12x25 PWM case fan | $0 | Have it (came with rack) |
 | SysRacks 24x24 server rack | $75 | Purchased |
 
@@ -43,7 +44,7 @@
 ## Blocking Issues
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
-- Bench POST host-power step is blocked until the board's documented power-control method is positively identified.
+- Host POST is still not proved. The repo-safe next step remains: positively identify the documented host power-control path and verify BMC/LAN behavior before improvising anything at the front-panel header.
 - Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 
 ## Known Failures

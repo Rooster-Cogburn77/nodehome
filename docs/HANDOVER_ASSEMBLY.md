@@ -3,7 +3,7 @@
 ## Status: IN PROGRESS
 ## Expires when: System running, first 70B model inference complete
 
-**Last Updated:** 2026-04-07
+**Last Updated:** 2026-05-01
 
 ---
 
@@ -26,8 +26,8 @@ Noctua NH-U9 TR4-SP3 is 125mm tall. RM400 allows 130mm with the bracket, 148mm w
 ### 3. Don't Throw Away The CPU Socket Cover
 The BMC/IPMI default password may be printed on it. Record it before discarding.
 
-### 4. vLLM Tensor Parallelism Won't Work With 3 GPUs
-64 attention heads on most 70B models aren't divisible by 3. Use `--pipeline-parallel-size 3` or use Ollama which handles 3 GPUs natively.
+### 4. Do Not Assume vLLM TP=3 Works For Every Model
+Keep the current repo posture: `TENSOR_PARALLEL_SIZE=3` is a validation target, not a solved assumption. Many 70B-class models have head/topology constraints that may push you toward `--pipeline-parallel-size 3` or a different serving path, so test the actual target model before treating TP=3 as settled.
 
 ### 5. Set GPU Power Limits
 Run `nvidia-smi -pl 300` after driver install. Drops from 1,050W GPU draw to 900W with ~5% performance hit. Much better thermals and power stability.
@@ -52,7 +52,7 @@ Run `nvidia-smi -pl 300` after driver install. Drops from 1,050W GPU draw to 900
 
 ## Phase 2: Breadboard Test (Outside Chassis)
 
-Do this on the motherboard box. Validates components before you stuff them in the 4U case.
+This was the original lowest-risk validation sequence. Parts of it were later reached in the repo's bench-power checkpoint, but the repo does not currently prove a successful POST from that stage.
 
 1. [ ] Install EPYC 7302 into SP3 socket (verify orientation, don't force)
 2. [ ] Mount Noctua NH-U9 TR4-SP3 (SecuFirm2 SP3 mounting hardware, NT-H1 paste included)
@@ -78,6 +78,8 @@ Do this on the motherboard box. Validates components before you stuff them in th
 - [ ] Install NVIDIA drivers: `sudo apt install ubuntu-drivers-common && sudo ubuntu-drivers install`
 - [ ] Reboot, verify: `nvidia-smi` shows 1x RTX 3090
 - [ ] Check PCIe link: `nvidia-smi --query-gpu=pcie.link.gen.current,pcie.link.width.current --format=csv` → should show `4, 16`
+
+Repo note: `docs/archives/SESSION_LOG_2026-04.md` records a later safe bench-power checkpoint, but not a proved POST or BIOS entry. Do not mark this phase complete from repo evidence alone.
 
 ---
 
@@ -109,6 +111,8 @@ Do this on the motherboard box. Validates components before you stuff them in th
 - [ ] Verify all 3 GPUs detected
 - [ ] Verify 128GB RAM detected (4x 32GB)
 - [ ] Verify NVMe SSD detected
+
+Repo note: current durable docs do not prove any of these checks have completed successfully.
 
 ### OS + Drivers
 - [ ] Boot Ubuntu (already installed from breadboard test)
@@ -154,7 +158,7 @@ Do this on the motherboard box. Validates components before you stuff them in th
 
 ### vLLM (After Ollama Baseline, For Multi-GPU Serving)
 - [ ] Use the bootstrap Docker helper: `/opt/nodehome/vllm/launch_vllm.sh`
-- [ ] Validate `TENSOR_PARALLEL_SIZE=3`; do not assume it works for every model
+- [ ] Validate `TENSOR_PARALLEL_SIZE=3`; if the target model's topology rejects it, fall back to pipeline parallelism or a different serving path
 - [ ] Test CPU KV cache offload: `CPU_OFFLOAD_GB=32 /opt/nodehome/vllm/launch_vllm.sh`
 - [ ] Benchmark vs Ollama on same model
 
@@ -166,7 +170,7 @@ Do this on the motherboard box. Validates components before you stuff them in th
 | | Ollama | vLLM |
 |--|--------|------|
 | Setup | One-liner | Python env |
-| 3-GPU method | Layer splitting experiments | TP=3 validation target; model-dependent |
+| 3-GPU method | Layer splitting experiments | TP=3 validation target; fallback may be pipeline parallelism depending on model topology |
 | Speed | ~15-17 t/s | ~21-25 t/s |
 | Best for | First inference, convenience, small/single-GPU models | Multi-GPU serving experiments, throughput |
 

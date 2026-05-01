@@ -28,3 +28,5 @@ docs/wiki/generated/entities/*.md
 !docs/wiki/generated/entities/.gitkeep
 docs/wiki/generated/sources/*.md
 !docs/wiki/generated/sources/.gitkeep
+~$*.docx
+Home Build Progress Tracking doc_notes.docx

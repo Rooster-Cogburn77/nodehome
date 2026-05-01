@@ -1,18 +1,17 @@
-# Session Scratch - 2026-04-07
-Focus: Finalizing Sovereign Node v1.0 BOM and Documentation Architecture.
+# Session Scratch - 2026-05-01
+Focus: Repo cleanup and repo-truth realignment.
 
-## Decisions
-- **SSD:** Acer Predator GM7 2TB ($269) locked. TLC mandatory for AI server loads.
-- **PSU:** Super Flower 1600W Titanium Refurbished ($223) secured from ReSpec.io.
-- **Cooler:** Noctua NH-U9 TR4-SP3 ($161.29) secured from Ada (kuaka02) to ensure silent idle and 4U height clearance.
-- **GPUs:** 3x Gigabyte RTX 3090 Turbo Blowers ($3,442.35) secured from Ada (kuaka02). 2-slot blower design is the hard constraint for density.
+## Observed
+- `CLAUDE.md` was stale against current repo posture: it still listed Proxmox in the settled day-one stack.
+- `docs/CURRENT_STATE.md` was stale against `docs/SESSION_LOG.md`: the repo had already recorded a safe bench-power checkpoint, but current state still described only inspection-stage progress.
+- `docs/HANDOVER_ASSEMBLY.md` contradicted the newer serving posture by stating TP=3 would not work, while the rest of the repo treats it as a validation target, not a solved assumption.
+- `SCRATCH.md` still reflected 2026-04-07 sourcing work instead of the current session.
+- `docs/SESSION_LOG.md` still contained April entries even though the repo's own rule says the current-month file should be capped to the current month.
 
-## Current State
-- **Secured (Ordered/Arrived):** Motherboard (H12SSL-i), CPU (EPYC 7302P), PSU (1600W Titanium), SSD (Acer GM7), GPUs (3x 3090 Blowers), RAM (128GB Samsung), Cooler (Noctua SP3), Chassis (RM400), Rack (SysRacks 24x24).
-- **In Progress:** Awaiting remaining deliveries (GPUs ETA Apr 16-28).
-- **Next:** Inspect EPYC socket and BIOS/BMC status. Plan breadboard test.
+## Not Proved
+- Any newer physical hardware state beyond what the repo itself records.
+- Any current in-chassis cabling, switch state, BMC state, or successful POST.
 
-## Key Details
-- **Supermicro H12SSL-i Rev 2.0:** Arrived. Verified Rev 2.0 status.
-- **24x24 Rack:** 17.5" case depth (RM400) fits with ample rear clearance.
-- **Software Path:** `claw-code` + local Ollama/vLLM backend.
+## Cleanup Decisions
+- Clean only contradictions and stale repo state proved from files in this checkout.
+- Ignore Word lockfiles only; do not assume the untracked `.docx` note file should be deleted or ignored.
