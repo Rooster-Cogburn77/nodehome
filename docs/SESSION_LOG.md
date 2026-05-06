@@ -29,5 +29,6 @@
 - Reviewed `llama.cpp b9010` and confirmed it fixes CUDA PCI bus ID de-dupe behavior that could ignore additional GPUs or trigger OOM conditions. Conclusion: real multi-GPU watch item for this box.
 - Reviewed the 2026-05-04 and 2026-05-05 sweep cluster and concluded there was no major new stack signal: recent `llama.cpp` CUDA / multi-GPU fixes remain watch items, but no new Ollama/vLLM/serving change justified moving pins or changing the current serving order.
 - Noted that the 2026-05-05 extended run is low-confidence due to source-health degradation (`21` social feed failures, including `19` timeouts), so that digest should not be treated as strong evidence.
+- Reviewed Cloudflare's `Agents can now create Cloudflare accounts, buy domains, and deploy` post and logged it as a high-signal future architecture note: the important pattern is not Cloudflare specifically, but agent-operated infrastructure built around discovery, authorization, payment, scoped budgets, and production deployment with humans only at approval boundaries.
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
