@@ -23,6 +23,7 @@
 - Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later "manager of models" workflow layer, but not to the immediate hardware build.
 - Cloudflare's new agent provisioning flow is now logged as a real future "agent-operated infrastructure" signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
 - SubQ is now logged as a hosted long-context architecture watch item. Early access was requested on 2026-05-05; status is pending review/waitlist.
+- Railway changelog #0288 is now logged as a practical agent-guardrails signal: reversible destructive actions, safer shared machine identity, and explicit deployment controls matter more as agents become operators.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
