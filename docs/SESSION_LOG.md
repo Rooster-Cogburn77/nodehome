@@ -25,5 +25,7 @@
 - Reviewed SubQ from primary vendor materials and classified it as a hosted long-context architecture watch item: interesting enough to track, but not a current local-node stack input.
 - Logged that early access for SubQ was requested and that the current status is pending review/waitlist.
 - Reviewed Railway changelog #0288 and logged it as an agent-guardrails signal rather than a Railway-only product note: reversible destructive actions, workspace/shared machine identity, and explicit deploy controls all map directly onto safer agent-operated infrastructure design.
+- Reviewed the actual `Ollama v0.23.0` release notes and confirmed they are mostly Claude Desktop launch integration, app recommendations, Windows OpenClaw timeout fixes, and Metal hardening. Conclusion: not enough to move the pinned Linux 3x3090 target off `v0.21.2`.
+- Reviewed `llama.cpp b9010` and confirmed it fixes CUDA PCI bus ID de-dupe behavior that could ignore additional GPUs or trigger OOM conditions. Conclusion: real multi-GPU watch item for this box.
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.

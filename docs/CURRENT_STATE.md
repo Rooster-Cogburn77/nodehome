@@ -24,6 +24,8 @@
 - Cloudflare's new agent provisioning flow is now logged as a real future "agent-operated infrastructure" signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
 - SubQ is now logged as a hosted long-context architecture watch item. Early access was requested on 2026-05-05; status is pending review/waitlist.
 - Railway changelog #0288 is now logged as a practical agent-guardrails signal: reversible destructive actions, safer shared machine identity, and explicit deployment controls matter more as agents become operators.
+- `llama.cpp` `b9010` is now logged as a real multi-GPU CUDA watch item for this box: it fixes PCI bus ID de-dupe behavior that could ignore other GPUs or trigger OOM conditions.
+- `Ollama v0.23.0` has now been reviewed at a high level and does not currently justify moving the pinned `v0.21.2` day-one target for the Linux 3x3090 stack.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
