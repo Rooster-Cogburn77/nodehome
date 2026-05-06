@@ -16,3 +16,13 @@
 - Added a narrow `.gitignore` rule for Word lockfiles (`~$*.docx`) without ignoring the actual untracked `.docx` note file.
 **Commits:** Pending
 **Next:** Verify the diff, then decide whether to leave the untracked `.docx` note outside git, add a repo-specific ignore for it, or remove it manually if it is no longer needed.
+
+## 2026-05-05 (Session 8)
+**Focus:** Hyperscaler capex recall and SubQ watch-state
+**What was done:**
+- Recovered the saved hyperscaler capex summary from the local wiki: `~$600B+/year` in 2026 and `~$1.3T` over 2024-2026, with the caveat that the repo stored a rolled-up conclusion rather than a filing-by-filing table.
+- Re-checked the historical infrastructure comparison framing and corrected the old Interstate shorthand: the stored `~2x Interstate` line does not hold up cleanly and should be treated as stale until rebuilt with a single inflation-consistent table.
+- Reviewed SubQ from primary vendor materials and classified it as a hosted long-context architecture watch item: interesting enough to track, but not a current local-node stack input.
+- Logged that early access for SubQ was requested and that the current status is pending review/waitlist.
+**Commits:** Pending
+**Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.

@@ -22,6 +22,7 @@
 - `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
 - Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later "manager of models" workflow layer, but not to the immediate hardware build.
 - Cloudflare's new agent provisioning flow is now logged as a real future "agent-operated infrastructure" signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
+- SubQ is now logged as a hosted long-context architecture watch item. Early access was requested on 2026-05-05; status is pending review/waitlist.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
