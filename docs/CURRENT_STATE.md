@@ -26,6 +26,8 @@
 - Railway changelog #0288 is now logged as a practical agent-guardrails signal: reversible destructive actions, safer shared machine identity, and explicit deployment controls matter more as agents become operators.
 - `llama.cpp` `b9010` is now logged as a real multi-GPU CUDA watch item for this box: it fixes PCI bus ID de-dupe behavior that could ignore other GPUs or trigger OOM conditions.
 - `Ollama v0.23.0` has now been reviewed at a high level and does not currently justify moving the pinned `v0.21.2` day-one target for the Linux 3x3090 stack.
+- The May 4-5 sweeps did not materially change the stack posture. Recent `llama.cpp` CUDA / multi-GPU fixes remain watch items, but no new release signal justified moving pins or changing the serving order.
+- The 2026-05-05 extended sweep should be treated as lower-confidence evidence due to heavy X/OpenRSS degradation (`21` social feed failures, including `19` timeouts).
 
 ## Component Status
 | Component | Price (incl tax) | Status |
