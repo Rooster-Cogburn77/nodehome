@@ -28,5 +28,12 @@ Focus: Ubuntu 26.04 install on `BLK0`, GPU #1 + GPU #2 bring-up, Ollama smoke te
 - Source one PCIe modular cable for `SF-1600F14HT`. Acceptable sources: eBay search `"SF-1600F14HT" cable`, CableMod configurator with PSU set to Super Flower Leadex Titanium, or Super Flower USA distributor email.
 - Do not substitute EVGA Supernova / Corsair Type 4 / "compatible with multiple brands" cables — Super Flower Leadex Titanium pinout is brand-specific and cross-brand mixing has documented fry incidents.
 
+## Temporary pigtail rule for GPU #3 (in effect until the proper cable arrives)
+- A single existing dual-head cable may be used as a pigtail on GPU #3 for: BIOS / `lspci` / driver install / `nvidia-smi` / brief supervised low-load smoke tests.
+- Not for: long inference, unattended operation, stress tests, benchmarks, or any sustained multi-GPU load.
+- Touch-check connectors a few minutes into use; if hot, power down immediately.
+- Rule and rationale durably recorded in `docs/wiki/decisions/temporary-pigtail-rule.md`.
+- Sustained heavy 3-GPU workloads are deferred until the proper dedicated cable is installed on GPU #3.
+
 ## Next software step (in flight or imminent)
 - `ollama pull llama3.3:70b-instruct-q4_K_M` — ~40 GB, fits across 2x 24 GiB. Validates multi-GPU layer-split path on the existing 2-card hardware.
