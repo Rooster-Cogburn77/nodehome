@@ -20,7 +20,7 @@
 │  │  [32GB][32GB][32GB][32GB][ ][ ][ ][ ] ← 128GB ECC   │
 │  └──────────────────────────────────┘                   │
 │                                                         │
-│  [Acer GM7 2TB NVMe]  [Arctic Freezer 4U-M]            │
+│  [Acer GM7 2TB NVMe]  [Noctua NH-U9 TR4-SP3]           │
 │                                                         │
 │  [Super Flower Leadex Titanium 1600W PSU]               │
 └─────────────────────────────────────────────────────────┘

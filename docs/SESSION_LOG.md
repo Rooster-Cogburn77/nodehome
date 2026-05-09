@@ -33,6 +33,20 @@
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
 
+## 2026-05-09 (Session 10)
+**Focus:** Bring-up jumped from safe bench-power to POST + BIOS + IPMI + NVMe enumeration
+**What was done:**
+- Verified the prior repo-truth claim ("POST not proved") against fresh photo evidence and concluded it is now stale. The `Supermicro H12SSL-i` reaches the Aptio BIOS setup utility on BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`, with Memory Information populated and the standard tab set rendering.
+- Confirmed BMC and IPMI directly: IPMI tab shows `BMC Firmware Revision 01.05.02` and `IPMI STATUS: Working`, with `System Event Log` and `BMC Network Configuration` available.
+- Confirmed boot mode is `UEFI` with `LEGACY to EFI Support: Disabled` and a fixed UEFI boot order including `UEFI Hard Disk`, USB classes, the dual `Broadcom NetXtreme BCM5720` NICs (MACs `90:5A:08:7B:73:54` and `:73:55`), and the built-in EFI shell.
+- Confirmed NVMe enumeration at firmware level: EFI shell `map -r` shows exactly one block device, `BLK0` at `PciRoot(0x0)/Pci(0x3,0x3)/Pci(0x0,0x0)/NVMe(0x1,...)`, with no `FS0:` filesystem alias. SATA0-15 across both onboard controllers (`B:48` and `B:49`) report `Not Present`, which matches the diskless-SATA build.
+- Validated the replacement RDIMM purchase: with all four `Samsung M393A4K40CB1-CRC4Q` sticks installed, BIOS Main now reports `Total Memory: 128 GB`. The earlier `32 GB` BIOS readout from a 1-DIMM minimum-config session is no longer current and should not be cited as live state.
+- Confirmed PCIe posture for later GPU validation: all 7 CPU PCIe 4.0 slots are set to OPROM `[EFI]` with bifurcation `[Auto]`, `Above 4G Decoding` is `[Enabled]`. Logged `Re-Size BAR Support: [Disabled]` as a known future BIOS tuning item to revisit as a deliberate A/B test after baseline Ubuntu boot, not before.
+- Realigned `docs/architecture/overview.md` so the physical-layer ASCII diagram shows `Noctua NH-U9 TR4-SP3` instead of the obsolete `Arctic Freezer 4U-M`. Other architecture docs already reflected Noctua.
+- Updated `docs/CURRENT_STATE.md` to record POST proved, IPMI working, NVMe enumerated, 128GB trained, and the new milestone of installing Ubuntu Server 24.04 onto `BLK0`.
+**Commits:** Pending
+**Next:** Boot a UEFI Ubuntu Server 24.04 installer USB, install onto `BLK0`, verify reboot from NVMe, then move into controlled OS bring-up before single-GPU validation.
+
 ## 2026-05-09 (Session 9)
 **Focus:** May 8-9 sweep triage and corrected bring-up RAM path
 **What was done:**
