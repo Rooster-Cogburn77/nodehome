@@ -76,6 +76,12 @@ Current 2026-04-29 pressure note:
 - The review result is still conservative: keep the pin at `0.21.2` because the visible `0.22.x` changes are dominated by new-model additions and MLX / launch work, not Linux RTX 3090 fixes that justify churn before bring-up.
 - Unlike the previous review cycle, the bootstrap is now explicitly pinned, so the repo and the actual install path stay aligned.
 
+Current 2026-05-09 sweep note:
+
+- `Ollama v0.23.2` and `vLLM v0.20.2` are now explicit release-review items, but neither currently justifies moving the pinned `Ollama v0.21.2` / `vLLM v0.19.1` targets before baseline hardware bring-up succeeds.
+- The May 8-9 sweeps reinforce the same rule as earlier runs: infra/release items are useful, but the workflow/social lane is still noisy enough that it should not drive stack decisions by itself.
+- Recent `llama.cpp` release churn and backend commits remain benchmark/watch inputs only. They do not change the `Ollama -> vLLM -> direct llama.cpp benchmark` order.
+
 Current 2026-04-16 watch note:
 
 - `llama.cpp` landed CUDA changes around explicit P2P opt-in and NCCL communicator management. That is directly relevant to future multi-GPU benchmarking, but it still argues for caution rather than redesign.

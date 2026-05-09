@@ -1,6 +1,6 @@
 # Current State
 
-**Last Updated:** 2026-05-01
+**Last Updated:** 2026-05-09
 
 ## Active Work
 - Hardware bring-up has progressed past inspection into a safe bench-power checkpoint: PSU/cable inventory was completed, the motherboard/CPU/RAM/cooler were powered on safely, and no immediate electrical fault was observed.
@@ -29,6 +29,10 @@
 - `Ollama v0.23.0` has now been reviewed at a high level and does not currently justify moving the pinned `v0.21.2` day-one target for the Linux 3x3090 stack.
 - The May 4-5 sweeps did not materially change the stack posture. Recent `llama.cpp` CUDA / multi-GPU fixes remain watch items, but no new release signal justified moving pins or changing the serving order.
 - The 2026-05-05 extended sweep should be treated as lower-confidence evidence due to heavy X/OpenRSS degradation (`21` social feed failures, including `19` timeouts).
+- `Ollama v0.23.2` has now also been reviewed at a high level and still does not justify moving the pinned `v0.21.2` day-one target for the Linux 3x3090 stack.
+- `vLLM v0.20.2` is now on the release-review queue, but the current evidence does not justify moving the pinned `v0.19.1` helper image before baseline hardware bring-up succeeds.
+- The May 8-9 sweeps did not materially change the stack posture. Recent `llama.cpp` release churn and backend-path commits remain watch items, but no new release signal justified changing the serving order.
+- The workflow/social lane is currently not operator-trustworthy enough to drive decisions on its own: irrelevant Simon/Bluesky chatter is still leaking into top signals and synthesis, so infra and release items are the only reliable parts of these digests for now.
 
 ## Component Status
 | Component | Price (incl tax) | Status |
@@ -36,7 +40,8 @@
 | 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142 |
 | EPYC 7302P + H12SSL-i v2.0 | $985 | Arrived 2026-04-07 |
 | PSU 1600W Titanium | $241 | Purchased |
-| RAM 128GB DDR4-2133 ECC | $455 | Purchased, order #03-14469-02999 |
+| RAM 128GB DDR4-2133 ECC | $455 | Purchased, but arrived as 32GB 4DRx4 LRDIMM (`M386A4G40DM0-CPB2Q`) rather than the clean 2Rx4 RDIMM bring-up path |
+| RAM 128GB DDR4-2400 ECC RDIMM | $428.67 | Purchased replacement set, order #26-14569-05057 (`4x Samsung M393A4K40CB1-CRC4Q`) |
 | SSD Acer GM7 2TB | $291 | Purchased |
 | SilverStone RM400 chassis | ~$260 | Purchased |
 | Noctua NH-U9 TR4-SP3 cooler | $161 | Purchased from kuaka02 (Ada) |
@@ -44,13 +49,14 @@
 | SysRacks 24x24 server rack | $75 | Purchased |
 
 ## Budget
-- **Spent (incl tax):** ~$5,910
-- **Over original $5,600 budget by:** ~$310 (cooler upgrade from Arctic $70 -> Noctua $161, plus rack)
-- **All components purchased.** No remaining spend.
+- **Spent (incl tax):** ~$6,339
+- **Over original $5,600 budget by:** ~$739 (cooler upgrade from Arctic $70 -> Noctua $161, rack, plus replacement RDIMM purchase)
+- **All components purchased.** The only open spend question is whether the incompatible LRDIMM set is later returned or resold.
 
 ## Blocking Issues
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
+- The original 128GB RAM set is no longer acceptable as proof RAM for bring-up. Clean `2Rx4 ECC RDIMM` replacement memory is now the next test path.
 - Host POST is still not proved. The repo-safe next step remains: positively identify the documented host power-control path and verify BMC/LAN behavior before improvising anything at the front-panel header.
 - Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 

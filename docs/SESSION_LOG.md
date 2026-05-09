@@ -32,3 +32,16 @@
 - Reviewed Cloudflare's `Agents can now create Cloudflare accounts, buy domains, and deploy` post and logged it as a high-signal future architecture note: the important pattern is not Cloudflare specifically, but agent-operated infrastructure built around discovery, authorization, payment, scoped budgets, and production deployment with humans only at approval boundaries.
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
+
+## 2026-05-09 (Session 9)
+**Focus:** May 8-9 sweep triage and corrected bring-up RAM path
+**What was done:**
+- Reviewed the 2026-05-08 core/extended and 2026-05-09 core sweeps for operator-relevant signal instead of treating the generated synthesis as trustworthy by default.
+- Logged the only immediate stack-relevant release pressure from that cluster: `Ollama v0.23.2` and `vLLM v0.20.2` are now known review items, but current evidence still does not justify moving the pinned `Ollama v0.21.2` and `vLLM v0.19.1` targets before baseline hardware bring-up succeeds.
+- Kept the `llama.cpp` build churn (`b9070-b9089`) and recent backend commits in the benchmark/watch lane only; no May 8-9 release signal changed the `Ollama -> vLLM -> direct llama.cpp benchmark` serving order.
+- Logged that the workflow/social lane is currently not operator-trustworthy enough to drive decisions on its own: irrelevant Simon/Bluesky chatter is still leaking into top signals and synthesis, so the infra/release lane is the only reliable part of these digests for now.
+- Corrected the memory diagnosis by checking the physical DIMM labels instead of relying on stale IPMI inventory: the original 128GB set is `32GB 4DRx4 LRDIMM` (`Samsung M386A4G40DM0-CPB2Q`), not the clean `2Rx4 RDIMM` path required for an unambiguous bring-up test.
+- Purchased a replacement 128GB RDIMM set for proof testing: `4x Samsung M393A4K40CB1-CRC4Q`, eBay order `#26-14569-05057`, total paid `$428.67`, expected delivery `2026-05-07` to `2026-05-11`.
+- Updated `docs/CURRENT_STATE.md` so the repo snapshot now reflects the May 8-9 sweep posture and the corrected bring-up RAM status.
+**Commits:** Pending
+**Next:** When the replacement RDIMMs arrive, retest in minimum config with `1` new stick in `DIMMA1` before adding GPUs or touching the pre-seated CPU.
