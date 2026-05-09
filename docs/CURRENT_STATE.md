@@ -3,12 +3,14 @@
 **Last Updated:** 2026-05-09
 
 ## Active Work
-- Hardware bring-up has now passed POST. The board reaches the Aptio BIOS setup utility on a `Supermicro H12SSL-i` running BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`, boot mode is `UEFI` with LEGACY disabled, and `IPMI STATUS: Working` at BMC firmware revision `01.05.02` is shown on the IPMI tab.
-- All four replacement RDIMMs (`Samsung M393A4K40CB1-CRC4Q`) have trained: BIOS Main now reports `Total Memory: 128 GB`. The earlier `32 GB` BIOS readout was from a 1-DIMM minimum-config session and is no longer current.
-- Storage is enumerated at the firmware level but no OS is installed yet: the EFI shell `map -r` lists exactly one block device, `BLK0` at `PciRoot(0x0)/Pci(0x3,0x3)/Pci(0x0,0x0)/NVMe(0x1,...)`, with no `FS0:` filesystem alias. SATA0-15 across both onboard controllers are reported `Not Present`, which matches the diskless-SATA build.
-- Repo-truth hardware limit: photo evidence has now been verified for POST, BMC, IPMI, NVMe enumeration, and the 4-DIMM training claim. What is **not** yet proved from durable evidence is a working OS install, a working bootloader on `BLK0`, or any GPU-populated state — those remain ahead of the build, not behind it.
-- The next physical milestone is: boot a UEFI Ubuntu Server 26.04 installer USB, install onto `BLK0`, verify reboot from NVMe, then move into controlled OS bring-up before single-GPU validation. OS version was deliberately moved from 24.04 to 26.04 on 2026-05-09 for a longer support window; see `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
-- Known BIOS tuning item to revisit after first Ubuntu boot: `Re-Size BAR Support` is currently `[Disabled]` while `Above 4G Decoding` is `[Enabled]`. ReBAR is the natural pairing for 3x RTX 3090 inference and should be A/B tested as a deliberate change after baseline boot, not flipped blind.
+- Hardware bring-up is now well past POST. `Supermicro H12SSL-i` BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`, BMC firmware `01.05.02`, IPMI Working, all four `Samsung M393A4K40CB1-CRC4Q` RDIMMs trained at `Total Memory: 128 GB`.
+- **Ubuntu Server 26.04 LTS is installed on `BLK0` (the Acer Predator GM7 2TB NVMe) and boots cleanly from NVMe.** Kernel is `Linux 7.0.0-15-generic`, hostname `homelab`, OS partitions are `/boot/efi` (1 GiB FAT32) + `/` (1.86 TiB ext4). System is fully patched.
+- **Network is operational on `eno2`** (Broadcom BCM5720, MAC `90:5a:08:7b:73:55`, DHCP `192.168.1.198/24`, dual-stack with IPv6). SSH reachable from the user's workstation; the IPMI KVM is no longer needed for day-to-day work. `eno1` is intentionally unused (no cable). The BMC USB virtual NIC `enxbe3af2b6059f` at `169.254.3.1/24` is harmless.
+- **GPU #1 (`81:00.0` in `CPU SLOT1`) and GPU #2 (`C1:00.0` in `CPU SLOT3`) are installed and fully validated.** Both `NVIDIA GeForce RTX 3090` (GA102), driver `nvidia-driver-595-server-open` at runtime version `595.58.03`, CUDA runtime `13.2`. Both slots negotiated PCIe `gen.max = 4`, `width.max = 16`, and **GPU 0's link was confirmed to actually run at Gen 4 x16 under inference load** (idle Gen 1 → Gen 4 ramp captured via `nvidia-smi` mid-flight). Power delivery held cleanly at `348 W` (essentially the 350 W TDP cap) for an 89% utilization sustained inference run, validating the 2-cable / one-head-per-dual-head-cable power configuration.
+- **Day-one inference path is working end-to-end on the 2-GPU configuration.** Ollama is installed and the systemd service is active. `qwen3:8b` (~5 GB weights, ~10.9 GiB resident on GPU 0 because the default `num_ctx=262144` allocates a large KV cache) ran a real CoT prompt and returned clean output. Multi-GPU detection is confirmed at the framework level — Ollama sees both 3090s as `compute=8.6` CUDA devices and pools 48 GB VRAM.
+- **GPU #3 is the only remaining hardware item.** The card is on hand but install is blocked on a single missing PCIe modular cable for the `Super Flower SF-1600F14HT` (Leadex Titanium 1600W) PSU. Sourcing options: eBay `"SF-1600F14HT" cable`, CableMod configurator with PSU set to Super Flower Leadex, or Super Flower USA distributor email. Do **not** substitute EVGA Supernova / Corsair / Seasonic cables — Super Flower Leadex Titanium pinout is brand-specific and cross-brand mixing has well-documented fry incidents.
+- Ollama install actually placed `v0.23.2` on disk (the install script always pulls latest stable); this is the previously-reviewed-clean release that earlier sweeps decided did not justify churning the pin pre-bring-up. The pin is therefore moved from `v0.21.2` to `v0.23.2` on 2026-05-09 to match what is actually running, rather than pretending the install matches a stale pin.
+- Known BIOS tuning item still open: `Re-Size BAR Support` remains `[Disabled]` while `Above 4G Decoding` is `[Enabled]`. ReBAR is the natural pairing for 3x RTX 3090 inference and should be A/B tested as a deliberate change after the third GPU is online and a stable baseline benchmark exists, not flipped blind.
 - Hardware safety rule for this project remains explicit: no intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up. Only labeled connectors, documented headers, or approved vendor tools/adapters are allowed.
 - This is the first full server build in this configuration. It is expected that some parts may not fit perfectly on the first attempt and that an extra cable, bracket, adapter, or replacement part may still be needed to finish cleanly.
 - Sweep system is operational and now produces daily digests, weekly rollups, follow-up queue items, and assumption-pressure checks.
@@ -16,9 +18,9 @@
 - The operator brief now has basic scaling guards: recommendation line, source/entity caps, and suppression of already-triaged rows.
 - The sweep scheduler was repaired on 2026-04-27 after laptop-style task settings caused missed runs and `0x800710E0` refusals; tasks now have a real working directory and `StartWhenAvailable=true`.
 - X/OpenRSS source health was also recovered on 2026-04-27 by auto-enabling OpenRSS fallback when no `X_BEARER_TOKEN` exists and clearing stale X-only quarantine state.
-- Release-note review remains resolved in favor of `Ollama v0.21.2` for day-one install, and the bootstrap now pins that version explicitly instead of following latest stable.
+- Release-note review now lands on `Ollama v0.23.2` as the day-one install target, matching what the official `install.sh` actually places on disk. Earlier sweeps reviewed this release as clean; the pin update simply removes the gap between the intended and actual install state.
 - `vLLM` is now deliberately pinned to `v0.19.1` instead of `v0.19.0`.
-- `Ollama 0.22.0` / `0.22.1-rc0` now pressure the target again, but current evidence says they are mostly new-model / MLX / launch changes rather than Linux RTX 3090 must-haves, so the pin stays at `0.21.2` for now.
+- The earlier intermediate releases (`Ollama 0.22.0`, `0.22.1-rc0`, `0.23.0`) were reviewed as not strictly necessary, but the eventual move to `0.23.2` on install day made the pin discussion moot.
 - Current serving posture remains: Ollama first, vLLM second, direct `llama.cpp` benchmark/watch only.
 - `Qwen3.6-35B-A3B` is now logged as a future vLLM benchmark candidate, not a day-one model target.
 - `Qwen3.6-Max-Preview` is now logged as a hosted proprietary coding model to watch for future routing/escalation, not a local-node target.
@@ -41,7 +43,7 @@
 ## Component Status
 | Component | Price (incl tax) | Status |
 |-----------|-----------------|--------|
-| 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142 |
+| 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142. **2 of 3 installed and validated** (`81:00.0` in CPU SLOT1, `C1:00.0` in CPU SLOT3, both at PCIe Gen 4 x16, full TDP power delivery confirmed under inference load). GPU #3 install blocked on one missing PCIe modular cable for the SF-1600F14HT PSU. |
 | EPYC 7302P + H12SSL-i v2.0 | $985 | Arrived 2026-04-07 |
 | PSU 1600W Titanium | $241 | Purchased |
 | RAM 128GB DDR4-2133 ECC | $455 | Purchased, but arrived as 32GB 4DRx4 LRDIMM (`M386A4G40DM0-CPB2Q`) rather than the clean 2Rx4 RDIMM bring-up path. Open question whether the LRDIMM set is later returned or resold. |
@@ -58,9 +60,9 @@
 - **All components purchased and primary stack hardware now validated through POST.** The only open spend question is whether the incompatible LRDIMM set is later returned or resold.
 
 ## Blocking Issues
-- No purchasing blockers.
-- No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
-- Host POST is now proved. The next blocker is OS install: boot a UEFI Ubuntu Server 26.04 installer USB, install onto `BLK0`, then verify reboot from NVMe before any GPU population.
+- No purchasing blockers other than the one missing PCIe modular cable (Super Flower SF-1600F14HT-compatible) needed to power GPU #3.
+- No software version blocker. Day-one targets are now pinned Ollama `v0.23.2` (matching what is actually installed) and `vLLM v0.19.1` (vLLM not yet installed; will be staged after the third GPU is online).
+- Host POST and OS install are both proved. The remaining hardware blocker is **GPU #3 power cabling**, not slot or driver capacity. Once the cable arrives, the third card slots into a free CPU PCIe 4.0 x16 (likely SLOT5 to mirror the 1/3/5 spacing pattern), and the same single-GPU validation flow that worked for #1 and #2 applies.
 - Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 
 ## Known Failures

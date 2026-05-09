@@ -1,32 +1,31 @@
-# Session Scratch - 2026-05-09 (Session 11)
-Focus: OS-version decision before first installer USB is flashed.
+# Session Scratch - 2026-05-09 (Session 12)
+Focus: Ubuntu 26.04 install on `BLK0`, GPU #1 + GPU #2 bring-up, Ollama smoke test through real inference.
 
-## Observed
-- Ubuntu download page now lists `26.04 LTS (Resolute Raccoon)` as the latest LTS; `24.04.4 LTS` is shown as a previous-but-supported option.
-- Repo target was still `Ubuntu 24.04 LTS` across `CLAUDE.md`, `docs/architecture/software-stack.md`, `docs/HANDOVER_ASSEMBLY.md`, `docs/CURRENT_STATE.md`, and the build-guide wiki.
-- User goal restated explicitly: "install once, run long-term without frequent OS upgrades."
+## Observed (validated this session)
+- `Ubuntu Server 26.04 LTS` installed onto `BLK0` (Acer Predator GM7 2TB), kernel `Linux 7.0.0-15-generic`, hostname `homelab`, NVMe boot proven.
+- Network: `eno2` UP at `192.168.1.198/24` via DHCP; SSH from workstation works; the IPMI KVM is no longer the only console.
+- Drivers: `nvidia-driver-595-server-open` (LTSB + open kernel modules) at runtime `595.58.03`, CUDA `13.2`.
+- GPU #1 (`81:00.0` in `CPU SLOT1`) and GPU #2 (`C1:00.0` in `CPU SLOT3`) both at `pcie.link.gen.max = 4`, `width.max = 16`. PCIe Gen 4 also confirmed under load (`gen.current` ramped `1 → 4` mid-flight).
+- Power delivery: 2-cable / one-head-per-dual-head-cable config held at `348 W` (essentially 350 W TDP cap) for an 89% GPU utilization sustained inference run, no instability.
+- Ollama: `v0.23.2` installed via official `install.sh`. systemd service active. Both GPUs detected by Ollama as `compute=8.6` CUDA devices, pooled `total_vram = 48 GiB`, default `num_ctx = 262144`.
+- Inference end-to-end: `qwen3:8b` ran a CoT prompt and produced clean output. Larger 2000-word essay run produced the in-flight `nvidia-smi` validation snapshot.
+- BMC USB virtual NIC `enxbe3af2b6059f` at `169.254.3.1/24` is harmless background — visible to the OS as an `Insyde Software / RNDIS_Ethernet_Gadget` interface, link-local only, no internet.
 
-## Decision
-- Move the day-one OS target from `Ubuntu Server 24.04 LTS` to `Ubuntu Server 26.04 LTS`. Decision doc at `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
-- Reasoning summary: 26.04 adds roughly two extra years on both standard support and Pro/ESM windows compared to 24.04, avoids a future `do-release-upgrade` cycle, and the "release-day driver risk" framing does not apply to GA102 / RTX 3090 (2020-era silicon, mature in current driver branches).
-- Day-one stack pins (`Ollama v0.21.2`, `vLLM v0.19.1`) are not OS-version-coupled and will be verified, not reselected, after the new install.
-
-## Documentation deltas applied this session
-- `CLAUDE.md` tech stack line now says `Ubuntu 26.04 LTS bare metal first`.
-- `docs/architecture/software-stack.md` OS section now points at 26.04 (Resolute Raccoon) and references the new decision doc.
-- `docs/HANDOVER_ASSEMBLY.md` checklist item updated to install 26.04.
-- `docs/CURRENT_STATE.md` next-milestone language updated to 26.04 with a pointer to the decision doc.
-- `docs/wiki/research/sovereign-node-build-guide.md` section 4.1 rewritten for 26.04, with 24.04 retained as a documented fallback.
-- New decision file `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
-- New `docs/SESSION_LOG.md` Session 11 entry recording the decision.
+## Decisions made this session
+- Storage layout: guided "Use entire disk" on `/dev/nvme0n1` with **LVM disabled** and **encryption off**. Reason: simpler partitioning for a headless inference server; LUKS would require a passphrase on every reboot and break unattended monthly patch cycles.
+- Power cabling: use 2 separate dual-head PCIe cables per GPU, plugged into 2 separate PSU sockets, only one head of each connected to the GPU. Electrically equivalent to two single-head cables. Validated under full TDP load.
+- Ollama pin: moved from `v0.21.2` to `v0.23.2` to match what the official install actually places. Already reviewed clean in prior sweeps; closes the gap between aspirational pin and real install.
 
 ## Not Proved (still ahead of the build)
-- Working bootloader on `BLK0`.
-- Installed OS reachable from the BMC console after reboot.
-- Any GPU-populated state (still at minimum CPU + RAM + NVMe).
-- Any benchmark, CUDA, or model-load behavior.
+- GPU #3 install — blocked on one missing PCIe modular cable for `Super Flower SF-1600F14HT`.
+- Multi-GPU layer-split inference on a model that actually requires both cards (e.g., `llama3.3:70b-instruct-q4_K_M`, ~40 GB).
+- vLLM install and `TENSOR_PARALLEL_SIZE=2` (or `=3` once GPU #3 is in).
+- Sustained thermal validation under multi-hour load.
+- ReBAR enable + A/B benchmark vs current `[Disabled]` baseline.
 
 ## Next physical step
-- On Windows: download `Ubuntu Server 26.04 LTS` ISO, verify SHA256, flash with Rufus using GPT / UEFI (non-CSM) / ISO Image mode.
-- On the server: boot the USB via the F11 boot menu, pick the entry starting with `UEFI:`.
-- Pause at the GRUB menu (`Try or Install Ubuntu Server`) and confirm before running the installer prompts.
+- Source one PCIe modular cable for `SF-1600F14HT`. Acceptable sources: eBay search `"SF-1600F14HT" cable`, CableMod configurator with PSU set to Super Flower Leadex Titanium, or Super Flower USA distributor email.
+- Do not substitute EVGA Supernova / Corsair Type 4 / "compatible with multiple brands" cables — Super Flower Leadex Titanium pinout is brand-specific and cross-brand mixing has documented fry incidents.
+
+## Next software step (in flight or imminent)
+- `ollama pull llama3.3:70b-instruct-q4_K_M` — ~40 GB, fits across 2x 24 GiB. Validates multi-GPU layer-split path on the existing 2-card hardware.

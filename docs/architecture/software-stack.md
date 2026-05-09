@@ -65,11 +65,17 @@ Current W15 stack signals:
 - Ollama remains the target first-run serving layer; Gemma4 needs an FA compatibility gate before being treated as stable on the node.
 - Cheap 10GbE switching is bookmarked for future multi-node expansion, not a day-one purchase.
 
-Current 2026-04-27 version decision:
+Current 2026-04-27 version decision (superseded 2026-05-09 — see below):
 
-- Ollama `v0.21.2` remains the accepted day-one target line.
+- Ollama `v0.21.2` was the accepted day-one target line.
 - `v0.21.3-rc*` remains watch-only. Release candidates do not belong in the day-one local serving plan.
-- Gemma4 on Ampere still needs the explicit flash-attention gate check after install; accepting `0.21.2` does not remove that validation step.
+- Gemma4 on Ampere still needs the explicit flash-attention gate check after install; accepting any specific version does not remove that validation step.
+
+Current 2026-05-09 install-day decision:
+
+- Day-one install actually placed `Ollama v0.23.2` (what `install.sh` pulls as latest stable). Earlier sweeps had already reviewed `0.23.2` as clean — mostly Claude Desktop launch features and Metal hardening, no Linux RTX 3090 regressions.
+- The pin therefore moves from `v0.21.2` to `v0.23.2` to match the actual install state, rather than maintaining a stale aspirational pin.
+- Inference smoke-tested end-to-end on `qwen3:8b` across the 2-GPU configuration (third GPU still pending power cable). PCIe Gen 4 x16 confirmed under load with `power.draw = 348 W`, `utilization.gpu = 89%`, `memory.used = 10.9 GiB` on GPU 0.
 
 Current 2026-04-29 pressure note:
 

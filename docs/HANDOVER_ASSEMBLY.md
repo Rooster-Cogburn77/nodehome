@@ -73,13 +73,13 @@ This was the original lowest-risk validation sequence. Parts of it were later re
 - [ ] Disable Secure Boot (NVIDIA drivers won't load with it on)
 
 ### Single GPU Validation
-- [ ] Confirm GPU detected in BIOS
-- [ ] Install Ubuntu 26.04 LTS via IPMI KVM (USB boot)
-- [ ] Install NVIDIA drivers: `sudo apt install ubuntu-drivers-common && sudo ubuntu-drivers install`
-- [ ] Reboot, verify: `nvidia-smi` shows 1x RTX 3090
-- [ ] Check PCIe link: `nvidia-smi --query-gpu=pcie.link.gen.current,pcie.link.width.current --format=csv` → should show `4, 16`
+- [x] Confirm GPU detected in BIOS — done 2026-05-09, `81:00.0` and later `C1:00.0` enumerated cleanly
+- [x] Install Ubuntu 26.04 LTS via IPMI KVM (USB boot) — done 2026-05-09, installed onto `BLK0` (Acer Predator GM7), kernel `Linux 7.0.0-15-generic`
+- [x] Install NVIDIA drivers — done 2026-05-09, `nvidia-driver-595-server-open` runtime `595.58.03`, CUDA `13.2`
+- [x] Reboot, verify: `nvidia-smi` shows GPUs — done 2026-05-09, 2 of 3 GPUs validated; `nvidia-smi` reports both 3090s
+- [x] Check PCIe link: `nvidia-smi --query-gpu=pcie.link.gen.max,pcie.link.width.max --format=csv` returns `4, 16` for both GPUs. **Gen 4 also confirmed in practice** (idle Gen 1 → Gen 4 ramp captured under inference load)
 
-Repo note: `docs/archives/SESSION_LOG_2026-04.md` records a later safe bench-power checkpoint, but not a proved POST or BIOS entry. Do not mark this phase complete from repo evidence alone.
+Repo note: GPU #3 install is blocked on one missing PCIe modular cable for the `Super Flower SF-1600F14HT` PSU. The same single-GPU validation flow above will be used once the cable arrives.
 
 ---
 
