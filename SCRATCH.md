@@ -22,6 +22,7 @@ Focus: Ubuntu 26.04 install on `BLK0`, GPU #1 + GPU #2 bring-up, Ollama smoke te
 - vLLM install and `TENSOR_PARALLEL_SIZE=2` (or `=3` once GPU #3 is in).
 - Sustained thermal validation under multi-hour load.
 - ReBAR enable + A/B benchmark vs current `[Disabled]` baseline.
+- **Final physical deployment.** RM400 chassis is currently desk-mounted, not in the SysRacks 24x24 rack. Cable routing inside the chassis is functional but not yet tidied for a permanent install. Dedicated IPMI ethernet port is not patched into rack-side networking. Permanent location (living room) move has not happened. This phase is deliberately deferred until GPU #3 is in, so the rack-mount happens once with the final component set.
 
 ## Next physical step
 - Source one PCIe modular cable for `SF-1600F14HT`. Acceptable sources: eBay search `"SF-1600F14HT" cable`, CableMod configurator with PSU set to Super Flower Leadex Titanium, or Super Flower USA distributor email.
