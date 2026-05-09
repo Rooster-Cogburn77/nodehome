@@ -7,7 +7,7 @@
 - All four replacement RDIMMs (`Samsung M393A4K40CB1-CRC4Q`) have trained: BIOS Main now reports `Total Memory: 128 GB`. The earlier `32 GB` BIOS readout was from a 1-DIMM minimum-config session and is no longer current.
 - Storage is enumerated at the firmware level but no OS is installed yet: the EFI shell `map -r` lists exactly one block device, `BLK0` at `PciRoot(0x0)/Pci(0x3,0x3)/Pci(0x0,0x0)/NVMe(0x1,...)`, with no `FS0:` filesystem alias. SATA0-15 across both onboard controllers are reported `Not Present`, which matches the diskless-SATA build.
 - Repo-truth hardware limit: photo evidence has now been verified for POST, BMC, IPMI, NVMe enumeration, and the 4-DIMM training claim. What is **not** yet proved from durable evidence is a working OS install, a working bootloader on `BLK0`, or any GPU-populated state — those remain ahead of the build, not behind it.
-- The next physical milestone is: boot a UEFI Ubuntu Server 24.04 installer USB, install onto `BLK0`, verify reboot from NVMe, then move into controlled OS bring-up before single-GPU validation.
+- The next physical milestone is: boot a UEFI Ubuntu Server 26.04 installer USB, install onto `BLK0`, verify reboot from NVMe, then move into controlled OS bring-up before single-GPU validation. OS version was deliberately moved from 24.04 to 26.04 on 2026-05-09 for a longer support window; see `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
 - Known BIOS tuning item to revisit after first Ubuntu boot: `Re-Size BAR Support` is currently `[Disabled]` while `Above 4G Decoding` is `[Enabled]`. ReBAR is the natural pairing for 3x RTX 3090 inference and should be A/B tested as a deliberate change after baseline boot, not flipped blind.
 - Hardware safety rule for this project remains explicit: no intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up. Only labeled connectors, documented headers, or approved vendor tools/adapters are allowed.
 - This is the first full server build in this configuration. It is expected that some parts may not fit perfectly on the first attempt and that an extra cable, bracket, adapter, or replacement part may still be needed to finish cleanly.
@@ -60,7 +60,7 @@
 ## Blocking Issues
 - No purchasing blockers.
 - No software version blocker. Current day-one targets are pinned Ollama `v0.21.2` and `vLLM v0.19.1`.
-- Host POST is now proved. The next blocker is OS install: boot a UEFI Ubuntu Server 24.04 installer USB, install onto `BLK0`, then verify reboot from NVMe before any GPU population.
+- Host POST is now proved. The next blocker is OS install: boot a UEFI Ubuntu Server 26.04 installer USB, install onto `BLK0`, then verify reboot from NVMe before any GPU population.
 - Reminder: fitment surprises or a late extra order would be normal for a first-time dense rack/GPU build and should be treated as part of the learning process, not as a project failure.
 
 ## Known Failures

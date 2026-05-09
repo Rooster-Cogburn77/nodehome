@@ -74,7 +74,7 @@ This was the original lowest-risk validation sequence. Parts of it were later re
 
 ### Single GPU Validation
 - [ ] Confirm GPU detected in BIOS
-- [ ] Install Ubuntu 24.04 LTS via IPMI KVM (USB boot)
+- [ ] Install Ubuntu 26.04 LTS via IPMI KVM (USB boot)
 - [ ] Install NVIDIA drivers: `sudo apt install ubuntu-drivers-common && sudo ubuntu-drivers install`
 - [ ] Reboot, verify: `nvidia-smi` shows 1x RTX 3090
 - [ ] Check PCIe link: `nvidia-smi --query-gpu=pcie.link.gen.current,pcie.link.width.current --format=csv` → should show `4, 16`

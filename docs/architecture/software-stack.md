@@ -3,9 +3,10 @@
 **Status:** Not yet implemented. Hardware build in progress.
 
 ## OS
-- **Ubuntu Server 24.04 LTS**
+- **Ubuntu Server 26.04 LTS** (Resolute Raccoon)
 - Headless operation, SSH access
 - NVIDIA driver + CUDA toolkit
+- Decision rationale: see `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`
 
 ## Model Serving
 | Tool | Purpose | Notes |

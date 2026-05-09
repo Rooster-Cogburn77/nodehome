@@ -245,13 +245,14 @@ The EPYC 7302 uses **Socket SP3**. This is a direct, supported socket.
 
 ### 4.1 Recommended Ubuntu Version
 
-**Ubuntu 24.04 LTS (Noble Numbat)** is the recommended choice as of 2026:
-- Long-term support until 2029 (extended to 2034 with Ubuntu Pro)
-- Excellent NVIDIA driver support via apt
-- Kernel 6.8+ with good EPYC/PCIe 4.0 support
+**Ubuntu 26.04 LTS (Resolute Raccoon)** is the current target as of 2026-05-09:
+- Long-term support until 2031 (extended to 2036 with Ubuntu Pro)
+- Linux 7.0 kernel with strong EPYC/PCIe 4.0 support
+- NVIDIA proprietary driver branches covering RTX 3090 (Ampere, GA102) are mature on this kernel — Ampere is 2020-era silicon, not a release-day-driver risk
 - CUDA toolkit packages available in NVIDIA's official repository
+- Decision rationale: `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`
 
-Ubuntu 22.04 LTS also works but has older kernel and may require HWE kernel for optimal EPYC support.
+Ubuntu 24.04 LTS (Noble Numbat) was the prior target and is still a fine fallback choice if a release-day blocker appears with 26.04. 22.04 LTS works but is being phased out of new builds.
 
 ### 4.2 NVIDIA Driver Installation (apt method -- RECOMMENDED)
 

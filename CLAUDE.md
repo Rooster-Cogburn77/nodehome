@@ -14,7 +14,7 @@ Establish a private, independent AI research lab (The Sovereign Node) centered o
 - **PSU:** Super Flower Leadex Titanium 1600W [Purchased: $223.00]
 - **Cooler:** Noctua NH-U9 TR4-SP3 [Purchased: $161.29]
 - **Storage:** Acer Predator GM7 2TB TLC [Purchased: $269.00]
-- **Software:** Ubuntu 24.04 LTS bare metal first, Docker, Ollama, vLLM, `claw-code`
+- **Software:** Ubuntu 26.04 LTS bare metal first, Docker, Ollama, vLLM, `claw-code`
 - **Virtualization:** Proxmox is not part of the day-one bootstrap; treat it as a later separate host decision
 
 ## Repository Structure

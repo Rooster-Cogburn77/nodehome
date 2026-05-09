@@ -1,29 +1,32 @@
-# Session Scratch - 2026-05-09 (Session 10)
-Focus: Bring-up jumped from safe bench-power to POST + BIOS + IPMI + NVMe enumeration; close the gap between repo docs and live hardware.
+# Session Scratch - 2026-05-09 (Session 11)
+Focus: OS-version decision before first installer USB is flashed.
 
-## Observed (verified from photo evidence cross-checked against repo)
-- POST proved on `Supermicro H12SSL-i`, BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`.
-- BMC firmware `01.05.02`, `IPMI STATUS: Working`.
-- Boot mode `UEFI`, LEGACY disabled, UEFI boot order populated (UEFI Hard Disk, USB, BCM5720 PXE, EFI shell).
-- EFI shell `map -r` enumerates one block device only: `BLK0` NVMe at `PciRoot(0x0)/Pci(0x3,0x3)/Pci(0x0,0x0)/NVMe(0x1,...)`. No `FS0:`.
-- SATA0-15 both controllers `Not Present` (correct for this build).
-- All four replacement RDIMMs (`Samsung M393A4K40CB1-CRC4Q`) trained: BIOS reports `Total Memory: 128 GB`.
-- All 7 CPU PCIe 4.0 slots at OPROM `[EFI]`, bifurcation `[Auto]`. `Above 4G Decoding` `[Enabled]`. `Re-Size BAR Support` `[Disabled]`.
-- Two BCM5720 NICs visible, MACs `90:5A:08:7B:73:54` and `:73:55`.
+## Observed
+- Ubuntu download page now lists `26.04 LTS (Resolute Raccoon)` as the latest LTS; `24.04.4 LTS` is shown as a previous-but-supported option.
+- Repo target was still `Ubuntu 24.04 LTS` across `CLAUDE.md`, `docs/architecture/software-stack.md`, `docs/HANDOVER_ASSEMBLY.md`, `docs/CURRENT_STATE.md`, and the build-guide wiki.
+- User goal restated explicitly: "install once, run long-term without frequent OS upgrades."
+
+## Decision
+- Move the day-one OS target from `Ubuntu Server 24.04 LTS` to `Ubuntu Server 26.04 LTS`. Decision doc at `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
+- Reasoning summary: 26.04 adds roughly two extra years on both standard support and Pro/ESM windows compared to 24.04, avoids a future `do-release-upgrade` cycle, and the "release-day driver risk" framing does not apply to GA102 / RTX 3090 (2020-era silicon, mature in current driver branches).
+- Day-one stack pins (`Ollama v0.21.2`, `vLLM v0.19.1`) are not OS-version-coupled and will be verified, not reselected, after the new install.
+
+## Documentation deltas applied this session
+- `CLAUDE.md` tech stack line now says `Ubuntu 26.04 LTS bare metal first`.
+- `docs/architecture/software-stack.md` OS section now points at 26.04 (Resolute Raccoon) and references the new decision doc.
+- `docs/HANDOVER_ASSEMBLY.md` checklist item updated to install 26.04.
+- `docs/CURRENT_STATE.md` next-milestone language updated to 26.04 with a pointer to the decision doc.
+- `docs/wiki/research/sovereign-node-build-guide.md` section 4.1 rewritten for 26.04, with 24.04 retained as a documented fallback.
+- New decision file `docs/wiki/decisions/ubuntu-26-04-over-24-04.md`.
+- New `docs/SESSION_LOG.md` Session 11 entry recording the decision.
 
 ## Not Proved (still ahead of the build)
 - Working bootloader on `BLK0`.
 - Installed OS reachable from the BMC console after reboot.
-- Any GPU-populated state (still at minimum CPU+RAM+NVMe).
+- Any GPU-populated state (still at minimum CPU + RAM + NVMe).
 - Any benchmark, CUDA, or model-load behavior.
 
-## Decisions
-- Realign repo docs to reflect the new bring-up state, do not revise `Re-Size BAR` yet — leave it `Disabled` for the baseline boot and treat ReBAR as a deliberate A/B test post-Ubuntu.
-- Hold the existing `Ollama v0.21.2` / `vLLM v0.19.1` pins. Nothing in this session changes the serving stack posture.
-- Keep the LRDIMM return/resale question open; it does not block bring-up now that the RDIMM set is validated.
-
 ## Next physical step
-- Boot a UEFI Ubuntu Server 24.04 installer USB.
-- Install onto `BLK0`.
-- Verify reboot from NVMe (BIOS Boot Option `UEFI Hard Disk` should resolve to the new EFI partition on `BLK0`).
-- Only after a clean reboot from NVMe, move to controlled OS bring-up and single-GPU validation.
+- On Windows: download `Ubuntu Server 26.04 LTS` ISO, verify SHA256, flash with Rufus using GPT / UEFI (non-CSM) / ISO Image mode.
+- On the server: boot the USB via the F11 boot menu, pick the entry starting with `UEFI:`.
+- Pause at the GRUB menu (`Try or Install Ubuntu Server`) and confirm before running the installer prompts.

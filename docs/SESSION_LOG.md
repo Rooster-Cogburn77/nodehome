@@ -33,6 +33,18 @@
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
 
+## 2026-05-09 (Session 11)
+**Focus:** OS-version decision before first installer USB is flashed
+**What was done:**
+- Recognized that the `Ubuntu 24.04 LTS` target encoded across the repo predated the current Ubuntu download page, where `26.04 LTS (Resolute Raccoon)` is now the latest LTS and `24.04.4 LTS` is offered as a previous-but-supported option.
+- Re-evaluated the choice against the user's stated goal of "install once, run long-term without frequent OS upgrades." Concluded that 26.04 is the better target because it adds roughly two extra years of standard support and two extra years of Pro/ESM support over 24.04, and avoids a future `do-release-upgrade` cycle entirely.
+- Verified that the "26.04 is brand-new" risk does not meaningfully apply to RTX 3090: GA102 / Ampere is 2020-era silicon, fully covered by current NVIDIA proprietary driver branches.
+- Updated the day-one stack target across the repo: `CLAUDE.md`, `docs/architecture/software-stack.md`, `docs/HANDOVER_ASSEMBLY.md`, `docs/CURRENT_STATE.md`, and `docs/wiki/research/sovereign-node-build-guide.md`.
+- Added a formal decision doc at `docs/wiki/decisions/ubuntu-26-04-over-24-04.md` recording the rationale, the alternatives considered, and a documented rollback path to 24.04.4 LTS if a 26.04-specific bring-up blocker appears.
+- Confirmed posture on day-one stack pins: `Ollama v0.21.2` and `vLLM v0.19.1` are userspace and not OS-version-coupled. Treat their relationship to 26.04 as verification after install, not re-architecture.
+**Commits:** Pending
+**Next:** Flash the Ubuntu Server 26.04 LTS installer USB on Windows via Rufus (GPT, UEFI non-CSM, ISO mode), then boot it on the H12SSL-i and pause at the GRUB menu before running the installer prompts.
+
 ## 2026-05-09 (Session 10)
 **Focus:** Bring-up jumped from safe bench-power to POST + BIOS + IPMI + NVMe enumeration
 **What was done:**
