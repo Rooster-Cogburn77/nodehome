@@ -1,39 +1,36 @@
-# Session Scratch - 2026-05-09 (Session 12)
-Focus: Ubuntu 26.04 install on `BLK0`, GPU #1 + GPU #2 bring-up, Ollama smoke test through real inference.
+# Session Scratch - 2026-05-09 (Session 13)
+Focus: All-3-GPU hardware bring-up under the temporary pigtail rule on GPU #3, 70B Q4 layer-split inference validated, cable ordered.
 
 ## Observed (validated this session)
-- `Ubuntu Server 26.04 LTS` installed onto `BLK0` (Acer Predator GM7 2TB), kernel `Linux 7.0.0-15-generic`, hostname `homelab`, NVMe boot proven.
-- Network: `eno2` UP at `192.168.1.198/24` via DHCP; SSH from workstation works; the IPMI KVM is no longer the only console.
-- Drivers: `nvidia-driver-595-server-open` (LTSB + open kernel modules) at runtime `595.58.03`, CUDA `13.2`.
-- GPU #1 (`81:00.0` in `CPU SLOT1`) and GPU #2 (`C1:00.0` in `CPU SLOT3`) both at `pcie.link.gen.max = 4`, `width.max = 16`. PCIe Gen 4 also confirmed under load (`gen.current` ramped `1 → 4` mid-flight).
-- Power delivery: 2-cable / one-head-per-dual-head-cable config held at `348 W` (essentially 350 W TDP cap) for an 89% GPU utilization sustained inference run, no instability.
-- Ollama: `v0.23.2` installed via official `install.sh`. systemd service active. Both GPUs detected by Ollama as `compute=8.6` CUDA devices, pooled `total_vram = 48 GiB`, default `num_ctx = 262144`.
-- Inference end-to-end: `qwen3:8b` ran a CoT prompt and produced clean output. Larger 2000-word essay run produced the in-flight `nvidia-smi` validation snapshot.
-- BMC USB virtual NIC `enxbe3af2b6059f` at `169.254.3.1/24` is harmless background — visible to the OS as an `Insyde Software / RNDIS_Ethernet_Gadget` interface, link-local only, no internet.
+- 70B Q4 layer-split inference works on the 2-GPU configuration. `ollama ps` reported `100% GPU`. Mid-flight `nvidia-smi` showed both GPUs at `P2`, `~110 W` each, same Ollama PID on both. Output was coherent. Generation rate was within the expected `8-15 tok/s` ceiling for this topology — slow but correct.
+- Power-yank from a pet pulling the cord mid-generation. Post-recovery: `Critical Warning 0x00`, `Available Spare 100%`, `Percentage Used 0%`, `Unsafe Shutdowns 3`, ext4 journal replay clean (`orphan cleanup on readonly fs` → `re-mounted r/w`). One nvidia 7.0 kernel `__warn_thunk` warning observed at module load — filed as known noise, not a blocker.
+- All three RTX 3090s now installed and link-validated:
+  - GPU 0: `81:00.0`, CPU SLOT1, `gen.max = 4`, `width.max = 16`. Validated under sustained TDP load earlier.
+  - GPU 1: `C1:00.0`, CPU SLOT3, `gen.max = 4`, `width.max = 16`. Validated under multi-GPU layer-split.
+  - GPU 2: `C2:00.0`, next available CPU x16 slot, `gen.max = 4`, `width.max = 16`. Brought up under the temporary pigtail rule. Touch-check at idle was clean (ambient).
+- Bus IDs `C1:` and `C2:` are adjacent → GPU #2 and GPU #3 share a PCIe root complex / IOD. Informational for later NUMA-aware tensor-parallel work.
 
 ## Decisions made this session
-- Storage layout: guided "Use entire disk" on `/dev/nvme0n1` with **LVM disabled** and **encryption off**. Reason: simpler partitioning for a headless inference server; LUKS would require a passphrase on every reboot and break unattended monthly patch cycles.
-- Power cabling: use 2 separate dual-head PCIe cables per GPU, plugged into 2 separate PSU sockets, only one head of each connected to the GPU. Electrically equivalent to two single-head cables. Validated under full TDP load.
-- Ollama pin: moved from `v0.21.2` to `v0.23.2` to match what the official install actually places. Already reviewed clean in prior sweeps; closes the gap between aspirational pin and real install.
+- Adopted the formal **temporary pigtail rule** for GPU #3 (`docs/wiki/decisions/temporary-pigtail-rule.md`). Permitted: BIOS, `lspci`, driver install, `nvidia-smi`, brief supervised low-load smoke tests. Not permitted: long inference, unattended operation, stress tests, benchmarks, or any sustained multi-GPU load. Retires when the proper dedicated cable is installed.
+- Replaced the earlier glib "375 W single-cable safety limit" framing with use-category-bounded guidance, since real-world safety depends on PSU brand, cable construction, connector quality, ambient temperature, and load duration — none of which are well-characterized for this exact stack. Captured as feedback memory.
+- Ordered the proper cable from eBay seller `lizzieb753` UK at landed cost `$49.85`. Corrected an earlier `$33.98` quote (item + shipping only) that omitted UK→US import charges and checkout tax. Captured as feedback memory so future cross-border quotes always show landed cost.
 
 ## Not Proved (still ahead of the build)
-- GPU #3 install — blocked on one missing PCIe modular cable for `Super Flower SF-1600F14HT`.
-- Multi-GPU layer-split inference on a model that actually requires both cards (e.g., `llama3.3:70b-instruct-q4_K_M`, ~40 GB).
-- vLLM install and `TENSOR_PARALLEL_SIZE=2` (or `=3` once GPU #3 is in).
-- Sustained thermal validation under multi-hour load.
+- Sustained 3-GPU heavy inference. Gated on the proper cable arriving and the pigtail being retired (estimated 5-8 days).
+- vLLM install + `TENSOR_PARALLEL_SIZE=2` on the existing 2-GPU configuration, with later upgrade to `TENSOR_PARALLEL_SIZE=3` once GPU #3 is unrestricted.
+- 70B Q6 across all 3 GPUs — the original day-one model target.
+- Sustained thermal validation under multi-hour load (single-shot 348 W draw was clean on GPU #1; soak test still pending).
 - ReBAR enable + A/B benchmark vs current `[Disabled]` baseline.
-- **Final physical deployment.** RM400 chassis is currently desk-mounted, not in the SysRacks 24x24 rack. Cable routing inside the chassis is functional but not yet tidied for a permanent install. Dedicated IPMI ethernet port is not patched into rack-side networking. Permanent location (living room) move has not happened. This phase is deliberately deferred until GPU #3 is in, so the rack-mount happens once with the final component set.
+- Final physical deployment: RM400 chassis is desk-mounted, not rail-mounted in the SysRacks 24x24. Cable routing is functional but not tidied. Dedicated IPMI ethernet not patched into rack-side networking. Permanent living-room location move not done. Deferred until the proper cable is installed.
+
+## Hardware-side rule reminders in effect right now
+- **Pigtail on GPU #3:** idle / `nvidia-smi` / brief light queries only. No sustained 3-GPU workload.
+- **Power cord:** household pet pulled it once today during inference. Real recurring risk until the box moves to the rack with proper cable management. A cord lock or locking IEC adapter is a $5 cope until then.
 
 ## Next physical step
-- Source one PCIe modular cable for `SF-1600F14HT`. Acceptable sources: eBay search `"SF-1600F14HT" cable`, CableMod configurator with PSU set to Super Flower Leadex Titanium, or Super Flower USA distributor email.
-- Do not substitute EVGA Supernova / Corsair Type 4 / "compatible with multiple brands" cables — Super Flower Leadex Titanium pinout is brand-specific and cross-brand mixing has documented fry incidents.
-
-## Temporary pigtail rule for GPU #3 (in effect until the proper cable arrives)
-- A single existing dual-head cable may be used as a pigtail on GPU #3 for: BIOS / `lspci` / driver install / `nvidia-smi` / brief supervised low-load smoke tests.
-- Not for: long inference, unattended operation, stress tests, benchmarks, or any sustained multi-GPU load.
-- Touch-check connectors a few minutes into use; if hot, power down immediately.
-- Rule and rationale durably recorded in `docs/wiki/decisions/temporary-pigtail-rule.md`.
-- Sustained heavy 3-GPU workloads are deferred until the proper dedicated cable is installed on GPU #3.
+- Wait for the cable. Estimated 2026-05-14 to 2026-05-17 window.
+- When the cable arrives: power down → swap pigtail for the proper dedicated cable → boot → validate → run sustained 3-GPU workload → retire the temporary pigtail rule.
 
 ## Next software step (in flight or imminent)
-- `ollama pull llama3.3:70b-instruct-q4_K_M` — ~40 GB, fits across 2x 24 GiB. Validates multi-GPU layer-split path on the existing 2-card hardware.
+- Stage vLLM install on the 2-GPU configuration so `TENSOR_PARALLEL_SIZE=2` testing can begin. vLLM TP is generally faster than Ollama's pipeline parallel on PCIe-only setups. Real numbers to compare against tonight's 70B Q4 baseline.
+- For interactive work in the meantime: prefer 30B-class models (Qwen 30B, Mistral 24B, Gemma 4 27B) on a single GPU. Expected `25-40 tok/s`.
