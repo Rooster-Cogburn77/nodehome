@@ -33,6 +33,24 @@
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
 
+## 2026-05-09 / 2026-05-10 (Session 14)
+**Focus:** Post-bring-up software stack expansion — interactive-tier A/B benchmark, Open WebUI, Docker + GPU passthrough, vLLM staging
+**What was done:**
+- Pulled three 30B-class candidates for A/B speed comparison: `mistral-small3.1:24b` (~15 GB), `gemma3:27b` (~17 GB), and the already-installed `qwen2.5:32b-instruct-q4_K_M` (~19 GB). Ran the same 500-word essay prompt on each with `--verbose` to capture runtime stats.
+- Results, ranked by `eval rate` (output tokens per second, single 3090):
+  - `mistral-small3.1:24b` — `51.13 tok/s` eval, `1501.38 tok/s` prompt eval, `6.72 s` load. Fastest by a comfortable margin.
+  - `gemma3:27b` — `39.91 tok/s` eval, `411.74 tok/s` prompt eval, `28.25 s` load (anomalous cold-load time, should improve warm).
+  - `qwen2.5:32b-instruct-q4_K_M` — `39.21 tok/s` eval, `677.02 tok/s` prompt eval, `8.07 s` load.
+- Adopted `mistral-small3.1:24b` as the **default daily-driver interactive model**. Smaller weights = better KV-cache headroom + faster forward pass at the same hardware.
+- Installed `docker.io 29.1.3` from the Ubuntu 26.04 archive (`apt install docker.io`), enabled the systemd service, added the user to the `docker` group (effective on next login; `sudo docker` works in the current session). The first install attempt timed out on a stalled `sudo` prompt during the parallel model pulls; clean re-run completed without issue.
+- Installed Open WebUI (`ghcr.io/open-webui/open-webui:main`) in a detached Docker container on port `3000`, configured via `OLLAMA_BASE_URL=http://host.docker.internal:11434` and `--add-host=host.docker.internal:host-gateway`. Container had to be restarted after Ollama was reconfigured to listen on all interfaces (see next bullet); after that the model dropdown populated cleanly with all installed Ollama models and browser chat works at `http://192.168.1.198:3000`.
+- Reconfigured Ollama to bind on all interfaces, not the default `127.0.0.1:11434`, by writing a systemd drop-in at `/etc/systemd/system/ollama.service.d/override.conf` that sets `OLLAMA_HOST=0.0.0.0:11434`. Verified with `ss -tlnp | grep 11434` returning `*:11434`. Without this change Open WebUI inside Docker could not reach Ollama on the host, since `host.docker.internal` resolves to the host's bridge IP rather than `127.0.0.1`.
+- Installed `nvidia-container-toolkit 1.19.0` from NVIDIA's apt repo, registered `nvidia` as a Docker runtime via `sudo nvidia-ctk runtime configure --runtime=docker`, and restarted Docker. Smoke-tested by running `nvidia/cuda:12.6.0-base-ubuntu24.04` in a temporary container; all 3 GPUs visible inside the container with the same `nvidia-smi` table as the host. GPU passthrough is now end-to-end functional.
+- Pulled `vllm/vllm-openai:v0.19.1` (~10 GB Docker image) and launched a detached vLLM server explicitly constrained to GPUs 0 and 1 (`--gpus '"device=0,1"' -e CUDA_VISIBLE_DEVICES=0,1`), respecting the temporary pigtail rule on GPU 2. The model is `Qwen/Qwen2.5-32B-Instruct-AWQ` (publicly available, no HuggingFace auth gate) running with `--tensor-parallel-size 2`, `--gpu-memory-utilization 0.85`, `--max-model-len 8192`, OpenAI-compatible API exposed on port `8000`. Model download + load was still in progress at the time of this commit; first benchmark against the Ollama 32B and 70B baselines is the immediate next item.
+- Captured a small terminal-paste lesson (not a memory file, just operational): on this user's terminal, long single-line shell commands wrap at the SSH-side, and the wrap can break commands that involve heredocs or piped `tee` with long URLs. Workaround used in this session: stash long strings into shell variables first, then pipe the variable into the command, keeping each terminal line short. Solved one apt-source-list write that the wrap-issue had silently dropped.
+**Commits:** Pending
+**Next:** Wait on the vLLM model download + load to complete, then benchmark `Qwen/Qwen2.5-32B-Instruct-AWQ` on TP=2 against the Ollama 32B (39.21 tok/s) and Ollama 70B Q4 layer-split (8-15 tok/s) baselines via the OpenAI-compatible API. After the cable arrives and GPU 3 is unrestricted, escalate vLLM to TP=3 and to a 70B-class AWQ model (e.g. `Qwen/Qwen2.5-72B-Instruct-AWQ`).
+
 ## 2026-05-09 (Session 13)
 **Focus:** All-3-GPU hardware bring-up under the temporary pigtail rule, multi-GPU inference path validated end-to-end, cable for GPU #3 ordered
 **What was done:**
