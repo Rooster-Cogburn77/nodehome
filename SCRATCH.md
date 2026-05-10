@@ -13,10 +13,13 @@ Focus: All-3-GPU hardware bring-up under the temporary pigtail rule on GPU #3, 7
 ## Decisions made this session
 - Adopted the formal **temporary pigtail rule** for GPU #3 (`docs/wiki/decisions/temporary-pigtail-rule.md`). Permitted: BIOS, `lspci`, driver install, `nvidia-smi`, brief supervised low-load smoke tests. Not permitted: long inference, unattended operation, stress tests, benchmarks, or any sustained multi-GPU load. Retires when the proper dedicated cable is installed.
 - Replaced the earlier glib "375 W single-cable safety limit" framing with use-category-bounded guidance, since real-world safety depends on PSU brand, cable construction, connector quality, ambient temperature, and load duration — none of which are well-characterized for this exact stack. Captured as feedback memory.
-- Ordered the proper cable from eBay seller `lizzieb753` UK at landed cost `$49.85`. Corrected an earlier `$33.98` quote (item + shipping only) that omitted UK→US import charges and checkout tax. Captured as feedback memory so future cross-border quotes always show landed cost.
+- Ordered the proper cable from eBay seller `lizzieb753` UK at landed cost `$49.85`, order `05-14624-65956`. Corrected an earlier `$33.98` quote (item + shipping only) that omitted UK→US import charges and checkout tax. Also corrected an earlier `5-8 days` shipping-time quote — realistic UK→US window is 2-4 weeks, ending around `2026-05-23 to 2026-06-10`. Both quoting errors captured as feedback memory.
+
+## Late-session validation
+- Re-ran the full 1500-word essay generation on `llama3.3:70b-instruct-q4_K_M` across the 2-GPU layer-split configuration. Output completed with a coherent, well-structured 1500-word essay on distributed computing — research-grade quality, expected slow rate (~8-15 tok/s ceiling for this topology). Empirical confirmation that the day-one stack posture holds: 70B-class for complex reasoning (slow on purpose), 30B-class as the interactive tier.
 
 ## Not Proved (still ahead of the build)
-- Sustained 3-GPU heavy inference. Gated on the proper cable arriving and the pigtail being retired (estimated 5-8 days).
+- Sustained 3-GPU heavy inference. Gated on the proper cable arriving and the pigtail being retired. Realistic window for the cable: **2026-05-23 to 2026-06-10**, per the eBay seller's posted estimate. The earlier `5-8 days` figure was a cross-border-shipping quoting mistake on my part; UK Royal Mail / eBay International to US is 2-4 weeks realistically.
 - vLLM install + `TENSOR_PARALLEL_SIZE=2` on the existing 2-GPU configuration, with later upgrade to `TENSOR_PARALLEL_SIZE=3` once GPU #3 is unrestricted.
 - 70B Q6 across all 3 GPUs — the original day-one model target.
 - Sustained thermal validation under multi-hour load (single-shot 348 W draw was clean on GPU #1; soak test still pending).
@@ -28,7 +31,8 @@ Focus: All-3-GPU hardware bring-up under the temporary pigtail rule on GPU #3, 7
 - **Power cord:** household pet pulled it once today during inference. Real recurring risk until the box moves to the rack with proper cable management. A cord lock or locking IEC adapter is a $5 cope until then.
 
 ## Next physical step
-- Wait for the cable. Estimated 2026-05-14 to 2026-05-17 window.
+- Wait for the cable. Realistic window: 2026-05-23 to 2026-06-10. Order number `05-14624-65956` from `lizzieb753` UK at landed `$49.85`.
+- Continuing to look for a faster source in parallel (CableMod Rush+Express in 5-10 days at ~$70 from US warehouse, or r/hardwareswap local pickup if anyone happens to have one). The eBay UK order is the floor; if a faster legitimate source materializes, the eBay order can be cancelled.
 - When the cable arrives: power down → swap pigtail for the proper dedicated cable → boot → validate → run sustained 3-GPU workload → retire the temporary pigtail rule.
 
 ## Next software step (in flight or imminent)
