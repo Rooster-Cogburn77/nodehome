@@ -37,13 +37,22 @@ Focus: Permanent in-chassis install — drive cage removal, front-panel header w
 ## Immediate next steps
 1. `./scripts/healthcheck.sh` — single-pass validation of host/GPUs/storage/Ollama/Docker/APIs/BMC/kernel for the post-rebuild + post-Option-C baseline.
 2. Capture JF1 pinout into `docs/runbooks/h12ssl-i-front-panel.md` before the next chassis-open event.
+3. Begin IPMI hardening per `docs/runbooks/ipmi-hardening.md`. **Phase 1** (password rotation + cert hygiene) can run independent of all four open decisions and is the highest value-per-effort piece. **Phases 2-3** (management VLAN + static IP + cable patch) are blocked on decisions #1, #2, #4 in that doc.
+
+## IPMI hardening scoped (this session)
+- New scope doc: `docs/runbooks/ipmi-hardening.md`. Captures the four phases and the four open decisions blocking execution: home network gear, managed switch ownership, password manager destination, fallback posture if the home router can't do VLANs.
+- Companion to the existing `docs/runbooks/ipmi-recovery.md`. The recovery runbook will need an update during Phase 1 step 5 to drop the inline factory password reference and point at whatever password manager the user picks.
 
 ## Still ahead (unchanged from Session 15)
 - Cable for GPU #3 in transit, realistic window `2026-05-23 to 2026-06-10`.
 - Rack-mount on Tedgetal sliding shelf, dedicated IPMI ethernet patch, permanent location move — unblocked by the shelf, blocked-by-preference on completing the cable swap first so the box is moved/cabled-into-rack only once.
-- BMC hardening before LAN exposure: rotate factory `SYZIFLTPAK` (in repo git history), replace self-signed cert, set static IP. If "doing things the right way" is the bar, the BMC should sit on its own management VLAN, not the flat LAN.
 - TP=3 + 70B-class AWQ benchmark, ReBAR A/B, sustained 3-GPU thermal soak — all post-cable.
 - Sweeps pipeline migration to server (still on laptop via Task Scheduler).
+
+## Session close-out state
+- Host powered down by user at end of Session 16. `vllm-server`, `ollama.service`, and `open-webui` all confirmed `--restart unless-stopped`-equivalent (Ollama is a systemd service auto-starting on boot, both Docker containers carry `RestartPolicy.Name = unless-stopped` from Session 15). Next power-on should auto-recover the full stack; healthcheck script is the validation tool.
+- Repo at `4a0a4f3` is the post-Option-C verified baseline. This commit will land the IPMI hardening scope doc on top.
+- The build is now functionally a "research lab" rather than a "build in progress." Remaining work is finalization (IPMI hardening, rack mount, GPU 3 cable arrival + pigtail retirement) and choice-of-direction items (benchmarking, automation, second-node planning).
 
 ## Operational lessons added this session
 - "Don't suggest the easy/shortcut route" — saved as feedback memory. Default to the proper path; offering "you can skip this" reads as me trying to reduce my own work or hedging on the user's standards.
