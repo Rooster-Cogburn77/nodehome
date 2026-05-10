@@ -156,14 +156,28 @@ section "Docker containers"
 if ! command -v docker >/dev/null 2>&1; then
   fail "docker not installed"
 else
-  for cname in vllm-server open-webui; do
-    STATE=$(sudo -n docker inspect --format '{{.State.Status}}' "$cname" 2>/dev/null || echo "missing")
-    case "$STATE" in
-      running) ok "$cname: running" ;;
-      missing) warn "$cname: container not present" ;;
-      *)       fail "$cname: state=$STATE" ;;
-    esac
-  done
+  # Prefer plain docker (works when the user is in the docker group, which is
+  # the production posture after first login post-usermod). Fall back to sudo -n
+  # if plain docker is not authorized.
+  if docker ps >/dev/null 2>&1; then
+    DOCKER="docker"
+  elif sudo -n docker ps >/dev/null 2>&1; then
+    DOCKER="sudo -n docker"
+  else
+    DOCKER=""
+  fi
+  if [[ -z $DOCKER ]]; then
+    warn "docker not accessible by this user (not in docker group, no NOPASSWD sudo)"
+  else
+    for cname in vllm-server open-webui; do
+      STATE=$($DOCKER inspect --format '{{.State.Status}}' "$cname" 2>/dev/null || echo "missing")
+      case "$STATE" in
+        running) ok "$cname: running" ;;
+        missing) warn "$cname: container not present" ;;
+        *)       fail "$cname: state=$STATE" ;;
+      esac
+    done
+  fi
 fi
 
 # ---------- API reachability ----------
