@@ -1,61 +1,61 @@
-# Session Scratch - 2026-05-09 / 2026-05-10 (Session 14)
-Focus: Post-bring-up software stack expansion. Interactive A/B, Open WebUI, Docker + GPU passthrough, vLLM staging.
+# Session Scratch - 2026-05-10 (Session 15)
+Focus: Operational hardening — service persistence, reboot validation, health-check tooling, IPMI runbook, system-enforced pigtail rule. Closed with a clean overnight power-down.
 
 ## Observed (validated this session)
-- 30B-class A/B benchmark (single 3090, same prompt, `--verbose`):
-  - `mistral-small3.1:24b`: `eval 51.13 tok/s`, `prompt eval 1501.38 tok/s`, `load 6.72 s`. Winner.
-  - `gemma3:27b`: `eval 39.91 tok/s`, `prompt eval 411.74 tok/s`, `load 28.25 s`.
-  - `qwen2.5:32b-instruct-q4_K_M`: `eval 39.21 tok/s`, `prompt eval 677.02 tok/s`, `load 8.07 s`.
-- Mistral 24B is the new default daily-driver interactive model.
-- 5 models on disk, ~98 GB total: qwen3:8b, mistral-small3.1:24b, gemma3:27b, qwen2.5:32b-instruct-q4_K_M, llama3.3:70b-instruct-q4_K_M.
-- Docker `29.1.3` installed; user added to `docker` group (effective on next login; `sudo docker` for now).
-- Open WebUI Docker container on port `3000`, pointed at local Ollama. Browser access works, dropdown populated.
-- Ollama systemd override at `/etc/systemd/system/ollama.service.d/override.conf` sets `OLLAMA_HOST=0.0.0.0:11434`. Required for Docker containers to reach Ollama via `host.docker.internal`.
-- `nvidia-container-toolkit 1.19.0` installed; `nvidia` registered as Docker runtime; `nvidia-smi` works inside containers with all 3 GPUs visible.
-- `vllm/vllm-openai:v0.19.1` Docker image pulled. Container launched bound to GPUs 0+1 only (per pigtail rule on GPU 2), serving `Qwen/Qwen2.5-32B-Instruct-AWQ` on TP=2 with `--gpu-memory-utilization 0.85` and `--max-model-len 8192`. OpenAI-compatible API on port `8000`. Model download/load still in progress at time of this commit.
+- Both Docker containers (`vllm-server`, `open-webui`) updated to `--restart unless-stopped`. `docker inspect` confirms `RestartPolicy.Name = unless-stopped` on both.
+- Full `sudo reboot` recovery validated end-to-end. Post-reboot: 3 GPUs back, Ollama service auto-active, both containers `Up`, Ollama API serving 5 models, Open WebUI HTTP 200, vLLM API ready after `~95 s` warmup (boot 04:36:12 → "Application startup complete" 04:37:50).
+- `scripts/healthcheck.sh` written and stabilized through two real bug fixes:
+  - BMC MAC parsing: `awk -F:` was splitting on every colon in the MAC; fixed with `-F': '`.
+  - Docker container probes were unconditionally using `sudo -n docker`; failed silently for users in the docker group. Fixed by trying plain `docker` first, falling back to `sudo -n` only if needed.
+  - Final pass on the healthy stack: `[HEALTHY] 2 warning(s)` for the two expected items (BMC LAN port unpatched, one historical `__warn_thunk` kernel line).
+- `docs/runbooks/ipmi-recovery.md` authored. Captures BMC firmware `01.05.02`, dedicated NIC MAC `90:5a:08:7b:71:6d` (verified via `ipmitool lan print 1`, supersedes a one-character typo in the April archive), recovered factory default ADMIN password `SYZIFLTPAK` from `docs/archives/SESSION_LOG_2026-04.md:57`, web UI / `ipmitool` access procedures, failure scenarios addressed and not addressed, and a hardening note that the factory password is in repo git history and must be rotated before the BMC sees any LAN.
+- **Pigtail rule violation discovered + fixed.** Healthcheck output flagged GPU 2 at `135.93 W / 6446 MiB / PCIe gen 4 active`. Root cause: an Open WebUI chat hit Ollama, Ollama saw GPUs 0+1 memory-loaded by vLLM, used its "least-loaded GPU" scheduler, and put the model on GPU 2. The temporary pigtail rule prohibits sustained load on GPU 2 — but the rule was operator-enforced, not system-enforced. Touch-checked the cable, restarted Ollama to evict the model (memory dropped to `1 MiB`, power to `33 W`).
+- Pigtail rule is now **system-enforced on the Ollama side**. Extended `/etc/systemd/system/ollama.service.d/override.conf` to set `CUDA_VISIBLE_DEVICES=0,1` in addition to `OLLAMA_HOST=0.0.0.0:11434`. After `daemon-reload + systemctl restart ollama`, Ollama only sees 2 GPUs and physically cannot schedule anything on GPU 2 regardless of load. vLLM was already explicitly bound to `--gpus '"device=0,1"'`, so it was already correct.
 
 ## Decisions made this session
-- Default interactive model is `mistral-small3.1:24b`. Speed delta over the others is large enough to feel; quality re-evaluation can happen later if needed.
-- vLLM running with TP=2 only (not TP=3). GPU 2 stays out of vLLM scope until the proper cable arrives and the temporary pigtail rule is retired.
-- Model for the first vLLM benchmark is the publicly-available `Qwen/Qwen2.5-32B-Instruct-AWQ` (no HF gate), not a Llama 3.3 70B variant. The 70B comparison comes later either via an ungated 70B AWQ (`Qwen/Qwen2.5-72B-Instruct-AWQ`) on TP=3, or after handling the HF token gate for Llama 3.3.
-- Operational paste workaround: long single-line shell commands wrap badly on this terminal and can silently break heredocs and piped `tee` commands. Workaround: stash long strings in shell variables, keep each typed line short.
+- vLLM and Open WebUI containers should be persistent across reboots (`--restart unless-stopped`).
+- Pigtail rule enforcement moves from "operator-enforced documentation" to "system-enforced systemd env var" on the Ollama side. This is the right belt-and-suspenders posture; the documentation rule still applies for any other tool that might schedule work on GPU 2.
+- Healthcheck script is read-only by design; warnings do not gate the exit code, only failures do. Good fit for both interactive use today and an eventual cron-driven automated periodic healthcheck after sudoers NOPASSWD is configured for the specific commands.
+
+## Open trade-off introduced by the pigtail pin (deferred for next session decision)
+- vLLM at `--gpu-memory-utilization 0.85` leaves ~2 GiB free per card on GPUs 0 and 1.
+- With Ollama now restricted to those two cards, none of the locally-installed Ollama models fit in that headroom.
+- Open WebUI chat through Ollama will fail to load any model while vLLM is running.
+- Three forward options on the table:
+  - **A.** Lower vLLM `--gpu-memory-utilization` to ~0.55 so GPUs 0+1 have ~10 GiB free each. Smaller KV cache for vLLM but Ollama gets headroom for 24B-class models.
+  - **B.** Stop the vLLM container when not actively benchmarking. Loses always-on multi-GPU posture.
+  - **C.** Point Open WebUI at the vLLM OpenAI-compatible endpoint as a second connection. Chat routes to vLLM's loaded model directly. Loses Ollama model-switching menu while vLLM is up.
+- Decision deferred until the user picks an end-state preference.
 
 ## Not Proved (still ahead of the build)
-- vLLM TP=2 token rate vs Ollama baselines. Pending model load.
 - Sustained 3-GPU heavy inference. Gated on the cable arriving and the pigtail being retired.
-- vLLM TP=3 on a 70B-class model.
+- vLLM TP=3 on a 70B-class AWQ model (`Qwen/Qwen2.5-72B-Instruct-AWQ` is the planned target).
 - 70B Q6 across all 3 GPUs.
-- Sweeps pipeline wired to local model for synthesis (the project's stated goal of automated research).
 - Sustained thermal validation under multi-hour load.
 - ReBAR enable + A/B vs current `[Disabled]`.
-- Final physical deployment: rails, rack mount, cable management, dedicated IPMI patch, permanent location move. Deferred until cable arrives.
+- Sweep pipeline running natively on the server (still runs on laptop via Windows Task Scheduler).
+- Final physical deployment: rack-mount on the Tedgetal shelf, dedicated IPMI ethernet patch, permanent location move.
 
-## Live status of major services
-- `ollama.service` — active, bound to `0.0.0.0:11434`
-- `docker.service` — active, with nvidia runtime registered
-- `open-webui` container — up, port 3000, points at host Ollama
-- `vllm-server` container — up (detached), port 8000, mid-load on `Qwen/Qwen2.5-32B-Instruct-AWQ` at the time of this commit
+## Live status of major services at end of session
+- `ollama.service` — active, bound to `0.0.0.0:11434`, `CUDA_VISIBLE_DEVICES=0,1`
+- `docker.service` — active, with `nvidia` runtime registered
+- `vllm-server` container — `Up`, port `8000`, `Qwen/Qwen2.5-32B-Instruct-AWQ` on TP=2
+- `open-webui` container — `Up`, port `3000`, healthy
+- BMC — reachable in-band via USB-NIC at `169.254.3.1/24`. Dedicated IPMI port still unpatched (`IP Address: 0.0.0.0`).
+- Host clean shutdown performed at end of session. Next start expects all services to auto-recover; healthcheck script is the validation tool.
 
 ## Next physical step
-- Wait for cable. Realistic window 2026-05-23 to 2026-06-10. Continuing to look for faster source in parallel.
-
-## vLLM benchmark complete
-- vLLM `v0.19.1` on `Qwen/Qwen2.5-32B-Instruct-AWQ`, TP=2 across GPUs 0+1, awq_marlin kernel + FA2: **`59.13 tok/s`** end-to-end (795 completion tokens in 13.445 s wall clock).
-- ~50% faster than Ollama on the same 32B class (39.21 tok/s GGUF Q4_K_M).
-- ~4-7× faster than Ollama 70B Q4 layer-split (~8-15 tok/s).
-- Day-one stack pin (vLLM for multi-GPU production tier) empirically validated.
-
-## Sweeps synthesis closed
-- `sweeps/llm_synthesize.py` written, committed, deployed on `homelab`. Reads latest operator brief, posts to local OpenAI-compatible endpoint (Ollama default, vLLM via `--endpoint`), appends `## Local LLM Synthesis` section. Stdlib-only Python.
-- End-to-end test: `mistral-small3.1:24b` synthesized the 2026-05-09 brief in ~4 seconds, 917 chars output, correctly identified actionable items and noise.
-- Operator briefs remain gitignored (daily artifacts). The synthesis script is committed; briefs are local to whichever box runs the sweep.
+- Tedgetal sliding shelf arriving 2026-05-10. Rack-mount + dedicated IPMI patch + permanent location move are unblocked by the shelf and do **not** need the GPU 3 cable; the pigtail config is stable for the move and the cable swap is a separate 5-min operation when it arrives.
+- The GPU 3 PCIe modular cable from `lizzieb753` UK is still in transit, realistic window `2026-05-23 to 2026-06-10`. Continuing to look for a faster source.
 
 ## Next software step
-- TP=3 + `Qwen/Qwen2.5-72B-Instruct-AWQ` benchmark is gated on GPU 3 being unrestricted (cable arrival).
-- Optional follow-on: wire `llm_synthesize.py` into `run_workflow.py` so it runs automatically after the brief is built.
-- Further follow-on: migrate the entire sweep pipeline from the laptop (Windows Task Scheduler) to the server (cron / systemd timer) so briefs are generated on `homelab` natively instead of being `scp`'d for synthesis.
+- Resolve the open A/B/C trade-off so Open WebUI chat works alongside vLLM.
+- Then options on the queue: multi-prompt benchmark across all 5 models, sweep migration to server (shadow mode), `claw-code` install, code-task model bench with tool use, ReBAR A/B (post-cable), TP=3 + 70B AWQ (post-cable).
 
-## Physical deployment update
-- Sliding shelf (Tedgetal 1U, $46, 14-22" adjustable, 60 lb cap) ordered, arriving tomorrow.
-- The cable for GPU 3 is still in transit (lizzieb753 UK, $49.85, ETA 2026-05-23 to 2026-06-10). Continuing to look for a faster source.
-- Updated mental model: physical deployment (rack-mount, IPMI patch, location move) does NOT have to wait for the cable. The pigtail config on GPU 3 is stable while idle, the rack-mount can happen on top of current cabling, and the cable swap when it arrives is a 5-minute power-down / open / swap / close / boot operation that does not require unmounting from the rack.
+## Operational lessons from this session (already saved as memory files)
+- Search the repo's archives, runbooks, and session logs before asking the user to physically retrieve information that may already be recorded. The BMC default password was already in `docs/archives/SESSION_LOG_2026-04.md:57`.
+- Don't quote glib safety thresholds for cross-vendor hardware. Real safety depends on too many factors that aren't well-characterized for a specific stack. Frame by use category instead.
+- Quote landed cost (item + shipping + import + tax), not "item + shipping," for cross-border purchases.
+- Don't recommend stopping for the day or comment on time of day. The user sets pacing.
+- When a long shell paste involves a heredoc, packed into a single quoted variable instead — terminal-side leading-space wraps break heredoc terminator matching.
+- When the user describes a hardware setup, parse what they actually proposed before objecting to a worst-case interpretation of the keyword.
