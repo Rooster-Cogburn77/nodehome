@@ -39,6 +39,9 @@ Focus: Permanent in-chassis install — drive cage removal, front-panel header w
 2. Capture JF1 pinout into `docs/runbooks/h12ssl-i-front-panel.md` before the next chassis-open event.
 3. Begin IPMI hardening per `docs/runbooks/ipmi-hardening.md`. **Phase 1** (password rotation + cert hygiene) can run independent of all four open decisions and is the highest value-per-effort piece. **Phases 2-3** (management VLAN + static IP + cable patch) are blocked on decisions #1, #2, #4 in that doc.
 
+## Outstanding mechanical follow-on
+- **Motherboard mounting screws not all fully installed.** A few standoff screws still need to go in to fully secure the H12SSL-i to the RM400 tray. Currently the board is in position and stable but not 100% screwed down. Address before the rack-mount + permanent location move (i.e., before any handling that would let the board flex against the standoffs). Cheapest moment is the same chassis-open event that captures the JF1 pinout.
+
 ## IPMI hardening scoped (this session)
 - New scope doc: `docs/runbooks/ipmi-hardening.md`. Captures the four phases and the four open decisions blocking execution: home network gear, managed switch ownership, password manager destination, fallback posture if the home router can't do VLANs.
 - Companion to the existing `docs/runbooks/ipmi-recovery.md`. The recovery runbook will need an update during Phase 1 step 5 to drop the inline factory password reference and point at whatever password manager the user picks.
