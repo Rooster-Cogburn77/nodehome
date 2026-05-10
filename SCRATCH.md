@@ -23,20 +23,20 @@ Focus: Permanent in-chassis install — drive cage removal, front-panel header w
 
 ## Decisions standing (carried forward from Session 15)
 - A/B/C trade-off resolution: **Option C primary, B fallback, A rejected.** Open WebUI gets a second OpenAI-compatible Connection pointing at the vLLM container (`http://host.docker.internal:8000/v1`) so chat routes to vLLM directly without forcing Ollama to share VRAM with vLLM. If vLLM is down for whatever reason, fallback is to stop the vLLM container entirely (Option B) and let Ollama use the full 24 GB per card. Lowering vLLM `--gpu-memory-utilization` to 0.55 (Option A) was rejected — the whole point of running vLLM is the higher KV-cache headroom, and giving that up just to satisfy Ollama is the wrong direction.
-- Not yet implemented in the UI; that's the next action after this checkpoint.
+- **Option C landed.** Open WebUI Admin Panel → Settings → Connections → added an OpenAI API entry with URL `http://host.docker.internal:8000/v1`, key `local`, prefix ID `vllm`. Verify went green and pulled `Qwen/Qwen2.5-32B-Instruct-AWQ` from the vLLM container. Model picker in chat now shows `vllm.Qwen/Qwen2.5-32B-Instruct-AWQ` alongside the Ollama models. Real prompt got a coherent reply through the vLLM path; user observed it as "really fast" subjectively (matches the Session 14 benchmark of 59.13 tok/s vs 39.21 for Ollama on the same model class). Trade-off closed.
+- Side fix: Qwen claimed it was "hosted by Alibaba Cloud" out of the box, which is just its pretraining identity. Set a per-model System Prompt in Open WebUI Workspace → Models that grounds it in this hardware (3x RTX 3090, EPYC 7302P, vLLM v0.19.1 container, no Alibaba Cloud connection). Same workspace-level system-prompt fix applies to the Ollama models if/when it matters.
 
-## Live status of major services (best-effort, post-rebuild, not all directly verified)
-- `ollama.service` — active, accepting requests on port 11434, gemma3:27b loaded successfully (verified via UI chat reply)
-- Open WebUI container — up, port 3000, serving (verified via UI chat reply)
-- `vllm-server` container — state TBD, see operational signal above
-- Permanent in-chassis wiring — done (per user report); cable management for permanent install completed
-- BMC — assumed reachable via USB-NIC at `169.254.3.1/24` per Session 15 state; not re-verified this session. Dedicated IPMI port still unpatched.
+## Live status of major services (post-rebuild, post-Option-C)
+- `ollama.service` — active, API on `:11434` returning all 5 models (`gemma3:27b`, `mistral-small3.1:24b`, `qwen2.5:32b-instruct-q4_K_M`, `llama3.3:70b-instruct-q4_K_M`, `qwen3:8b`); none currently loaded into VRAM (vLLM owns it).
+- `vllm-server` container — `Up`, port 8000, `/v1/models` returning 200, `Qwen/Qwen2.5-32B-Instruct-AWQ` resident on GPUs 0+1 at ~22 GiB each. Reachable both directly and through Open WebUI.
+- Open WebUI container — `Up`, port 3000, both OpenAI-compatible (vLLM) and Ollama connections active in the model picker.
+- nvidia-smi: GPU 0 22775 MiB, GPU 1 22472 MiB, GPU 2 1 MiB (pigtail rule respected).
+- Permanent in-chassis wiring — done; cable management for permanent install completed.
+- BMC — not re-verified this session post-rebuild. Dedicated IPMI port still unpatched.
 
-## Immediate next steps after this commit
-1. `./scripts/healthcheck.sh` — single-pass validation of host/GPUs/storage/Ollama/Docker/APIs/BMC/kernel.
-2. Disambiguate vLLM container state (`docker ps`, `docker logs vllm-server`, `nvidia-smi` for memory check).
-3. Implement Option C: Open WebUI → Settings → Connections → add OpenAI-compatible endpoint, URL `http://host.docker.internal:8000/v1`, model picker should then show both Ollama and vLLM models.
-4. Capture JF1 pinout into `docs/runbooks/h12ssl-i-front-panel.md` (low priority; before next chassis-open event).
+## Immediate next steps
+1. `./scripts/healthcheck.sh` — single-pass validation of host/GPUs/storage/Ollama/Docker/APIs/BMC/kernel for the post-rebuild + post-Option-C baseline.
+2. Capture JF1 pinout into `docs/runbooks/h12ssl-i-front-panel.md` before the next chassis-open event.
 
 ## Still ahead (unchanged from Session 15)
 - Cable for GPU #3 in transit, realistic window `2026-05-23 to 2026-06-10`.
