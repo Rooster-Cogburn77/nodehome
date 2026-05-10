@@ -45,6 +45,17 @@ Focus: Post-bring-up software stack expansion. Interactive A/B, Open WebUI, Dock
 - ~4-7× faster than Ollama 70B Q4 layer-split (~8-15 tok/s).
 - Day-one stack pin (vLLM for multi-GPU production tier) empirically validated.
 
+## Sweeps synthesis closed
+- `sweeps/llm_synthesize.py` written, committed, deployed on `homelab`. Reads latest operator brief, posts to local OpenAI-compatible endpoint (Ollama default, vLLM via `--endpoint`), appends `## Local LLM Synthesis` section. Stdlib-only Python.
+- End-to-end test: `mistral-small3.1:24b` synthesized the 2026-05-09 brief in ~4 seconds, 917 chars output, correctly identified actionable items and noise.
+- Operator briefs remain gitignored (daily artifacts). The synthesis script is committed; briefs are local to whichever box runs the sweep.
+
 ## Next software step
-- Wire the existing `sweeps/` pipeline to use the local Ollama (or vLLM) for synthesis. Project's stated automated-research goal.
 - TP=3 + `Qwen/Qwen2.5-72B-Instruct-AWQ` benchmark is gated on GPU 3 being unrestricted (cable arrival).
+- Optional follow-on: wire `llm_synthesize.py` into `run_workflow.py` so it runs automatically after the brief is built.
+- Further follow-on: migrate the entire sweep pipeline from the laptop (Windows Task Scheduler) to the server (cron / systemd timer) so briefs are generated on `homelab` natively instead of being `scp`'d for synthesis.
+
+## Physical deployment update
+- Sliding shelf (Tedgetal 1U, $46, 14-22" adjustable, 60 lb cap) ordered, arriving tomorrow.
+- The cable for GPU 3 is still in transit (lizzieb753 UK, $49.85, ETA 2026-05-23 to 2026-06-10). Continuing to look for a faster source.
+- Updated mental model: physical deployment (rack-mount, IPMI patch, location move) does NOT have to wait for the cable. The pigtail config on GPU 3 is stable while idle, the rack-mount can happen on top of current cabling, and the cable swap when it arrives is a 5-minute power-down / open / swap / close / boot operation that does not require unmounting from the rack.

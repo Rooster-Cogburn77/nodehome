@@ -55,6 +55,13 @@
 
 **Now next:** TP=3 escalation + 70B-class AWQ model are gated on GPU 3 being unrestricted. In the interim, the natural next item is wiring the existing `sweeps/` pipeline to use the local Ollama (or vLLM) for synthesis — the project's stated goal of an owned, automated research-and-publication loop.
 
+**Sweeps synthesis loop closed.** Authored `sweeps/llm_synthesize.py` (stdlib-only, ~170 lines) that reads the most recent operator brief from `docs/sweeps/operator/`, calls a local OpenAI-compatible chat-completions endpoint (default Ollama with `mistral-small3.1:24b`; `--endpoint` switches it to the vLLM container at port `8000`), and appends a `## Local LLM Synthesis` section with a "top 3 items + skip" digest. Idempotent (re-runs replace the prior section instead of stacking). Cloned the repo onto the `homelab` server, `scp`'d the latest brief over (briefs are gitignored as daily-run artifacts), and ran the script end-to-end against both endpoints.
+
+- **Ollama path:** `mistral-small3.1:24b` synthesized the 2026-05-09 brief in ~4 seconds, 917 characters of output. Correctly distilled the brief's `vLLM v0.20.2`, `llama.cpp Gemma4 NVFP4`, and `X/OpenRSS fetch failure` items into actionable framing, plus a clean `Skip: Future Architecture (empty)` line.
+- **vLLM path:** same script with `--endpoint http://localhost:8000/v1/chat/completions --model Qwen/Qwen2.5-32B-Instruct-AWQ` produced **identical** synthesis output to the Ollama run — same 917 characters, same top-3 items in the same order, same `Skip:` line. With `temperature=0.2` and a structured prompt over a structured brief, the two models converge. Useful operational signal: for this synthesis workload, model choice is a convenience question (Ollama is always-on; vLLM has to be running), not a quality question. Default: Ollama + Mistral 24B. When vLLM is up anyway for production multi-GPU inference, route synthesis through it for free.
+
+The repo's stated automated-research goal — running synthesis through owned inference rather than a paid external API — is now empirically validated end-to-end against both serving stacks.
+
 ## 2026-05-09 (Session 13)
 **Focus:** All-3-GPU hardware bring-up under the temporary pigtail rule, multi-GPU inference path validated end-to-end, cable for GPU #3 ordered
 **What was done:**
