@@ -195,7 +195,7 @@ if command -v ipmitool >/dev/null 2>&1; then
   if BMC_LAN=$(sudo -n ipmitool lan print 1 2>/dev/null); then
     BMC_IP=$(echo "$BMC_LAN" | awk -F: '/^IP Address[ ]+:/ {gsub(/ /,"",$2); print $2; exit}')
     BMC_SRC=$(echo "$BMC_LAN" | awk -F: '/IP Address Source/ {sub(/^[ \t]+/,"",$2); print $2; exit}')
-    BMC_MAC=$(echo "$BMC_LAN" | awk -F: '/^MAC Address[ ]+:/ {sub(/^[ \t]+/,"",$2); print $2; exit}')
+    BMC_MAC=$(echo "$BMC_LAN" | awk -F': ' '/^MAC Address/ {print $2; exit}')
     if [[ "$BMC_IP" == "0.0.0.0" || -z "$BMC_IP" ]]; then
       warn "BMC LAN port not patched (IP=$BMC_IP, source=$BMC_SRC)"
     else
