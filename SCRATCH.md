@@ -16,7 +16,8 @@ Focus: All-3-GPU hardware bring-up under the temporary pigtail rule on GPU #3, 7
 - Ordered the proper cable from eBay seller `lizzieb753` UK at landed cost `$49.85`, order `05-14624-65956`. Corrected an earlier `$33.98` quote (item + shipping only) that omitted UK→US import charges and checkout tax. Also corrected an earlier `5-8 days` shipping-time quote — realistic UK→US window is 2-4 weeks, ending around `2026-05-23 to 2026-06-10`. Both quoting errors captured as feedback memory.
 
 ## Late-session validation
-- Re-ran the full 1500-word essay generation on `llama3.3:70b-instruct-q4_K_M` across the 2-GPU layer-split configuration. Output completed with a coherent, well-structured 1500-word essay on distributed computing — research-grade quality, expected slow rate (~8-15 tok/s ceiling for this topology). Empirical confirmation that the day-one stack posture holds: 70B-class for complex reasoning (slow on purpose), 30B-class as the interactive tier.
+- Re-ran the full 1500-word essay generation on `llama3.3:70b-instruct-q4_K_M` across the 2-GPU layer-split configuration. Output completed with a coherent, well-structured 1500-word essay on distributed computing — research-grade quality, expected slow rate (~8-15 tok/s ceiling for this topology).
+- **Interactive tier benchmarked.** `qwen2.5:32b-instruct-q4_K_M` on a single 3090: `eval rate 39.31 tok/s`, `prompt eval rate 696.63 tok/s`, `load duration 8.02 s`. ~3-4× faster than 70B layer-split. Day-one tiering empirically confirmed: 8B fast / 32B interactive / 70B deep-reasoning.
 
 ## Not Proved (still ahead of the build)
 - Sustained 3-GPU heavy inference. Gated on the proper cable arriving and the pigtail being retired. Realistic window for the cable: **2026-05-23 to 2026-06-10**, per the eBay seller's posted estimate. The earlier `5-8 days` figure was a cross-border-shipping quoting mistake on my part; UK Royal Mail / eBay International to US is 2-4 weeks realistically.
