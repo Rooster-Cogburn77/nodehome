@@ -33,6 +33,21 @@
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
 
+## 2026-05-10 (Session 16)
+**Focus:** Permanent in-chassis install — drive cage removal, front-panel header wiring, internal cable cleanup, GPU reinstall, power-on validation
+**What was done:**
+- Removed all three left-side internal drive cage sections from the SilverStone RM400. Build is NVMe-only, so the cages were dead weight blocking cable routing and access to the GPU/PCIe area. With all three cleared, the left-side bay area is fully open for cable management.
+- Wired the front-panel header (JF1) on the H12SSL-i to the chassis FP leads. The H12SSL-i has an on-board power button so the chassis FP power button is redundant for bring-up — wired anyway because the build target is permanent install, not minimum-viable. The JF1 pinout used for this wiring was not captured into a repo runbook; that's a follow-on (action: photograph the JF1 silkscreen or pull the page from the Supermicro `MNL-2314.pdf` and write `docs/runbooks/h12ssl-i-front-panel.md`).
+- Connected both chassis fans (front + rear) to motherboard fan headers.
+- Top GPU was removed during chassis work to access the FP header / cable routing zone, then reinstalled. All 3 GPUs back in their original slots after wiring cleanup.
+- Tidied internal wiring for the permanent install: front-panel wires routed against the chassis edge, USB 3 cable kept clear of the GPU/fan zone, fan leads secured. Confirmed nothing under tension and no thin signal wires running across PCIe slot faces.
+- Powered the host back on after the rebuild. First post-rebuild smoke test was an Open WebUI chat with `gemma3:27b` that returned a coherent reply — confirms Ollama service auto-started, Open WebUI container auto-recovered, and at least one of GPU 0/1 had enough memory to load the ~17 GB model.
+- Operational signal worth flagging: `gemma3:27b` loading at all means there was ~8-9 GB free per card on GPUs 0+1 at chat time. With vLLM at `--gpu-memory-utilization 0.85` it would normally leave only ~2 GiB free per card. So either the vLLM container did not auto-start after the rebuild, or it is up but unloaded. Disambiguate via `docker ps` + `nvidia-smi` + `scripts/healthcheck.sh` next.
+- Decision standing on the open A/B/C trade-off from Session 15: **Option C primary, B fallback, A rejected.** Open WebUI gets a second OpenAI-compatible Connection pointed at the vLLM container (`http://host.docker.internal:8000/v1`) so chat can route to vLLM directly without forcing Ollama to share VRAM with vLLM. If vLLM is down for any reason, fallback is to stop the vLLM container entirely and let Ollama use the full 24 GB per card (Option B). Lowering vLLM memory utilization to 0.55 (Option A) is rejected — the whole point of running vLLM is the higher KV-cache headroom. Implementation deferred to next session.
+- Saved a feedback memory: "don't suggest the easy/shortcut route." Default to the proper path; offering "you don't strictly need this" alternatives reads as me trying to reduce my own work or hedging on the user's standards.
+**Commits:** Pending
+**Next:** Run `scripts/healthcheck.sh` for the post-permanent-install baseline. Verify vLLM container state. Then implement Option C in Open WebUI. After that the next physical phase (rack-mount + IPMI patch + permanent location move) is gated only on the GPU 3 cable arriving and the temporary pigtail being retired.
+
 ## 2026-05-10 (Session 15)
 **Focus:** Operational hardening — service persistence, reboot validation, health-check tooling, IPMI runbook, system-enforced pigtail rule
 **What was done:**
