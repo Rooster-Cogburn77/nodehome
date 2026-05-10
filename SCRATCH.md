@@ -39,7 +39,12 @@ Focus: Post-bring-up software stack expansion. Interactive A/B, Open WebUI, Dock
 ## Next physical step
 - Wait for cable. Realistic window 2026-05-23 to 2026-06-10. Continuing to look for faster source in parallel.
 
-## Next software step (in flight)
-- Confirm vLLM finishes loading the model: `sudo docker logs --tail 50 vllm-server` should eventually show "Application startup complete" or "Uvicorn running on http://0.0.0.0:8000".
-- First benchmark via the OpenAI-compatible API: same 500-word-essay prompt, capture token rate. Compare to Ollama 32B (39.21 tok/s) and Ollama 70B Q4 layer-split (~8-15 tok/s).
-- Then: wire sweeps pipeline to use local Ollama for synthesis (project's stated automated-research goal).
+## vLLM benchmark complete
+- vLLM `v0.19.1` on `Qwen/Qwen2.5-32B-Instruct-AWQ`, TP=2 across GPUs 0+1, awq_marlin kernel + FA2: **`59.13 tok/s`** end-to-end (795 completion tokens in 13.445 s wall clock).
+- ~50% faster than Ollama on the same 32B class (39.21 tok/s GGUF Q4_K_M).
+- ~4-7× faster than Ollama 70B Q4 layer-split (~8-15 tok/s).
+- Day-one stack pin (vLLM for multi-GPU production tier) empirically validated.
+
+## Next software step
+- Wire the existing `sweeps/` pipeline to use the local Ollama (or vLLM) for synthesis. Project's stated automated-research goal.
+- TP=3 + `Qwen/Qwen2.5-72B-Instruct-AWQ` benchmark is gated on GPU 3 being unrestricted (cable arrival).
