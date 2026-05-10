@@ -17,6 +17,7 @@ FACT_NOTEBOOK = ROOT / "sweeps" / "fact_notebook.py"
 BUILD_WEEKLY = ROOT / "sweeps" / "build_weekly.py"
 BUILD_WIKI = ROOT / "sweeps" / "build_wiki.py"
 BUILD_OPERATOR = ROOT / "sweeps" / "build_operator_brief.py"
+LLM_SYNTHESIZE = ROOT / "sweeps" / "llm_synthesize.py"
 
 
 def load_env_file(path: Path) -> int:
@@ -54,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-fact-notebook", action="store_true", help="Do not update the sweep fact notebook.")
     parser.add_argument("--skip-wiki", action="store_true", help="Do not rebuild the generated wiki view.")
     parser.add_argument("--skip-operator", action="store_true", help="Do not rebuild the generated operator brief.")
+    parser.add_argument("--skip-llm-synthesis", action="store_true", help="Do not run the local LLM synthesis pass on the operator brief.")
     parser.add_argument("--skip-email", action="store_true", help="Do not run the email send step.")
     parser.add_argument("--weekly", action="store_true", help="Build the current ISO-week rollup after daily ingest.")
     parser.add_argument("--send-weekly", action="store_true", help="Send the weekly rollup email when --weekly is used.")
@@ -107,6 +109,26 @@ def main() -> int:
         if args.run_date:
             operator_cmd.extend(["--date", args.run_date])
         subprocess.run(operator_cmd, check=True, cwd=ROOT)
+
+    if args.skip_llm_synthesis:
+        print("Skipping LLM synthesis by request.")
+    elif args.skip_operator:
+        print("Skipping LLM synthesis because operator brief was skipped.")
+    else:
+        synth_endpoint = os.getenv("LLM_SYNTHESIS_ENDPOINT", "").strip()
+        if not synth_endpoint:
+            print("LLM_SYNTHESIS_ENDPOINT not set; skipping synthesis. Set in .env to enable.")
+        else:
+            synth_cmd = [python_exe, str(LLM_SYNTHESIZE)]
+            if args.run_date:
+                synth_cmd.append(args.run_date)
+            synth_cmd.extend(["--endpoint", synth_endpoint])
+            synth_model = os.getenv("LLM_SYNTHESIS_MODEL", "").strip()
+            if synth_model:
+                synth_cmd.extend(["--model", synth_model])
+            synth_result = subprocess.run(synth_cmd, cwd=ROOT)
+            if synth_result.returncode != 0:
+                print(f"LLM synthesis returned {synth_result.returncode}; continuing without it.")
 
     if args.skip_email:
         if not args.weekly:

@@ -7,6 +7,10 @@ DIGEST_WEEKLY_EMAIL_ENABLED=false
 SWEEP_AI_SUMMARY_ENABLED=false
 SWEEP_AI_SUMMARY_MODEL=qwen2.5:14b
 SWEEP_AI_SUMMARY_URL=http://127.0.0.1:11434/api/generate
+# Local LLM synthesis (sweeps/llm_synthesize.py, called from run_workflow.py).
+# Leave LLM_SYNTHESIS_ENDPOINT blank to disable. Default model is mistral-small3.1:24b.
+LLM_SYNTHESIS_ENDPOINT=http://192.168.1.198:11434/v1/chat/completions
+LLM_SYNTHESIS_MODEL=mistral-small3.1:24b
 X_EMAIL_IMAP_HOST=imap.example.com
 X_EMAIL_IMAP_PORT=993
 X_EMAIL_IMAP_USERNAME=x-notify@example.com
