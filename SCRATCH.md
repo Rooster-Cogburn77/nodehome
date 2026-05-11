@@ -1,61 +1,48 @@
-# Session Scratch - 2026-05-10 (Session 16)
-Focus: Permanent in-chassis install — drive cage removal, front-panel header wiring, internal cable cleanup, GPU reinstall, power-on validation. Continuation of Session 15's same-day power-down.
+# Session Scratch - 2026-05-11 (Session 17)
+Focus: Home media server planning — scoped a $500 spend on bulk storage to support a household TV/movie library on the existing AI node. No second compute node introduced. Continuation of Session 16's clean rack install + fan threshold fix.
 
-## Reported / done this session
-- All three left-side internal drive cage sections removed from the SilverStone RM400. Build is NVMe-only, so the cages were dead weight blocking cable routing and GPU-area access. Whole left-side bay area now open.
-- Front-panel header (JF1) on the H12SSL-i wired to chassis FP leads. The board has an on-board power button so the chassis FP power button is redundant for bring-up — wired anyway because the build target is permanent install, not minimum-viable.
-- Both chassis fans (front + rear) connected to motherboard fan headers.
-- Top GPU removed during chassis work to gain access; reinstalled with the other two after wiring cleanup. All 3 GPUs back in their original slots.
-- Internal wiring tidied for permanent install: front-panel wires routed against chassis edge, USB 3 cable kept clear of GPU/fan zone, fan leads secured, nothing under tension, no signal wires across PCIe slot faces.
-- Host powered back on after rebuild. Initial smoke test: Open WebUI chat with `gemma3:27b` returned a coherent reply through the Ollama path (model loaded, Ollama service up, Open WebUI container up, at least one of GPU 0/1 had memory).
+## What was decided this session
+- **Architecture:** direct-attached USB storage on the AI node, mounted into the existing Docker stack. Jellyfin container handles the media library; TV-side clients (smart TV apps / Roku / Apple TV / Fire Stick) stream over the home network. No second compute node.
+- **Hardware spec:** 2× WD Easystore 12TB external USB 3.0 drives, ~$420 total. Two drives so single-drive failure loses half the library, not all of it. Media is replaceable, so internal redundancy via ZFS mirror is not required — "two copies by policy" for the irreplaceable subset (photos, MealMastery configs) handled later.
+- **Software stack:** Jellyfin (preferred over Plex — fully free, no remote-stream paywall, mature). Optional automation stack (Sonarr/Radarr/Jellyseerr/Bazarr) can be added later as Docker containers.
+- **3090 HDMI ports stay unused.** Headless server posture preserved; BIOS primary display stays on the onboard ASPEED VGA. The 3090s still do the heavy lifting via NVENC for transcoding, but as compute devices over the network, not as display devices via HDMI.
 
-## Verified by me directly
-- `git status` clean before this checkpoint, on `main`, up to date with `origin/main`.
-- Open WebUI chat content showing `gemma3:27b` responding (user paste).
-- That's it. Everything else in "Reported" above is from the user's narration of the codex-assisted chassis work; I did not personally see `nvidia-smi`, `docker ps`, or `healthcheck.sh` output post-rebuild yet.
+## What was explicitly considered and rejected
+- **Second-node compute box** (M75q-1 + USB drive or similar) — over-engineered for a media-only use case once user clarified they don't want second-node operational overhead.
+- **Synology / QNAP NAS appliance** — $230-380 chassis consumes most of the $500 before any drives.
+- **Internal HDDs in the RM400** — drive cages removed in Session 16; only 1× internal 2.5" SATA bay remains, can't fit 2× 3.5" NAS drives.
+- **More RAM (128 GB → 256 GB)** — user has 115 GB unused headroom on existing 128 GB. RAM is over-provisioned for current and near-term workloads. Inflation-lens argument doesn't override "you won't use it" — speculative RAM is dead capital.
+- **2× 8TB drives in ZFS mirror over USB** — known reliability issues (USB enclosure sleep, controller hangs trip ZFS). Codex's "two copies by policy" is the safer pattern for USB-attached storage.
+- **Plug a TV directly into a 3090 HDMI** — requires BIOS primary-display change + OS-side desktop environment, breaks the headless posture. Network streaming via Jellyfin client apps is the standard pattern.
 
-## Operational signal worth flagging
-- `gemma3:27b` is ~17 GB. For Ollama to load it on GPUs 0+1 (`CUDA_VISIBLE_DEVICES=0,1`), there had to be ~8-9 GB free per card at chat time. With vLLM at `--gpu-memory-utilization 0.85` it leaves only ~2 GiB free per card. So either the vLLM container did not auto-start after the rebuild, or it is up but unloaded. Needs `docker ps` + `nvidia-smi` to disambiguate.
-- This is the same trade-off space recorded at end of Session 15 (the open A/B/C question). Whatever the actual current state is, it's a data point for picking between A/B/C.
+## Key correction taken this session
+- User pushed back on my "drives, RAM, switches keep getting cheaper, buy when needed" framing. Reality: DDR4 ECC RDIMM, HDDs, used server hardware are all *climbing* in price, not dropping. Updated reasoning to "lock in capacity at today's prices where you'll actually use it" — but **only** for resources the user will actually deploy. Speculative buying ahead of need on an item with no current use case is still dead capital, even with prices climbing.
+- Also: I drifted into a "second-node + storage" narrative once home-server use cases came up. User had to push back twice before I re-ranked from scratch and landed on direct-attached storage (no second node). Lesson: re-rank periodically when a conversation starts converging on a particular architectural direction, to avoid path-lock-in the user didn't actually ask for.
 
-## Documentation gap (follow-on)
-- The JF1 pinout used for the FP wiring was not captured into a repo runbook. Per the project rule "Documentation First," the next time GPUs come out and the FP header has to be re-wired, the pinout should already be in repo. Action: when convenient, photograph the JF1 silkscreen on the H12SSL-i (or pull the page from the Supermicro manual at https://www.supermicro.com/manuals/motherboard/EPYC7000/MNL-2314.pdf) and write `docs/runbooks/h12ssl-i-front-panel.md`.
+## Documented this session
+- `docs/runbooks/home-media-server.md` — scope/plan doc covering architecture, hardware spec, software stack, what's out of scope, open items before purchase, order of operations for install day. Companion to the IPMI hardening scope doc from Session 16.
 
-## Decisions standing (carried forward from Session 15)
-- A/B/C trade-off resolution: **Option C primary, B fallback, A rejected.** Open WebUI gets a second OpenAI-compatible Connection pointing at the vLLM container (`http://host.docker.internal:8000/v1`) so chat routes to vLLM directly without forcing Ollama to share VRAM with vLLM. If vLLM is down for whatever reason, fallback is to stop the vLLM container entirely (Option B) and let Ollama use the full 24 GB per card. Lowering vLLM `--gpu-memory-utilization` to 0.55 (Option A) was rejected — the whole point of running vLLM is the higher KV-cache headroom, and giving that up just to satisfy Ollama is the wrong direction.
-- **Option C landed.** Open WebUI Admin Panel → Settings → Connections → added an OpenAI API entry with URL `http://host.docker.internal:8000/v1`, key `local`, prefix ID `vllm`. Verify went green and pulled `Qwen/Qwen2.5-32B-Instruct-AWQ` from the vLLM container. Model picker in chat now shows `vllm.Qwen/Qwen2.5-32B-Instruct-AWQ` alongside the Ollama models. Real prompt got a coherent reply through the vLLM path; user observed it as "really fast" subjectively (matches the Session 14 benchmark of 59.13 tok/s vs 39.21 for Ollama on the same model class). Trade-off closed.
-- Side fix: Qwen claimed it was "hosted by Alibaba Cloud" out of the box, which is just its pretraining identity. Set a per-model System Prompt in Open WebUI Workspace → Models that grounds it in this hardware (3x RTX 3090, EPYC 7302P, vLLM v0.19.1 container, no Alibaba Cloud connection). Same workspace-level system-prompt fix applies to the Ollama models if/when it matters.
+## Open items before purchase
+- Confirm Best Buy / Amazon stock and exact pricing on order day. WD Easystore pricing fluctuates with sale cycles; 14TB sometimes drops within $20-30 of 12TB and becomes the better $/TB pick.
+- Confirm 2× USB 3.x ports available on the AI node and 2× outlets in the rack area (each Easystore needs its own AC brick).
+- Decide library layout: TV on one drive + movies on the other, or both as primary with year/alphabetical split, or one primary + one as backup-of-irreplaceable.
+- Confirm Jellyfin vs Plex (default: Jellyfin).
 
-## Live status of major services (post-rebuild, post-Option-C)
-- `ollama.service` — active, API on `:11434` returning all 5 models (`gemma3:27b`, `mistral-small3.1:24b`, `qwen2.5:32b-instruct-q4_K_M`, `llama3.3:70b-instruct-q4_K_M`, `qwen3:8b`); none currently loaded into VRAM (vLLM owns it).
-- `vllm-server` container — `Up`, port 8000, `/v1/models` returning 200, `Qwen/Qwen2.5-32B-Instruct-AWQ` resident on GPUs 0+1 at ~22 GiB each. Reachable both directly and through Open WebUI.
-- Open WebUI container — `Up`, port 3000, both OpenAI-compatible (vLLM) and Ollama connections active in the model picker.
-- nvidia-smi: GPU 0 22775 MiB, GPU 1 22472 MiB, GPU 2 1 MiB (pigtail rule respected).
-- Permanent in-chassis wiring — done; cable management for permanent install completed.
-- BMC — not re-verified this session post-rebuild. Dedicated IPMI port still unpatched.
+## Out of scope for this $500 (separately planned)
+- **Backup of irreplaceable data** (photos, MealMastery configs, sweep state). Media itself is replaceable; doesn't need backup. The small irreplaceable subset (~50-200 GB) can later use a partition of Drive 2 as a Restic target without buying anything else.
+- **UPS upsize.** BX1500M is undersized; user has 3600W Jackery as fallback buffer. Out of scope for this $500.
+- **Storage growth past 24 TB.** When the library outgrows two drives, the upgrade path is either adding a third drive to the same setup, or migrating to a NAS appliance / DAS enclosure with larger drives.
+- **IPMI hardening Phase 2/3.** Separate networking spend; scope already captured in `docs/runbooks/ipmi-hardening.md`.
 
-## Immediate next steps
-1. `./scripts/healthcheck.sh` — single-pass validation of host/GPUs/storage/Ollama/Docker/APIs/BMC/kernel for the post-rebuild + post-Option-C baseline.
-2. Capture JF1 pinout into `docs/runbooks/h12ssl-i-front-panel.md` before the next chassis-open event.
-3. Begin IPMI hardening per `docs/runbooks/ipmi-hardening.md`. **Phase 1** (password rotation + cert hygiene) can run independent of all four open decisions and is the highest value-per-effort piece. **Phases 2-3** (management VLAN + static IP + cable patch) are blocked on decisions #1, #2, #4 in that doc.
-
-## Outstanding mechanical follow-on
-- **Motherboard mounting screws not all fully installed.** A few standoff screws still need to go in to fully secure the H12SSL-i to the RM400 tray. Currently the board is in position and stable but not 100% screwed down. Address before the rack-mount + permanent location move (i.e., before any handling that would let the board flex against the standoffs). Cheapest moment is the same chassis-open event that captures the JF1 pinout.
-
-## IPMI hardening scoped (this session)
-- New scope doc: `docs/runbooks/ipmi-hardening.md`. Captures the four phases and the four open decisions blocking execution: home network gear, managed switch ownership, password manager destination, fallback posture if the home router can't do VLANs.
-- Companion to the existing `docs/runbooks/ipmi-recovery.md`. The recovery runbook will need an update during Phase 1 step 5 to drop the inline factory password reference and point at whatever password manager the user picks.
-
-## Still ahead (unchanged from Session 15)
-- Cable for GPU #3 in transit, realistic window `2026-05-23 to 2026-06-10`.
-- Rack-mount on Tedgetal sliding shelf, dedicated IPMI ethernet patch, permanent location move — unblocked by the shelf, blocked-by-preference on completing the cable swap first so the box is moved/cabled-into-rack only once.
-- TP=3 + 70B-class AWQ benchmark, ReBAR A/B, sustained 3-GPU thermal soak — all post-cable.
-- Sweeps pipeline migration to server (still on laptop via Task Scheduler).
-
-## Session close-out state
-- Host powered down by user at end of Session 16. `vllm-server`, `ollama.service`, and `open-webui` all confirmed `--restart unless-stopped`-equivalent (Ollama is a systemd service auto-starting on boot, both Docker containers carry `RestartPolicy.Name = unless-stopped` from Session 15). Next power-on should auto-recover the full stack; healthcheck script is the validation tool.
-- Repo at `4a0a4f3` is the post-Option-C verified baseline. This commit will land the IPMI hardening scope doc on top.
-- The build is now functionally a "research lab" rather than a "build in progress." Remaining work is finalization (IPMI hardening, rack mount, GPU 3 cable arrival + pigtail retirement) and choice-of-direction items (benchmarking, automation, second-node planning).
+## Carried forward from Session 16
+- Permanent in-chassis install complete, board screws now all in (per Session 16 follow-on).
+- Rack install complete on Tedgetal sliding shelf.
+- BMC fan threshold fix landed and documented at `docs/runbooks/bmc-fan-thresholds.md`.
+- Healthcheck output clean from rack-install validation: 3 GPUs at P8 idle, both Docker containers up, both APIs serving 200, BMC reachable via USB-NIC.
+- Option C resolved: Open WebUI routes to both Ollama and vLLM with a per-model system prompt grounding Qwen in the local hardware.
+- GPU 3 cable still in transit; temporary pigtail rule still enforced via Ollama `CUDA_VISIBLE_DEVICES=0,1`.
+- JF1 pinout still not photographed into a runbook (next chassis-open event).
 
 ## Operational lessons added this session
-- "Don't suggest the easy/shortcut route" — saved as feedback memory. Default to the proper path; offering "you can skip this" reads as me trying to reduce my own work or hedging on the user's standards.
+- **Re-rank fresh when narratives start to converge.** When a conversation about $500 spend drifted into "second-node + storage," I followed the narrative instead of re-checking whether the original ranking was still right. User had to push back twice to break the drift. Save as feedback memory: periodically re-rank options from scratch during a long planning conversation, especially after the user reframes the use case.
+- **Don't quote prices off old assumptions.** Multiple times this session I quoted drive / chassis / RAM prices that were lower than the actual current market. The market for legacy DDR4 ECC RDIMM and NAS-tier HDDs has tightened. Check actual listings before quoting price ranges in a market-sensitive recommendation.
