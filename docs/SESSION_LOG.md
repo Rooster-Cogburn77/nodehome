@@ -33,6 +33,20 @@
 **Commits:** Pending
 **Next:** If needed, replace the old hyperscaler historical comparison note with a clean inflation-consistent table and keep SubQ in the hosted-routing watch lane until independent validation improves.
 
+## 2026-05-12 (Session 18)
+**Focus:** Daily digest review + sweep pipeline maintenance.
+**What was done:**
+- Reviewed 2026-05-12 core digest. Surfaced one genuine signal that the sweep had swallowed: the vLLM blog had three substantive posts on 2026-05-06 / 2026-05-11 that all appeared as `Blog | vLLM` placeholders in the digest. Manually retrieved them from `https://vllm.ai/blog`:
+  - **"A First Comprehensive Study of TurboQuant: Accuracy and Performance"** (2026-05-11) — KV-cache quantization at low bit-width. Directly relevant to MealMastery / production inference posture; better KV-cache compression unlocks more context length or more concurrent requests within the current `--gpu-memory-utilization 0.85` envelope. **Worth a real read when convenient.**
+  - **"vLLM Tops the Artificial Analysis Leaderboard"** (2026-05-11) — positioning post; notable call-out of Qwen 3.5 397B as a leading-edge model with good vLLM support. Future-watch item.
+  - **"Serving Agentic Workloads at Scale with vLLM x Mooncake"** (2026-05-06) — Mooncake distributed KV cache, 3.8× throughput claim. Multi-node relevance; not actionable for single-node setup today.
+- Confirmed `https://blog.vllm.ai/` 301-redirects to `https://vllm.ai/blog`. May be a contributing factor in the sweep's title-swallow bug for this source.
+- Updated `sweeps/PIPELINE_FOLLOWUPS.md` with three findings: (1) confirmed the vLLM title-swallow bug as recurring not one-off (two consecutive days of identical symptom); recorded the actually-retrieved content so it's preserved even if the sweep never picks it up. (2) new bug: GitHub activity feed produces duplicate entries — "simonw pushed llm" appeared 8+ times in today's digest as separate rows. Need a dedup pass collapsing by `(source, entity, action, date)`. (3) new bug: keyword classifier mis-tags content based on partial term matches — "Using LLM in shebang line" was tagged as a power/thermal topic, the Zombie Internet quote was tagged as an agent/tool-use pattern. Likely shares a root cause with the consumer-gaming mis-classification from 2026-05-11.
+- Other infra items from the digest: Ollama v0.23.3 stable shipped (small patch on currently-pinned v0.23.2, "harden update flows" — could safely upgrade but no urgency; deferred to next monthly review per `docs/runbooks/upgrade-cadence.md`). Ollama v0.30.0-rc13/rc14/rc15 released in 48 hours, with rc14 description mentioning a `llama-runner-phase-0` merge — significant runner architecture change incoming in v0.30. Captured in upgrade-cadence open follow-ups already.
+- No urgent action taken. Build remains stable; digests still useful as discovery surfaces despite the pipeline bugs.
+**Commits:** Pending
+**Next:** Read the TurboQuant post when convenient — evaluate whether vLLM's KV-cache quantization changes would let this stack carry more context or more concurrent requests at the same VRAM envelope, which would directly help MealMastery production capacity. Sweep pipeline bug-fixing remains backlog (filed in `PIPELINE_FOLLOWUPS.md`, no urgency).
+
 ## 2026-05-11 (Session 17)
 **Focus:** Home media server planning — scoped a $500 spend on bulk storage to support a household TV/movie library on the existing AI node.
 **What was done:**

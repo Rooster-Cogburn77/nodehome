@@ -27,16 +27,49 @@ Tracking items for the daily/extended/weekly sweep pipeline that need attention 
 - Add a "consumer gaming exclusion" filter pass to the classifier. Keywords like `PlayStation`, `PS5`, `PS6`, `Xbox`, `GTA`, `Steam Controller`, `Steam Deck`, `AIO` (in chassis/cooler context), `Roblox`, `Switch 2` should down-rank or exclude items unless paired with stack-relevant terms.
 - Consider a positive-signal allow-list for hardware items: must mention `EPYC`, `Threadripper`, `Xeon`, `MI300`, `H100`, `A100`, `V100`, `RTX 3090`, `RTX 4090`, `DDR4 ECC RDIMM`, `vLLM`, `Ollama`, `llama.cpp`, `inference`, `tensor parallel`, etc. — to be relevant to this build's lane.
 
-### 2026-05-11 — Article titles swallowed (replaced by site nav title)
+### 2026-05-11 — Article titles swallowed (replaced by site nav title) [RECURRING]
 
-**Symptom:** in the 2026-05-11 core digest, the vLLM blog post is listed as "Blog | vLLM" with no actual post title or content snippet. That's the page's HTML `<title>` element capturing the site nav header instead of the specific post heading.
+**Symptom:** in the 2026-05-11 core digest AND the 2026-05-12 core digest, the vLLM blog post is listed as "Blog | vLLM" with no actual post title or content snippet. That's the page's HTML `<title>` element capturing the site nav header instead of the specific post heading. **Confirmed recurring on consecutive days, not transient.**
 
-**Probable root cause:** the RSS/Atom fetcher is reading the wrong DOM element when the source is a multi-post blog page vs. a per-post RSS entry. May affect any source that doesn't expose per-post RSS items cleanly.
+**What the swallowed content actually was** (retrieved manually 2026-05-12 from https://vllm.ai/blog):
+- "A First Comprehensive Study of TurboQuant: Accuracy and Performance" (2026-05-11) — KV-cache quantization method using low bit-width. Directly relevant to this build's production posture (vLLM at `--gpu-memory-utilization 0.85`; better KV-cache compression unlocks more context length or more concurrent requests in the same VRAM).
+- "vLLM Tops the Artificial Analysis Leaderboard" (2026-05-11) — positioning post; notable for calling out Qwen 3.5 397B as a leading-edge model with good vLLM support.
+- "Serving Agentic Workloads at Scale with vLLM x Mooncake" (2026-05-06) — Mooncake distributed KV cache, 3.8x throughput claim. Multi-node relevance.
+
+This is two consecutive days where the digest's only vLLM signal was a title-and-content-stripped placeholder while the actual blog had three substantive posts.
+
+**Probable root cause:** the RSS/Atom fetcher is reading the wrong DOM element when the source is a multi-post blog page vs. a per-post RSS entry. Note: `https://blog.vllm.ai/` 301-redirects to `https://vllm.ai/blog` — the redirect may also be confusing the fetcher.
 
 **Action items:**
-- Identify the specific fetcher path used for the vLLM blog source in `sweeps/sources.json` (or wherever sources are defined).
+- Identify the specific fetcher path used for the vLLM blog source in `sweeps/sources.json`. Update to the post-redirect URL `https://vllm.ai/blog`.
 - Add per-source overrides if a site doesn't expose clean RSS — point at a specific feed URL or scrape a different DOM selector.
 - Check whether other "established primary" sources are exhibiting the same swallowed-title issue and would benefit from the same fix.
+- Until fixed: manually check the vLLM blog at least weekly since the digest can't be trusted to surface posts.
+
+### 2026-05-12 — GitHub activity feed produces duplicate entries
+
+**Symptom:** in the 2026-05-12 core digest, the Simon Willison GitHub activity entry "simonw pushed llm" appears 8+ times as separate rows with identical text. Either the GitHub activity feed is being polled multiple times within the digest window, or each individual push event within a session is being treated as a distinct digest entry without deduplication.
+
+**Probable root cause:** GitHub's activity feed reports each `git push` as a separate event. A single development session with 8 pushes generates 8 events. The sweep ingestor isn't collapsing by repo+date or by event signature.
+
+**Action items:**
+- Add a dedup pass on GitHub activity entries that collapses multiple `pushed <repo>` events on the same date into a single digest entry with a count (e.g., "simonw pushed llm (8 times)").
+- Consider a broader dedup pass at the digest-rendering layer that groups by `(source, entity, action, date)` and shows count+representative-title instead of separate rows.
+
+### 2026-05-12 — Keyword classifier mis-tags content based on partial term matches
+
+**Symptom:** the keyword classifier is matching on partial term occurrences without enough context, leading to wildly wrong topic tags. Examples from the 2026-05-12 core digest:
+- "New TIL: I figured out how to use my LLM CLI tool in a shebang line..." → tagged as **"Power or thermal topic — relevant to the 1600W PSU and blower cooling config."** The classifier matched on "LLM" or some other term and routed to the power/thermal bucket. The actual content is a workflow item.
+- "This is excellent. I particularly like the definition of the 'Zombie Internet'..." → tagged as **"Agent or tool-use pattern — relevant to local AI workflow automation."** It's a quote post / meta commentary, not an agent/tool-use signal.
+
+This is a different class of issue from the consumer-gaming mis-classification filed 2026-05-11 — that one was over-broad inclusion (consumer gaming items reaching the hardware bucket); this one is wrong-bucket routing on content that legitimately belongs in *some* bucket but not the one assigned.
+
+**Probable root cause:** the topic-tag-assignment heuristic is using too-shallow keyword features without contextual disambiguation. "LLM" alone shouldn't route to power-thermal; it should require co-occurrence with thermal/power terms.
+
+**Action items:**
+- Audit the topic-tag dictionary / routing rules. Move from single-keyword triggers to keyword + context (require two or more terms from the same topical cluster).
+- Consider a "did the LLM synthesizer actually flag this as relevant to topic X" cross-check before stamping a topic tag at digest-render time.
+- Likely shares a root cause with the consumer-gaming mis-classification — the underlying classifier is too aggressive on shallow keyword matches across multiple failure modes.
 
 ### Pre-existing — X/OpenRSS social feed health degraded
 
