@@ -1,48 +1,49 @@
-# Session Scratch - 2026-05-11 (Session 17)
-Focus: Home media server planning — scoped a $500 spend on bulk storage to support a household TV/movie library on the existing AI node. No second compute node introduced. Continuation of Session 16's clean rack install + fan threshold fix.
+# Session Scratch - 2026-05-12 (Session 18, afternoon)
+Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt in progress. Continuation of morning's digest review and sweep pipeline maintenance.
 
-## What was decided this session
-- **Architecture:** direct-attached USB storage on the AI node, mounted into the existing Docker stack. Jellyfin container handles the media library; TV-side clients (smart TV apps / Roku / Apple TV / Fire Stick) stream over the home network. No second compute node.
-- **Hardware spec:** 2× WD Easystore 12TB external USB 3.0 drives, ~$420 total. Two drives so single-drive failure loses half the library, not all of it. Media is replaceable, so internal redundancy via ZFS mirror is not required — "two copies by policy" for the irreplaceable subset (photos, MealMastery configs) handled later.
-- **Software stack:** Jellyfin (preferred over Plex — fully free, no remote-stream paywall, mature). Optional automation stack (Sonarr/Radarr/Jellyseerr/Bazarr) can be added later as Docker containers.
-- **3090 HDMI ports stay unused.** Headless server posture preserved; BIOS primary display stays on the onboard ASPEED VGA. The 3090s still do the heavy lifting via NVENC for transcoding, but as compute devices over the network, not as display devices via HDMI.
+## What was decided/executed this session
+- **Drive #1 purchased:** WD My Book 12TB (`WDBBGB0120HBK-Newm`), Walmart, $249. Last 2 in stock at that location. Arrives 2026-05-12 evening.
+- **Market shock confirmed industry-wide.** Same SKU spiked to $323.49 hours after purchase. Multi-retailer check confirmed: WD sold out for 2026, prices up ~46% since Sept 2025, Best Buy 12TB Easystore sold out, Newegg $440. Root cause: AI-hyperscaler nearline HDD demand.
+- **New durable doc:** `docs/wiki/concepts/hardware-supply-2026.md` capturing the market context, related DDR4 ECC RDIMM trajectory, decision rules for spending in this market.
+- **Drive #2 hunt in progress** (no commit yet):
+  - YellowChoo 12TB Easystore: opened $150 best offer → seller countered $175 → user re-countered $160 (pending).
+  - savsystems 14TB Elements "for parts": $30 best offer sent (technical-buyer side bet, recoverable-drive odds ~60-65%).
+  - Reviewed and passed on two used 14TB drives with concerning SMART data (34-36k power-on hours, 30,710 Read Recovery Attempts on one of them).
+- **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
-## What was explicitly considered and rejected
-- **Second-node compute box** (M75q-1 + USB drive or similar) — over-engineered for a media-only use case once user clarified they don't want second-node operational overhead.
-- **Synology / QNAP NAS appliance** — $230-380 chassis consumes most of the $500 before any drives.
-- **Internal HDDs in the RM400** — drive cages removed in Session 16; only 1× internal 2.5" SATA bay remains, can't fit 2× 3.5" NAS drives.
-- **More RAM (128 GB → 256 GB)** — user has 115 GB unused headroom on existing 128 GB. RAM is over-provisioned for current and near-term workloads. Inflation-lens argument doesn't override "you won't use it" — speculative RAM is dead capital.
-- **2× 8TB drives in ZFS mirror over USB** — known reliability issues (USB enclosure sleep, controller hangs trip ZFS). Codex's "two copies by policy" is the safer pattern for USB-attached storage.
-- **Plug a TV directly into a 3090 HDMI** — requires BIOS primary-display change + OS-side desktop environment, breaks the headless posture. Network streaming via Jellyfin client apps is the standard pattern.
+## Open follow-ons
+- Tonight: receive Drive #1, run on-arrival checklist (lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight). Mount at `/mnt/storage`.
+- Wait 24-48h on YellowChoo $160 counter.
+- Wait on savsystems $30 response.
+- If YellowChoo declines or holds firm at $175: meet at $175 ($195 total) — still a good deal in this market, 30-day returns is the safety net.
+- If YellowChoo deal falls through entirely: "I Sell Hard Drives" 14TB Easystore at $196 ($206.70 total, no returns but HDD specialist with strong DOA-handling track record) is the strongest backup.
+- After both drives in: spin up Jellyfin container, ingest first household media test content.
 
-## Key correction taken this session
-- User pushed back on my "drives, RAM, switches keep getting cheaper, buy when needed" framing. Reality: DDR4 ECC RDIMM, HDDs, used server hardware are all *climbing* in price, not dropping. Updated reasoning to "lock in capacity at today's prices where you'll actually use it" — but **only** for resources the user will actually deploy. Speculative buying ahead of need on an item with no current use case is still dead capital, even with prices climbing.
-- Also: I drifted into a "second-node + storage" narrative once home-server use cases came up. User had to push back twice before I re-ranked from scratch and landed on direct-attached storage (no second node). Lesson: re-rank periodically when a conversation starts converging on a particular architectural direction, to avoid path-lock-in the user didn't actually ask for.
+## Budget state
+- Spent: $249 (Drive #1)
+- Remaining: $251 of $500
+- Expected Drive #2 landing: $180-195 → total $429-444 (under budget by $56-71)
+- Worst-case Drive #2 (full retail backup play): $250 → total $499 (right at ceiling)
+- savsystems experiment: $30 separate, not budget-counted
 
-## Documented this session
-- `docs/runbooks/home-media-server.md` — scope/plan doc covering architecture, hardware spec, software stack, what's out of scope, open items before purchase, order of operations for install day. Companion to the IPMI hardening scope doc from Session 16.
+## Carried forward from this morning (Session 18 core)
+- Sweep pipeline bugs (4 open, see `sweeps/PIPELINE_FOLLOWUPS.md`): vLLM title-swallow [recurring], synthesis boilerplate, consumer-gaming mis-classification, GitHub activity duplicates, partial-keyword mis-tags.
+- vLLM blog signal recovered: TurboQuant KV-cache quantization post worth reading when convenient (directly applies to the `--gpu-memory-utilization 0.85` production posture).
+- Ollama v0.30.0-rc15 + v0.23.3 stable both shipped; deferred to next monthly upgrade review per `docs/runbooks/upgrade-cadence.md`.
+- Open WebUI rolling-tag `:main` should re-pull as `:v0.9.5` explicit pin per the same upgrade-cadence doc.
 
-## Open items before purchase
-- Confirm Best Buy / Amazon stock and exact pricing on order day. WD Easystore pricing fluctuates with sale cycles; 14TB sometimes drops within $20-30 of 12TB and becomes the better $/TB pick.
-- Confirm 2× USB 3.x ports available on the AI node and 2× outlets in the rack area (each Easystore needs its own AC brick).
-- Decide library layout: TV on one drive + movies on the other, or both as primary with year/alphabetical split, or one primary + one as backup-of-irreplaceable.
-- Confirm Jellyfin vs Plex (default: Jellyfin).
-
-## Out of scope for this $500 (separately planned)
-- **Backup of irreplaceable data** (photos, MealMastery configs, sweep state). Media itself is replaceable; doesn't need backup. The small irreplaceable subset (~50-200 GB) can later use a partition of Drive 2 as a Restic target without buying anything else.
-- **UPS upsize.** BX1500M is undersized; user has 3600W Jackery as fallback buffer. Out of scope for this $500.
-- **Storage growth past 24 TB.** When the library outgrows two drives, the upgrade path is either adding a third drive to the same setup, or migrating to a NAS appliance / DAS enclosure with larger drives.
-- **IPMI hardening Phase 2/3.** Separate networking spend; scope already captured in `docs/runbooks/ipmi-hardening.md`.
-
-## Carried forward from Session 16
-- Permanent in-chassis install complete, board screws now all in (per Session 16 follow-on).
-- Rack install complete on Tedgetal sliding shelf.
-- BMC fan threshold fix landed and documented at `docs/runbooks/bmc-fan-thresholds.md`.
-- Healthcheck output clean from rack-install validation: 3 GPUs at P8 idle, both Docker containers up, both APIs serving 200, BMC reachable via USB-NIC.
-- Option C resolved: Open WebUI routes to both Ollama and vLLM with a per-model system prompt grounding Qwen in the local hardware.
-- GPU 3 cable still in transit; temporary pigtail rule still enforced via Ollama `CUDA_VISIBLE_DEVICES=0,1`.
-- JF1 pinout still not photographed into a runbook (next chassis-open event).
+## Carried forward from earlier sessions (Sessions 16-17, still relevant)
+- Permanent in-chassis install complete; rack-installed on Tedgetal sliding shelf at U3-U6.
+- All 3 GPUs at PCIe Gen 4 x16 under load; pigtail rule still enforced on GPU 2 via Ollama `CUDA_VISIBLE_DEVICES=0,1` until GPU 3 cable arrives (window 2026-05-23 to 2026-06-10).
+- BMC fan threshold fix landed (`docs/runbooks/bmc-fan-thresholds.md`).
+- Option C resolved (Open WebUI routes to both Ollama and vLLM; per-model system prompt grounds Qwen in local hardware).
+- Home media server scope captured (`docs/runbooks/home-media-server.md`).
+- IPMI hardening scope captured (`docs/runbooks/ipmi-hardening.md`) — 4 phases, 4 decisions blocking execution.
+- Stack upgrade cadence policy captured (`docs/runbooks/upgrade-cadence.md`).
+- Local-AI thesis external references (`docs/wiki/research/local-ai-thesis-external-references.md`).
+- Hardware supply 2026 context (`docs/wiki/concepts/hardware-supply-2026.md`) — new this session.
 
 ## Operational lessons added this session
-- **Re-rank fresh when narratives start to converge.** When a conversation about $500 spend drifted into "second-node + storage," I followed the narrative instead of re-checking whether the original ranking was still right. User had to push back twice to break the drift. Save as feedback memory: periodically re-rank options from scratch during a long planning conversation, especially after the user reframes the use case.
-- **Don't quote prices off old assumptions.** Multiple times this session I quoted drive / chassis / RAM prices that were lower than the actual current market. The market for legacy DDR4 ECC RDIMM and NAS-tier HDDs has tightened. Check actual listings before quoting price ranges in a market-sensitive recommendation.
+- **Tech prices are climbing in 2026, not falling.** Specifically: HDDs (AI-hyperscaler demand) and DDR4 ECC RDIMM (EOL). The "buy when needed" framing only safely applies if (a) the use case is concrete and (b) the category isn't in supply distress. For HDD/DDR4 ECC RDIMM with a real use case, prefer buy-now over wait-and-see.
+- **Used 14TB market is now dominated by heavy-use datacenter pulls.** Watch SMART data carefully — Read Recovery Attempts is the leading indicator of failure on rotating media, more telling than reallocated sector count alone (because retries hide trouble until they stop working). 30k+ Read Recovery Attempts is a pass regardless of how clean the other counters look.
+- **Real-time price spikes confirm supply distress, not just listing variance.** Same SKU jumping 30% intraday on the last in-stock unit is a market signal, not an outlier.
