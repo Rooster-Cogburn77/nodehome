@@ -12,12 +12,17 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
 - **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
 ## Open follow-ons
-- Tonight: receive Drive #1, run on-arrival checklist (lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight). Mount at `/mnt/storage`.
-- Wait 24-48h on YellowChoo $160 counter.
+- Receive Drive #1 when Walmart ships (delivery TBD; was originally 2026-05-12 evening but delayed). On arrival: lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight. Mount at `/mnt/storage`.
+- Wait on YellowChoo $160 counter (sent 2026-05-12).
 - Wait on savsystems $30 response.
 - If YellowChoo declines or holds firm at $175: meet at $175 ($195 total) — still a good deal in this market, 30-day returns is the safety net.
 - If YellowChoo deal falls through entirely: "I Sell Hard Drives" 14TB Easystore at $196 ($206.70 total, no returns but HDD specialist with strong DOA-handling track record) is the strongest backup.
 - After both drives in: spin up Jellyfin container, ingest first household media test content.
+- **SCW RAM dispute resolution follow-ups (2026-05-13):**
+  - Receive prepaid return label from eBay (typically within 24 hours of forced refund decision).
+  - Ship LRDIMM kit back to SCW carefully (anti-static, foam, sturdy box). Use carrier indicated on label; keep tracking number.
+  - Wait for $454.65 refund to process (typically 2-5 business days after SCW receives the return).
+  - **Open decision: leave factual negative seller feedback for SCW.** Window closes ~2026-06-03 (60 days from 2026-04-04 purchase). Decision deferred — undecided whether to leave feedback or not. If yes, factual not emotional; reference the structured-field mismatch and eBay-forced resolution. If no, the win stands procedurally and that's enough. Come back to this after refund clears.
 
 ## Budget state
 - Spent: $249 (Drive #1)
