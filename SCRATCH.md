@@ -13,23 +13,19 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
 
 ## Open follow-ons
 - Receive Drive #1 when Walmart ships (delivery TBD; was originally 2026-05-12 evening but delayed). On arrival: lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight. Mount at `/mnt/storage`.
-- Wait on YellowChoo $160 counter (sent 2026-05-12).
-- Wait on savsystems $30 response.
-- If YellowChoo declines or holds firm at $175: meet at $175 ($195 total) — still a good deal in this market, 30-day returns is the safety net.
-- If YellowChoo deal falls through entirely: "I Sell Hard Drives" 14TB Easystore at $196 ($206.70 total, no returns but HDD specialist with strong DOA-handling track record) is the strongest backup.
-- After both drives in: spin up Jellyfin container, ingest first household media test content.
-- **SCW RAM dispute resolution follow-ups (2026-05-13):**
-  - Receive prepaid return label from eBay (typically within 24 hours of forced refund decision).
-  - Ship LRDIMM kit back to SCW carefully (anti-static, foam, sturdy box). Use carrier indicated on label; keep tracking number.
-  - Wait for $454.65 refund to process (typically 2-5 business days after SCW receives the return).
-  - **Open decision: leave factual negative seller feedback for SCW.** Window closes ~2026-06-03 (60 days from 2026-04-04 purchase). Decision deferred — undecided whether to leave feedback or not. If yes, factual not emotional; reference the structured-field mismatch and eBay-forced resolution. If no, the win stands procedurally and that's enough. Come back to this after refund clears.
+- **Drive #2 ordered 2026-05-13 at 3:50 PM:** WD My Book 12TB "new" from PayMore Westport (seller LLC: SPEEKS Technology, Overland Park KS), eBay order `03-14645-30973`. **$239.99 + $19.80 TX sales tax = $259.79 total** with free shipping. Delivery May 16-20 via USPS Ground. Returns through June 19. **On arrival verification protocol:** photograph packaging seals before opening; plug in, run `smartctl -d sat -a /dev/sdX` BEFORE formatting; check Power-On Hours (<30 = genuinely new, >200 = wiped-used, file return). If clean: wipefs + ext4 + mount as `/mnt/storage` next to Drive #1 (assuming drive 1 lands first).
+- **SCW RAM return shipped 2026-05-13** (dropped off today). Tracking via eBay return label; awaiting carrier confirmation, then SCW receipt, then $454.65 refund processing (typically 2-5 business days after receipt).
+- YellowChoo path dropped (declined $160 / expired; drive showed visible cosmetic damage scratches + chipped enclosure + no SMART data — backed out for cause).
+- savsystems $30 parts-drive offer: still pending response, can let it ride.
+- After both real drives in: spin up Jellyfin container, ingest first household media test content.
+- **Open decision still on the docket: leave factual negative seller feedback for SCW.** Window closes ~2026-06-03 (60 days from 2026-04-04 purchase). Decision deferred — undecided. If yes, factual not emotional. Come back after refund clears.
 
-## Budget state
-- Spent: $249 (Drive #1)
-- Remaining: $251 of $500
-- Expected Drive #2 landing: $180-195 → total $429-444 (under budget by $56-71)
-- Worst-case Drive #2 (full retail backup play): $250 → total $499 (right at ceiling)
-- savsystems experiment: $30 separate, not budget-counted
+## Budget state (updated 2026-05-13)
+- Drive #1 (Walmart WD My Book 12TB): $249 list (+ TX sales tax ≈ $269 total estimated)
+- Drive #2 (PayMore via eBay WD My Book 12TB): $259.79 (with tax, free shipping)
+- **Total drive spend: ~$528.79** — $28.79 over the original $500 ceiling
+- savsystems $30 experiment: still pending, not budget-counted
+- Justification: market shock confirmed mid-purchase (WD sold out 2026, prices up ~46% since Sept 2025); two 12TB drives for $528 in a market where one new 12TB drive is $300-440 retail at authorized channels is a defensible outcome. Original budget targeted a pre-shortage market that no longer exists.
 
 ## Carried forward from this morning (Session 18 core)
 - Sweep pipeline bugs (4 open, see `sweeps/PIPELINE_FOLLOWUPS.md`): vLLM title-swallow [recurring], synthesis boilerplate, consumer-gaming mis-classification, GitHub activity duplicates, partial-keyword mis-tags.
