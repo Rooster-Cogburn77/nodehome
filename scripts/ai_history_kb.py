@@ -92,6 +92,7 @@ STOP_WORDS = {
     "said",
     "tell",
     "me",
+    "open",
 }
 
 
@@ -181,8 +182,15 @@ def normalize_query(query: str) -> str:
     if '"' in query or " OR " in query or " AND " in query:
         return query
 
+    replacements = {
+        "open webui": "openwebui",
+    }
+    normalized = query.lower()
+    for phrase, token in replacements.items():
+        normalized = normalized.replace(phrase, token)
+
     terms = []
-    for term in re.findall(r"[A-Za-z0-9_+-]{3,}", query.lower()):
+    for term in re.findall(r"[A-Za-z0-9_+-]{3,}", normalized):
         if term not in STOP_WORDS:
             terms.append(term)
 
@@ -219,9 +227,17 @@ def add_item(
         INSERT INTO kb_fts (rowid, source_system, title, kind, role, text)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (rowid, source_system, title, kind, role, text),
+        (rowid, source_system, title, kind, role, f"{text}\n{text_aliases(text)}"),
     )
     return 1
+
+
+def text_aliases(text: str) -> str:
+    aliases = []
+    lowered = text.lower()
+    if "open webui" in lowered:
+        aliases.append("openwebui")
+    return " ".join(aliases)
 
 
 def add_source_item(
