@@ -199,13 +199,15 @@ sudo cp ~/nodehome/scripts/systemd/ai-history-kb.service /etc/systemd/system/ai-
 sudo systemctl daemon-reload
 sudo systemctl enable --now ai-history-kb.service
 systemctl status ai-history-kb.service --no-pager
-curl http://127.0.0.1:8765/health
 ```
 
-If `AI_HISTORY_HOST=172.17.0.1`, test from the host with:
+Test from the host:
 
 ```bash
-curl http://172.17.0.1:8765/health
+set -a
+. ~/node-private/chat-exports/ai-history-kb.env
+set +a
+curl -H "Authorization: Bearer ${AI_HISTORY_TOKEN}" "http://${AI_HISTORY_HOST}:${AI_HISTORY_PORT}/health"
 ```
 
 Security note: the service must be reachable from the Open WebUI Docker container through `host.docker.internal`. Prefer binding to the Docker bridge address plus `AI_HISTORY_TOKEN`. Use `0.0.0.0` only on a trusted LAN, and do not expose this service to the internet.
