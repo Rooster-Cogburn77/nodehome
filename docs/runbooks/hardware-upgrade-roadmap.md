@@ -120,6 +120,18 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 
 **Defer:** Single-device certificate authority is over-engineering.
 
+### Rack acoustic lining
+
+**Current state:** BMC fan threshold cycling was fixed. Remaining noise concern is fan ramping / fan hunting, not a confirmed rack-panel resonance problem.
+
+**Decision:** Do not buy adhesive acoustic foam for the rack interior. See `docs/wiki/decisions/rack-acoustic-treatment.md`.
+
+**Trigger:** Only revisit physical acoustic material if a specific resonance is identified.
+
+**If pursued:** Use rubber / neoprene isolation under external HDDs, blanking panels for airflow cleanup, or Dynamat-style butyl only on solid non-vented panels that audibly ring. Do not place foam near GPU exhaust, PSU exhaust, intake paths, or inside the RM400.
+
+**Defer:** Fan ramping should be solved by measuring fan, temperature, and load behavior, not by lining the rack.
+
 ---
 
 ## Software / configuration upgrades (no spend)

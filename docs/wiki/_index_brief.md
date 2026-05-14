@@ -10,12 +10,13 @@
 - claw-code: Open-source Claude Code agent harness
 - solar-offgrid-power: ~1.6 hours at full load, supplemental only
 
-## Decisions (5)
+## Decisions (6)
 - epyc-over-threadripper: 128 PCIe lanes, ECC, cost
 - blower-mandate: Slot physics in 4U chassis
 - ram-speed-irrelevant: GPU VRAM is the bottleneck, not system RAM
 - tlc-over-qlc: QLC fails under AI server read loads
 - noctua-over-arctic: Clearance margin and idle noise matter in living room placement
+- rack-acoustic-treatment: No rack-internal foam; use damping only for vibration
 
 ## Raw Sources (1)
 - ai-agent-traps-deepmind-2026: First intake using the raw/ → wiki/ pipeline
