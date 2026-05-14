@@ -139,6 +139,7 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 These don't fit the hardware roadmap but are on the same opportunity-cost ledger when the build expands:
 
 - Open WebUI repin from `:main` rolling tag to `:v0.9.5` explicit version (per `docs/runbooks/upgrade-cadence.md`)
+- Persistent NVIDIA power-cap unit for the validated 2-GPU vLLM profile (`docs/runbooks/nvidia-power-cap.md`): apply `300 W` to GPUs 0 and 1 after driver load; leave GPU 2 untouched until the proper cable arrives.
 - Ollama v0.30.0 evaluation when stable ships (currently rc15)
 - vLLM v0.21.0 release notes review (TurboQuant KV-cache quantization)
 - IPMI hardening Phase 1 (BMC password rotation, cert hygiene — runs in-band, no hardware needed)

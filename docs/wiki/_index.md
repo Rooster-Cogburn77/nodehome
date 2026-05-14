@@ -1,6 +1,6 @@
 # Sovereign Node Wiki Index
 
-## Concepts (7 articles)
+## Concepts (8 articles)
 | Article | Description |
 |---------|-------------|
 | [blower-gpu-form-factor](concepts/blower-gpu-form-factor.md) | Why 2-slot blower GPUs are mandatory for dense rack builds |
@@ -12,7 +12,7 @@
 | [claw-code](concepts/claw-code.md) | Open-source Claude Code agent harness (github.com/instructkr/claw-code) |
 | [solar-offgrid-power](concepts/solar-offgrid-power.md) | Solar/Jackery = ~1.6 hours at full load, supplemental only |
 
-## Decisions (6 articles)
+## Decisions (7 articles)
 | Decision | Date | Summary |
 |----------|------|---------|
 | [epyc-over-threadripper](decisions/epyc-over-threadripper.md) | 2026-04 | Why EPYC 7302 over Threadripper (128 PCIe lanes, ECC) |
@@ -20,6 +20,7 @@
 | [ram-speed-irrelevant](decisions/ram-speed-irrelevant.md) | 2026-04 | Why DDR4-2133 is fine (GPU VRAM is the bottleneck) |
 | [tlc-over-qlc](decisions/tlc-over-qlc.md) | 2026-04 | Why TLC SSD mandatory (QLC fails under AI read loads) |
 | [noctua-over-arctic](decisions/noctua-over-arctic.md) | 2026-04 | Why Noctua TR4-SP3 over Arctic 4U-M (clearance + idle noise in living room) |
+| [vllm-300w-power-cap](decisions/vllm-300w-power-cap.md) | 2026-05 | Why 300W + top fan is the sustained 2-GPU vLLM default |
 | [rack-acoustic-treatment](decisions/rack-acoustic-treatment.md) | 2026-05 | Why rack-internal foam is rejected; damping is allowed only for vibration |
 
 ## Research (8 articles)
