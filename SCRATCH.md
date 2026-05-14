@@ -11,17 +11,16 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
   - Reviewed and passed on two used 14TB drives with concerning SMART data (34-36k power-on hours, 30,710 Read Recovery Attempts on one of them).
 - **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
-## Validation backlog (work that can happen NOW, no hardware blockers)
-- **Sustained 2-GPU thermal soak** — vLLM inference loop on Qwen 32B for 4-8 hours, monitor `nvidia-smi` + temps + power. Validates production posture for MealMastery under sustained load.
-- **128 GB ECC RAM stress test** — `memtester` or `stress-ng --vm` for 4-12 hours. Catches latent ECC errors or DIMM issues.
-- **NVMe burn-in via `fio`** — random + sequential reads/writes, 1-4 hrs. Validates Acer GM7 isn't aging out.
-- **Network throughput** — `iperf3` between AI node and laptop. Catches duplex/cable issues.
-- **Multi-model concurrent load** — vLLM + Ollama queries concurrently, validate Option C edges.
-- **Read vLLM v0.21.0 release notes** — could affect `--gpu-memory-utilization 0.85` calculus (TurboQuant KV-cache work).
-- **Read Ollama v0.30.0 release notes** — major version bump from pinned v0.23.2.
-- **Healthcheck automation** — sudoers NOPASSWD entries for specific commands + cron hourly. Operational hygiene.
-- **Power consumption baseline** — Kill-A-Watt or smart plug at wall; informs UPS sizing.
-- **Backup pipeline groundwork** — install `restic`, write script targeting `/mnt/storage` once drives arrive.
+## Validation backlog (re-ranked 2026-05-13 with safety edges tightened)
+1. **Staged 2-GPU vLLM thermal soak** — DO NOT start with 4-8h unattended. Stage: 15 min watched → 1h watched → overnight if temps/power/fans stable. Keep strictly on GPUs 0,1 (pigtail rule). Validates production posture for MealMastery under sustained load.
+2. **Power consumption baseline** — Kill-A-Watt or smart plug. Capture multiple states: idle / vLLM loaded idle / 2-GPU inference under load / (later, post-cable) 3-GPU under load. Foundational data — informs UPS sizing (Tier 1 spend), circuit capacity, heat, noise. Higher-priority than I initially listed.
+3. **Healthcheck automation** — **narrow** NOPASSWD entries only for specific read-only commands the script needs (not broad `sudo -n` access). Cleaner alternative: run as root via systemd timer instead of cron. Operational hygiene without broadening the attack surface.
+4. **Network throughput** — `iperf3` between AI node and laptop. Quick (5 min) and useful; catches NIC/cable/switch weirdness.
+5. **Release-notes review** (vLLM v0.21.x, Ollama v0.30.x) — **review BEFORE upgrading, not before proving current stack.** Current stable stack already works; release notes are upgrade-decision input, not validation work.
+6. **RAM stress test** — lower urgency since the machine has booted and run on the RDIMMs already. If doing it: `stress-ng --vm 14 --vm-bytes 6G --timeout 4h` style — leave OS headroom (~30-40 GB), don't allocate the full 128 GB.
+7. **NVMe non-destructive `fio` benchmark** — **CRITICAL: use `--filename=/path/to/testfile` against a file on the mounted filesystem, NOT raw `/dev/nvme0n1`.** Raw-device fio destroys the filesystem. Test file should be ~10-50 GB on root, removed after.
+8. **Multi-model concurrent load** — lower value. Already know vLLM at 0.85 leaves ~2 GiB free, Ollama models won't fit. Test should validate **graceful failure** (Ollama returns OOM cleanly, doesn't crash the host or Open WebUI), not performance.
+9. **Backup pipeline groundwork** — wait until external drives are physically present, unless just drafting scripts. Premature setup against non-existent mount points adds zero value.
 
 **Gated on GPU 3 cable arrival** (sustained 3-GPU work, TP=3 vLLM, 70B AWQ across all 3, ReBAR A/B): wait for cable; window 2026-05-23 to 2026-06-10.
 
