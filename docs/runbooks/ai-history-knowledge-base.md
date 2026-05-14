@@ -56,6 +56,8 @@ Useful environment overrides:
 AI_HISTORY_ROOT=/home/bmoore_77/node-private/chat-exports
 AI_HISTORY_SNAPSHOT=2026-05-14
 AI_HISTORY_DB=/home/bmoore_77/node-private/chat-exports/unified/index/ai-history-2026-05-14.sqlite
+AI_HISTORY_HOST=0.0.0.0
+AI_HISTORY_PORT=8765
 AI_HISTORY_TOKEN=<optional bearer token for HTTP mode>
 ```
 
@@ -167,7 +169,30 @@ Repo-owned Open WebUI tool file:
 scripts/openwebui/ai_history_tool.py
 ```
 
-Install the persistent host API service:
+Install the persistent host API service.
+
+Optional but recommended before install: bind to Docker's host bridge and set a bearer token. On most Docker installs the bridge is `172.17.0.1`; verify with `ip -4 addr show docker0`.
+
+```bash
+mkdir -p ~/node-private/chat-exports
+openssl rand -hex 32
+```
+
+Put the generated token in:
+
+```bash
+nano ~/node-private/chat-exports/ai-history-kb.env
+```
+
+Example env file:
+
+```text
+AI_HISTORY_HOST=172.17.0.1
+AI_HISTORY_PORT=8765
+AI_HISTORY_TOKEN=paste-generated-token-here
+```
+
+Then install:
 
 ```bash
 sudo cp ~/nodehome/scripts/systemd/ai-history-kb.service /etc/systemd/system/ai-history-kb.service
@@ -177,7 +202,13 @@ systemctl status ai-history-kb.service --no-pager
 curl http://127.0.0.1:8765/health
 ```
 
-Security note: the service binds to `0.0.0.0:8765` in the systemd unit so the Open WebUI Docker container can reach it through `host.docker.internal`. This should remain on the trusted home LAN only. If the node becomes reachable from broader networks, set `AI_HISTORY_TOKEN` in `/home/bmoore_77/node-private/chat-exports/ai-history-kb.env` and configure the same token in the Open WebUI tool valves.
+If `AI_HISTORY_HOST=172.17.0.1`, test from the host with:
+
+```bash
+curl http://172.17.0.1:8765/health
+```
+
+Security note: the service must be reachable from the Open WebUI Docker container through `host.docker.internal`. Prefer binding to the Docker bridge address plus `AI_HISTORY_TOKEN`. Use `0.0.0.0` only on a trusted LAN, and do not expose this service to the internet.
 
 Open WebUI setup:
 
@@ -188,7 +219,7 @@ Open WebUI setup:
 5. Save it as `Nodehome AI History`.
 6. Open the tool's valves/settings.
 7. Set `endpoint` to `http://host.docker.internal:8765`.
-8. Set `token` only if `AI_HISTORY_TOKEN` is configured.
+8. Set `token` to the same value as `AI_HISTORY_TOKEN` if configured.
 9. Attach the tool to the target model from `Workspace -> Models -> <model> -> Tools`.
 10. Ensure Function Calling is set to `Native`, not legacy Default mode.
 

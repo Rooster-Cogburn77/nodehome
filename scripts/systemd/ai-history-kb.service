@@ -10,8 +10,10 @@ WorkingDirectory=/home/bmoore_77/nodehome
 Environment=AI_HISTORY_ROOT=/home/bmoore_77/node-private/chat-exports
 Environment=AI_HISTORY_SNAPSHOT=2026-05-14
 Environment=AI_HISTORY_DB=/home/bmoore_77/node-private/chat-exports/unified/index/ai-history-2026-05-14.sqlite
+Environment=AI_HISTORY_HOST=0.0.0.0
+Environment=AI_HISTORY_PORT=8765
 EnvironmentFile=-/home/bmoore_77/node-private/chat-exports/ai-history-kb.env
-ExecStart=/usr/bin/python3 /home/bmoore_77/nodehome/scripts/ai_history_kb.py serve --host 0.0.0.0 --port 8765
+ExecStart=/usr/bin/python3 /home/bmoore_77/nodehome/scripts/ai_history_kb.py serve --host ${AI_HISTORY_HOST} --port ${AI_HISTORY_PORT}
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
