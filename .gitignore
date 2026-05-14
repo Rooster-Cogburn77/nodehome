@@ -9,6 +9,8 @@ nul
 docs/sweeps/inbox/*.jsonl
 docs/sweeps/notebook/*.sqlite
 docs/sweeps/notebook/*.sqlite-*
+node-private/
+chat-exports/
 docs/sweeps/daily/*.md
 !docs/sweeps/daily/.gitkeep
 docs/sweeps/health/*.md

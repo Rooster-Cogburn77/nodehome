@@ -130,3 +130,20 @@ CPU_OFFLOAD_GB=32 TENSOR_PARALLEL_SIZE=3 /opt/nodehome/vllm/launch_vllm.sh
 ```
 
 If the NVIDIA driver was newly installed, reboot before final GPU validation.
+
+## AI History Knowledge Base
+
+`ai_history_kb.py` is the repo-owned helper for the private Claude/Codex/Claude Code history resource on the homelab node.
+
+Primary commands:
+
+```bash
+python3 ~/nodehome/scripts/ai_history_kb.py status
+python3 ~/nodehome/scripts/ai_history_kb.py doctor
+python3 ~/nodehome/scripts/ai_history_kb.py index-sources all
+python3 ~/nodehome/scripts/ai_history_kb.py rebuild
+python3 ~/nodehome/scripts/ai_history_kb.py context "what did we decide about gpu2" --limit 5
+python3 ~/nodehome/scripts/ai_history_kb.py serve --host 127.0.0.1 --port 8765
+```
+
+Runbook: [docs/runbooks/ai-history-knowledge-base.md](../docs/runbooks/ai-history-knowledge-base.md)
