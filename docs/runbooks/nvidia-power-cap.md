@@ -13,6 +13,8 @@ Apply the validated sustained 2-GPU vLLM operating profile after boot:
 
 The `nvidia-smi -pl` setting is runtime state. It resets on reboot, so a systemd unit is needed if this profile should survive restarts.
 
+Deployment status: installed and enabled on `homelab` on 2026-05-14. First live run exited `status=0/SUCCESS` and verified GPU0/GPU1 at `300.00 W`; boot-time execution will be verified on the next natural reboot.
+
 ## Manual Command
 
 Use this when testing or after a reboot before the unit exists:
@@ -38,7 +40,6 @@ Create `/etc/systemd/system/nvidia-power-cap.service`:
 ```ini
 [Unit]
 Description=Apply NVIDIA GPU power limits for 2-GPU vLLM profile
-After=multi-user.target
 
 [Service]
 Type=oneshot

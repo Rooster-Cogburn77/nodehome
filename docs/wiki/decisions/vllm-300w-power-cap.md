@@ -1,7 +1,7 @@
 # Decision: 300W + Top Fan for Sustained 2-GPU vLLM
 
 **Date:** 2026-05-14
-**Status:** Adopted for 2-GPU operation; persistent boot-time enforcement not yet installed
+**Status:** Adopted for 2-GPU operation; persistent boot-time enforcement installed
 **Type:** authored
 
 ## Decision
@@ -35,6 +35,6 @@ The top fan remains mandatory for sustained 2-GPU work because it produced a dir
 
 ## Follow-Ups
 
-- Install a narrow systemd unit only if persistent boot-time power caps are desired. See `docs/runbooks/nvidia-power-cap.md`.
+- Verify boot-time unit execution on the next natural reboot. The unit was installed and live-started successfully on 2026-05-14; reboot persistence has not yet been observed.
 - Do not include GPU 2 in any power-cap or sustained workload profile until the temporary pigtail rule is retired.
 - Re-test thermals after the proper GPU 2 cable is installed and before adopting any 3-GPU TP=3 profile.
