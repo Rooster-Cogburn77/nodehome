@@ -1,0 +1,24 @@
+[Unit]
+Description=Nodehome AI History Knowledge Base API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bmoore_77
+WorkingDirectory=/home/bmoore_77/nodehome
+Environment=AI_HISTORY_ROOT=/home/bmoore_77/node-private/chat-exports
+Environment=AI_HISTORY_SNAPSHOT=2026-05-14
+Environment=AI_HISTORY_DB=/home/bmoore_77/node-private/chat-exports/unified/index/ai-history-2026-05-14.sqlite
+EnvironmentFile=-/home/bmoore_77/node-private/chat-exports/ai-history-kb.env
+ExecStart=/usr/bin/python3 /home/bmoore_77/nodehome/scripts/ai_history_kb.py serve --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/bmoore_77/node-private/chat-exports
+
+[Install]
+WantedBy=multi-user.target

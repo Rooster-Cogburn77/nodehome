@@ -131,7 +131,7 @@ The output is designed to be injected into a model prompt as private reference c
 
 ## HTTP API
 
-Start the host-local service:
+Start the host service manually:
 
 ```bash
 python3 ~/nodehome/scripts/ai_history_kb.py serve --host 127.0.0.1 --port 8765
@@ -159,11 +159,50 @@ curl -s http://127.0.0.1:8765/prompt -H 'Content-Type: application/json' -d '{"q
 
 ## Open WebUI / vLLM Integration Plan
 
-Use this as an optional tool, not as always-on memory:
+Use this as an optional tool, not as always-on memory.
+
+Repo-owned Open WebUI tool file:
+
+```bash
+scripts/openwebui/ai_history_tool.py
+```
+
+Install the persistent host API service:
+
+```bash
+sudo cp ~/nodehome/scripts/systemd/ai-history-kb.service /etc/systemd/system/ai-history-kb.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ai-history-kb.service
+systemctl status ai-history-kb.service --no-pager
+curl http://127.0.0.1:8765/health
+```
+
+Security note: the service binds to `0.0.0.0:8765` in the systemd unit so the Open WebUI Docker container can reach it through `host.docker.internal`. This should remain on the trusted home LAN only. If the node becomes reachable from broader networks, set `AI_HISTORY_TOKEN` in `/home/bmoore_77/node-private/chat-exports/ai-history-kb.env` and configure the same token in the Open WebUI tool valves.
+
+Open WebUI setup:
+
+1. Open `http://192.168.1.198:3000`.
+2. Go to `Workspace -> Tools`.
+3. Create a new tool.
+4. Paste the contents of `~/nodehome/scripts/openwebui/ai_history_tool.py`.
+5. Save it as `Nodehome AI History`.
+6. Open the tool's valves/settings.
+7. Set `endpoint` to `http://host.docker.internal:8765`.
+8. Set `token` only if `AI_HISTORY_TOKEN` is configured.
+9. Attach the tool to the target model from `Workspace -> Models -> <model> -> Tools`.
+10. Ensure Function Calling is set to `Native`, not legacy Default mode.
+
+Recommended system prompt addition for any model with this tool enabled:
+
+```text
+You have access to a private Nodehome AI History tool. Use it only when the user asks about prior decisions, previous work, handovers, current project state, or named local systems such as Nodehome, Local_AI, MealMastery, GPU2, vLLM, Ollama, Open WebUI, power caps, pigtail rules, or Walmart order history. Do not call it for general world knowledge. When you use it, preserve source provenance and say when the history is incomplete or uncertain.
+```
+
+Operational model:
 
 1. Keep vLLM serving normal model inference.
-2. Run `ai_history_kb.py serve`.
-3. Add an Open WebUI tool/function that calls `/context` or `/prompt`.
+2. Keep `ai-history-kb.service` running on the host.
+3. Keep the Open WebUI tool pointed at `http://host.docker.internal:8765`.
 4. Instruct the model to call the tool only when the user asks about prior project state, previous decisions, handovers, or named local systems.
 5. Preserve provenance labels in the answer when using snippets.
 

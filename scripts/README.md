@@ -147,3 +147,8 @@ python3 ~/nodehome/scripts/ai_history_kb.py serve --host 127.0.0.1 --port 8765
 ```
 
 Runbook: [docs/runbooks/ai-history-knowledge-base.md](../docs/runbooks/ai-history-knowledge-base.md)
+
+Open WebUI integration assets:
+
+- `scripts/systemd/ai-history-kb.service` — persistent host API service.
+- `scripts/openwebui/ai_history_tool.py` — custom Open WebUI Tool that calls the host API.
