@@ -369,9 +369,10 @@ def codex_item_text(item: dict[str, Any]) -> tuple[str, str, str]:
     role = str(item.get("role") or "")
 
     if item_type == "message":
+        if role != "assistant":
+            return "session_context", role, ""
         text = flatten_text(item.get("content"))
-        kind = "assistant_message" if role == "assistant" else "user_message"
-        return kind, role, text
+        return "assistant_message", role, text
 
     if item_type in {"function_call", "tool_call"}:
         name = item.get("name") or item.get("call_id") or item_type
@@ -455,7 +456,13 @@ def index_codex(root: pathlib.Path, snapshot: str) -> dict[str, Any]:
         for line_no, record in read_jsonl(path):
             ts = str(record.get("timestamp") or record.get("ts") or "")
             record_type = str(record.get("type") or "")
-            item = record.get("item") if isinstance(record.get("item"), dict) else record
+            item = None
+            for key in ("payload", "item", "message"):
+                if isinstance(record.get(key), dict):
+                    item = record[key]
+                    break
+            if item is None:
+                item = record
             kind, role, text = codex_item_text(item)
             if record_type == "response_item" and kind == "record":
                 kind = "assistant_message"
