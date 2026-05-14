@@ -12,7 +12,7 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
 - **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
 ## Validation backlog (re-ranked 2026-05-13 with safety edges tightened)
-1. **Staged 2-GPU vLLM thermal soak** — DO NOT start with 4-8h unattended. Stage: 15 min watched → 1h watched → overnight if temps/power/fans stable. Keep strictly on GPUs 0,1 (pigtail rule). Validates production posture for MealMastery under sustained load.
+1. **Staged 2-GPU vLLM thermal soak** — 2026-05-14 status: API request path passed, 10-request watched loop passed, cooldown healthcheck passed. 30-minute watched soak started with `/tmp/vllm-soak.sh`; review `/tmp/vllm-30min-soak.log` plus post-soak `./scripts/healthcheck.sh` before marking complete. Keep strictly on GPUs 0,1 (pigtail rule); GPU 2 must remain at `1 MiB` / `0% util`.
 2. **Power consumption baseline** — Kill-A-Watt or smart plug. Capture multiple states: idle / vLLM loaded idle / 2-GPU inference under load / (later, post-cable) 3-GPU under load. Foundational data — informs UPS sizing (Tier 1 spend), circuit capacity, heat, noise. Higher-priority than I initially listed.
 3. **Healthcheck automation** — **narrow** NOPASSWD entries only for specific read-only commands the script needs (not broad `sudo -n` access). Cleaner alternative: run as root via systemd timer instead of cron. Operational hygiene without broadening the attack surface.
 4. **Network throughput** — `iperf3` between AI node and laptop. Quick (5 min) and useful; catches NIC/cable/switch weirdness.

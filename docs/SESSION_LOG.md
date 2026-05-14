@@ -1,6 +1,20 @@
 # Sovereign Node - Session Log
 <!-- Current month only. Archive previous months under docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-05-14 (Session 20)
+**Focus:** 2-GPU vLLM validation under the GPU 3 temporary-pigtail constraint.
+**What was done:**
+- Pulled latest repo state on `homelab`, ran `./scripts/healthcheck.sh`, and confirmed the baseline stack was healthy except for the known BMC LAN warning. Host showed 3 RTX 3090s detected, root filesystem at 10% usage with ~1.6T free, NVMe wear 0%, Ollama active, Open WebUI running, and no kernel error-level entries in the last hour.
+- Confirmed the GPU 3 safety boundary was enforced in runtime configuration: Ollama systemd environment includes `CUDA_VISIBLE_DEVICES=0,1`, and `docker inspect vllm-server` reports Docker GPU `DeviceIDs:["0","1"]`. GPU 2 (`C2:00.0`) remained excluded from sustained workload routing.
+- Restarted `vllm-server` manually after finding it cleanly exited from the previous run. It reached `Application startup complete` on 2026-05-14 at 04:07 local time, serving `Qwen/Qwen2.5-32B-Instruct-AWQ` on GPUs 0 and 1 only. `nvidia-smi` showed GPU0/GPU1 loaded at ~`22472 MiB` each and GPU2 still at `1 MiB`.
+- Re-ran `./scripts/healthcheck.sh`; result was `[HEALTHY]` with only the known BMC LAN warning. vLLM `/v1/models` returned HTTP 200 and model `Qwen/Qwen2.5-32B-Instruct-AWQ`.
+- Built a validated JSON prompt file at `/tmp/prompt.json` and a stable request wrapper at `/tmp/vllm-hit.sh` after terminal line wrapping repeatedly corrupted inline JSON / curl flags. A real OpenAI-compatible chat-completions request returned a normal `choices` payload with `usage` accounting, proving API -> tokenizer/model -> generation path.
+- Ran a watched 10-request vLLM loop through `/tmp/vllm-hit.sh`; all ten requests returned `HIT_OK`. GPU0/GPU1 carried the load at up to `~340-349 W`; observed peak temps were GPU0 `74 C`, GPU1 `67 C`. GPU2 stayed isolated throughout at `1 MiB`, `0% util`, `P8`, ~`22-23 W`.
+- Ran a two-minute cooldown check. GPU0/GPU1 returned to idle behavior (`45 C` / `40 C`, `P8`, ~`20-25 W`); GPU2 remained at `1 MiB`. `./scripts/healthcheck.sh` remained `[HEALTHY]` with no failures.
+- Started a 30-minute watched soak via `/tmp/vllm-soak.sh`, logging to `/tmp/vllm-30min-soak.log`. First iteration was safe: GPU0 `66 C` / `340 W` / `99%`, GPU1 `58 C` / `345 W` / `76%`, GPU2 `40 C` / `1 MiB` / `0%`. Final pass/fail is not yet recorded in repo; review the final log tail and post-soak healthcheck before marking the 30-minute soak complete.
+**Commits:** This doc update
+**Next:** After the 30-minute soak completes, run `tail -80 /tmp/vllm-30min-soak.log` and `./scripts/healthcheck.sh`. If GPU2 stayed idle, GPU0/GPU1 stayed below low-80s C without runaway fan behavior, and healthcheck remains clean, record the 30-minute soak as passed. Do not run sustained 3-GPU load until the proper SF-1600F14HT PCIe cable arrives and the temporary pigtail rule is retired.
+
 ## 2026-05-01 (Session 7)
 **Focus:** Repo cleanup and repo-truth realignment
 **What was done:**
