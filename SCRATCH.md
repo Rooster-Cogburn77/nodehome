@@ -11,6 +11,27 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
   - Reviewed and passed on two used 14TB drives with concerning SMART data (34-36k power-on hours, 30,710 Read Recovery Attempts on one of them).
 - **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
+## Validation backlog (work that can happen NOW, no hardware blockers)
+- **Sustained 2-GPU thermal soak** — vLLM inference loop on Qwen 32B for 4-8 hours, monitor `nvidia-smi` + temps + power. Validates production posture for MealMastery under sustained load.
+- **128 GB ECC RAM stress test** — `memtester` or `stress-ng --vm` for 4-12 hours. Catches latent ECC errors or DIMM issues.
+- **NVMe burn-in via `fio`** — random + sequential reads/writes, 1-4 hrs. Validates Acer GM7 isn't aging out.
+- **Network throughput** — `iperf3` between AI node and laptop. Catches duplex/cable issues.
+- **Multi-model concurrent load** — vLLM + Ollama queries concurrently, validate Option C edges.
+- **Read vLLM v0.21.0 release notes** — could affect `--gpu-memory-utilization 0.85` calculus (TurboQuant KV-cache work).
+- **Read Ollama v0.30.0 release notes** — major version bump from pinned v0.23.2.
+- **Healthcheck automation** — sudoers NOPASSWD entries for specific commands + cron hourly. Operational hygiene.
+- **Power consumption baseline** — Kill-A-Watt or smart plug at wall; informs UPS sizing.
+- **Backup pipeline groundwork** — install `restic`, write script targeting `/mnt/storage` once drives arrive.
+
+**Gated on GPU 3 cable arrival** (sustained 3-GPU work, TP=3 vLLM, 70B AWQ across all 3, ReBAR A/B): wait for cable; window 2026-05-23 to 2026-06-10.
+
+## Future hardware spend roadmap
+- Captured in `docs/runbooks/hardware-upgrade-roadmap.md` — prioritized future hardware spends with concrete triggers.
+- Top of the queue (Tier 1, when next budget available): UPS upgrade (used SMT2200, ~$200-350) + GPU 3 cable backup (~$50-100). ~$250-450 spend covers both.
+- Tier 2 (defensive against market trajectory): more RAM (4× 32GB DDR4-2400 ECC RDIMM, ~$320-600). Speculative without workload trigger but DDR4 EOL is climbing.
+- Tier 3 (IPMI hardening enabler): managed switch + optional firewall (~$35-300). Only when ready to execute IPMI Phase 2/3.
+- Tier 4 (deferred until specific trigger fires): storage expansion, NVMe expansion via Hyper M.2 card, 10GbE networking, PiKVM v4, internal CA.
+
 ## Open follow-ons
 - Receive Drive #1 when Walmart ships (delivery TBD; was originally 2026-05-12 evening but delayed). On arrival: lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight. Mount at `/mnt/storage`.
 - **Drive #2 ordered 2026-05-13 at 3:50 PM:** WD My Book 12TB "new" from PayMore Westport (seller LLC: SPEEKS Technology, Overland Park KS), eBay order `03-14645-30973`. **$239.99 + $19.80 TX sales tax = $259.79 total** with free shipping. Delivery May 16-20 via USPS Ground. Returns through June 19. **On arrival verification protocol:** photograph packaging seals before opening; plug in, run `smartctl -d sat -a /dev/sdX` BEFORE formatting; check Power-On Hours (<30 = genuinely new, >200 = wiped-used, file return). If clean: wipefs + ext4 + mount as `/mnt/storage` next to Drive #1 (assuming drive 1 lands first).
