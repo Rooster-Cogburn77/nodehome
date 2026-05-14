@@ -36,6 +36,24 @@ DEFAULT_TOKEN = os.environ.get("AI_HISTORY_TOKEN")
 
 SOURCE_CHOICES = ("claude-desktop", "codex", "claude-code")
 
+PHRASE_ALIASES = {
+    "open webui": "openwebui",
+    "super flower": "superflower",
+    "power cap": "powercap",
+    "gpu #2": "gpu2",
+    "gpu 2": "gpu2",
+}
+
+TERM_WEIGHTS = {
+    "gpu2": 5,
+    "pigtail": 5,
+    "openwebui": 4,
+    "superflower": 4,
+    "powercap": 4,
+    "vllm": 1,
+    "ollama": 1,
+}
+
 TRIGGERS = (
     "previous",
     "prior",
@@ -93,6 +111,10 @@ STOP_WORDS = {
     "tell",
     "me",
     "open",
+    "or",
+    "and",
+    "not",
+    "near",
 }
 
 
@@ -182,19 +204,24 @@ def normalize_query(query: str) -> str:
     if '"' in query or " OR " in query or " AND " in query:
         return query
 
-    replacements = {
-        "open webui": "openwebui",
-    }
     normalized = query.lower()
-    for phrase, token in replacements.items():
+    for phrase, token in PHRASE_ALIASES.items():
+        normalized = normalized.replace(phrase, token)
+
+    terms = query_terms(normalized)
+    return " OR ".join(terms[:8]) if terms else query
+
+
+def query_terms(query: str) -> list[str]:
+    normalized = query.lower()
+    for phrase, token in PHRASE_ALIASES.items():
         normalized = normalized.replace(phrase, token)
 
     terms = []
     for term in re.findall(r"[A-Za-z0-9_+-]{3,}", normalized):
-        if term not in STOP_WORDS:
+        if term not in STOP_WORDS and term not in terms:
             terms.append(term)
-
-    return " OR ".join(terms[:8]) if terms else query
+    return terms
 
 
 def add_item(
@@ -235,8 +262,9 @@ def add_item(
 def text_aliases(text: str) -> str:
     aliases = []
     lowered = text.lower()
-    if "open webui" in lowered:
-        aliases.append("openwebui")
+    for phrase, token in PHRASE_ALIASES.items():
+        if phrase in lowered:
+            aliases.append(token)
     return " ".join(aliases)
 
 
@@ -797,15 +825,61 @@ def doctor(db_path: pathlib.Path) -> dict[str, Any]:
     return payload
 
 
+def search_score(row: sqlite3.Row, terms: list[str]) -> int:
+    haystack = " ".join(
+        str(row[key] or "")
+        for key in ("source_system", "kind", "role", "title", "source_path", "text")
+    ).lower()
+
+    score = 0
+    matched = 0
+    for term in terms:
+        if term not in haystack:
+            continue
+        matched += 1
+        weight = TERM_WEIGHTS.get(term, 2)
+        score += weight * 100
+        score += min(haystack.count(term), 8) * weight * 5
+
+    if terms and matched == len(terms):
+        score += 1000
+    elif matched >= 2:
+        score += matched * 100
+
+    kind = str(row["kind"] or "")
+    if kind in {"assistant", "assistant_message"}:
+        score += 30
+    if kind in {"tool_call", "tool_output"}:
+        score -= 25
+
+    return score
+
+
+def public_search_row(row: sqlite3.Row, score: int) -> dict[str, Any]:
+    return {
+        "source_system": row["source_system"],
+        "kind": row["kind"],
+        "role": row["role"],
+        "title": row["title"],
+        "source_path": row["source_path"],
+        "line_no": row["line_no"],
+        "ts": row["ts"],
+        "score": score,
+        "snippet": row["snippet"],
+    }
+
+
 def search(
     db_path: pathlib.Path,
     query: str,
     limit: int,
     source: str | None = None,
-) -> list[sqlite3.Row]:
+) -> list[dict[str, Any]]:
     con = connect(db_path)
+    candidate_limit = max(limit * 50, 200)
     sql = (
-        "SELECT i.source_system, i.kind, i.title, i.source_path, i.line_no, "
+        "SELECT i.source_system, i.kind, i.role, i.title, i.source_path, "
+        "i.line_no, i.ts, i.text, bm25(kb_fts) AS fts_rank, "
         "snippet(kb_fts, 4, '[', ']', '...', 32) AS snippet "
         "FROM kb_fts f JOIN kb_items i ON i.id = f.rowid "
         "WHERE kb_fts MATCH ?"
@@ -814,11 +888,18 @@ def search(
     if source:
         sql += " AND i.source_system = ?"
         params.append(source)
-    sql += " LIMIT ?"
-    params.append(limit)
-    rows = list(con.execute(sql, params))
+    sql += " ORDER BY bm25(kb_fts) LIMIT ?"
+    params.append(candidate_limit)
+    terms = query_terms(query)
+    candidates = list(con.execute(sql, params))
     con.close()
-    return rows
+
+    ranked = []
+    for row in candidates:
+        score = search_score(row, terms)
+        ranked.append((score, row["fts_rank"], public_search_row(row, score)))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in ranked[:limit]]
 
 
 def context(
