@@ -239,22 +239,35 @@ def add_item(
     text = str(text or "").strip()
     if len(text) < 3:
         return 0
+    aliases = text_aliases(text)
 
     cur.execute(
         """
         INSERT INTO kb_items (
-          source_system, source_path, line_no, item_ref, title, kind, role, ts, text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_system, source_path, line_no, item_ref, title, kind, role, ts, text,
+          aliases
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (source_system, source_path, line_no, item_ref, title, kind, role, ts, text),
+        (
+            source_system,
+            source_path,
+            line_no,
+            item_ref,
+            title,
+            kind,
+            role,
+            ts,
+            text,
+            aliases,
+        ),
     )
     rowid = cur.lastrowid
     cur.execute(
         """
-        INSERT INTO kb_fts (rowid, source_system, title, kind, role, text)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO kb_fts (rowid, source_system, title, kind, role, text, aliases)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (rowid, source_system, title, kind, role, f"{text}\n{text_aliases(text)}"),
+        (rowid, source_system, title, kind, role, text, aliases),
     )
     return 1
 
@@ -303,7 +316,8 @@ def init_schema(cur: sqlite3.Cursor) -> None:
           kind TEXT,
           role TEXT,
           ts TEXT,
-          text TEXT
+          text TEXT,
+          aliases TEXT
         );
 
         CREATE INDEX idx_kb_items_source ON kb_items(source_system);
@@ -315,7 +329,8 @@ def init_schema(cur: sqlite3.Cursor) -> None:
           title,
           kind,
           role,
-          text
+          text,
+          aliases
         );
         """
     )
@@ -828,7 +843,15 @@ def doctor(db_path: pathlib.Path) -> dict[str, Any]:
 def search_score(row: sqlite3.Row, terms: list[str]) -> int:
     haystack = " ".join(
         str(row[key] or "")
-        for key in ("source_system", "kind", "role", "title", "source_path", "text")
+        for key in (
+            "source_system",
+            "kind",
+            "role",
+            "title",
+            "source_path",
+            "text",
+            "aliases",
+        )
     ).lower()
 
     score = 0
@@ -879,7 +902,7 @@ def search(
     candidate_limit = max(limit * 50, 200)
     sql = (
         "SELECT i.source_system, i.kind, i.role, i.title, i.source_path, "
-        "i.line_no, i.ts, i.text, bm25(kb_fts) AS fts_rank, "
+        "i.line_no, i.ts, i.text, i.aliases, bm25(kb_fts) AS fts_rank, "
         "snippet(kb_fts, 4, '[', ']', '...', 32) AS snippet "
         "FROM kb_fts f JOIN kb_items i ON i.id = f.rowid "
         "WHERE kb_fts MATCH ?"

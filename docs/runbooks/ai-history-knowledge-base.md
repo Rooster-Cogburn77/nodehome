@@ -116,6 +116,7 @@ Search quality notes:
 - Queries are FTS-backed, then reranked in Python.
 - Broad terms such as `vllm` and `ollama` are lower-weighted than local-decision terms such as `gpu2`, `pigtail`, `openwebui`, `powercap`, and `superflower`.
 - Phrase aliases normalize common project terms: `Open WebUI` -> `openwebui`, `Super Flower` -> `superflower`, `power cap` -> `powercap`, and `GPU 2` / `GPU #2` -> `gpu2`.
+- Aliases live in a separate FTS column so they affect matching/ranking without appearing in snippets.
 - Results preserve source labels and line references even after reranking.
 
 ## Prompt Resource Mode
