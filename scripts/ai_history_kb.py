@@ -456,6 +456,8 @@ def index_codex(root: pathlib.Path, snapshot: str) -> dict[str, Any]:
         for line_no, record in read_jsonl(path):
             ts = str(record.get("timestamp") or record.get("ts") or "")
             record_type = str(record.get("type") or "")
+            if record_type == "event_msg":
+                continue
             item = None
             for key in ("payload", "item", "message"):
                 if isinstance(record.get(key), dict):
@@ -545,6 +547,8 @@ def index_claude_code(root: pathlib.Path, snapshot: str) -> dict[str, Any]:
         rel = path.relative_to(source_root).as_posix()
         for line_no, record in read_jsonl(path):
             kind = str(record.get("type") or "record")
+            if kind not in {"user", "assistant", "record"}:
+                continue
             text = claude_code_record_text(record)
             n = add_source_item(
                 cur,
