@@ -96,7 +96,7 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 
 ### Networking upgrade (10GbE between AI node and laptop)
 
-**Current state:** 1GbE on `eno2`. Sustained transfers between AI node and laptop limited to ~110 MB/s.
+**Current state:** 1GbE on `eno2`. Practical SCP baseline captured 2026-05-14: node -> Windows `88.5 MB/s` (~708 Mbps), Windows -> node `67.8 MB/s` (~542 Mbps) using a 1 GiB file. Treat this as SSH/file-copy throughput, not raw line-rate; SCP encryption and Windows OpenSSH overhead can sit below the ~110 MB/s 1GbE file-copy ceiling.
 
 **Trigger:** Repeated large-file workflows (sweep migration, dataset shuffling, model artifact pushes) that feel slow.
 
