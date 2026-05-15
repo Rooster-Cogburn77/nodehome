@@ -12,6 +12,8 @@ Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/appl
 
 Nodechat can also run a small allowlist of read-only shell-style commands through `/cmd`. Every attempt is recorded as a structured `COMMAND_OUTPUT` block with timestamp, working directory, command class, exit code/refusal, and output.
 
+All local file/command paths are confined to the configured Nodechat workspace. The Windows launcher sets that workspace to `C:\Users\bmoor\Local_AI`.
+
 The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
 
 ## Default Backend
@@ -248,6 +250,7 @@ class: read-only
 command: git status --short --branch
 exit_code: 0
 truncated: false
+executable: C:\Program Files\Git\cmd\git.exe
 
 ## main...origin/main
 ```
@@ -260,6 +263,25 @@ Rules:
 - Refused examples: `git pull`, `git push`, `git add`, `git commit`, package-manager commands, network commands, destructive deletes, privileged service commands, and unknown commands.
 - `rg --pre`, `rg --hidden`, `rg --no-ignore`, and `git --output` / `git --ext-diff` style paths are refused in this phase.
 - This is not arbitrary shell. Commands are parsed and run without shell metacharacter expansion.
+- External executables are resolved through `PATH` and recorded in the output block as `executable: ...`.
+- Path arguments outside the Nodechat workspace are refused.
+
+## Safety Tests
+
+The Nodechat safety boundary has focused stdlib unit tests:
+
+```powershell
+py -3 -m unittest tests\test_nodechat_safety.py
+```
+
+Current coverage:
+
+- Workspace confinement blocks outside paths.
+- `/read` refuses outside-workspace files.
+- `/cmd` classifier refuses outside paths, risky `rg` flags, and network commands.
+- `/apply` refuses ambiguous repeated hunks.
+- `/apply` still works when repeated hunk context has an exact preferred location.
+- `/cmd` read-only subprocess execution records a resolved executable path.
 
 ## Tool Roadmap
 
@@ -351,6 +373,7 @@ Rules:
 - Supports stored proposal diffs only; no freeform `/write <path>` exists.
 - Refuses blocked private/generated paths and non-text file types.
 - Validates the unified diff against the current file before writing.
+- Refuses ambiguous repeated hunks instead of fuzzy-applying the first match.
 - Writes backups outside the repo under the Nodechat session backup directory.
 
 ### Phase 5 - Approval-Gated Shell
@@ -369,6 +392,7 @@ Rules:
 - Write/network/privileged/destructive commands are refused, not queued.
 - Never auto-run destructive commands.
 - Keep command output in the session log as structured `COMMAND_OUTPUT`.
+- Record resolved executable provenance for subprocess-backed commands.
 
 ## Safety Boundary
 

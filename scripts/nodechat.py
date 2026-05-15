@@ -16,6 +16,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -519,6 +520,25 @@ def resolve_workspace_path(config: Config, session: dict[str, Any], raw: str = "
     return path.resolve()
 
 
+def path_inside_workspace(config: Config, session: dict[str, Any], path: pathlib.Path) -> bool:
+    base = os.path.normcase(os.path.abspath(str(workspace_path(config, session))))
+    target = os.path.normcase(os.path.abspath(str(path.resolve())))
+    try:
+        return os.path.commonpath([base, target]) == base
+    except ValueError:
+        return False
+
+
+def workspace_confine_reason(config: Config, session: dict[str, Any], path: pathlib.Path) -> str | None:
+    if path_inside_workspace(config, session, path):
+        return None
+    return f"path outside nodechat workspace: {path}"
+
+
+def path_safety_reason(config: Config, session: dict[str, Any], path: pathlib.Path) -> str | None:
+    return workspace_confine_reason(config, session, path) or blocked_path_reason(path)
+
+
 def display_path(config: Config, session: dict[str, Any], path: pathlib.Path) -> str:
     try:
         return path.relative_to(workspace_path(config, session)).as_posix()
@@ -571,7 +591,7 @@ def command_pwd(config: Config, session: dict[str, Any]) -> None:
 
 def command_tree(config: Config, session: dict[str, Any], arg: str) -> None:
     root = resolve_workspace_path(config, session, arg)
-    reason = blocked_path_reason(root)
+    reason = path_safety_reason(config, session, root)
     if reason:
         print(f"tree refused: {reason}")
         return
@@ -589,8 +609,18 @@ def command_tree(config: Config, session: dict[str, Any], arg: str) -> None:
         depth = 0 if str(rel) == "." else len(rel.parts)
         if depth >= 2:
             dirs[:] = []
-        dirs[:] = [d for d in sorted(dirs) if blocked_path_reason(current_path / d) is None]
-        files = [f for f in sorted(files) if blocked_path_reason(current_path / f) is None]
+        dirs[:] = [
+            d
+            for d in sorted(dirs)
+            if not (current_path / d).is_symlink()
+            and path_safety_reason(config, session, current_path / d) is None
+        ]
+        files = [
+            f
+            for f in sorted(files)
+            if not (current_path / f).is_symlink()
+            and path_safety_reason(config, session, current_path / f) is None
+        ]
 
         indent = "  " * depth
         label = "." if str(rel) == "." else rel.name
@@ -619,7 +649,7 @@ def command_read(config: Config, session: dict[str, Any], arg: str) -> None:
         print("usage: /read <path>")
         return
     path = resolve_workspace_path(config, session, arg)
-    reason = blocked_path_reason(path)
+    reason = path_safety_reason(config, session, path)
     if reason:
         print(f"read refused: {reason}")
         return
@@ -643,15 +673,20 @@ def command_read(config: Config, session: dict[str, Any], arg: str) -> None:
     print(f"file context added: {path}{suffix}")
 
 
-def search_text_files(root: pathlib.Path, query: str) -> list[str]:
+def search_text_files(config: Config, session: dict[str, Any], root: pathlib.Path, query: str) -> list[str]:
     query_l = query.lower()
     rows: list[str] = []
     for current, dirs, files in os.walk(root):
         current_path = pathlib.Path(current)
-        dirs[:] = [d for d in sorted(dirs) if blocked_path_reason(current_path / d) is None]
+        dirs[:] = [
+            d
+            for d in sorted(dirs)
+            if not (current_path / d).is_symlink()
+            and path_safety_reason(config, session, current_path / d) is None
+        ]
         for filename in sorted(files):
             path = current_path / filename
-            if blocked_path_reason(path) or not is_text_candidate(path):
+            if path.is_symlink() or path_safety_reason(config, session, path) or not is_text_candidate(path):
                 continue
             try:
                 stat = path.stat()
@@ -696,7 +731,7 @@ def command_search_files(config: Config, session: dict[str, Any], arg: str) -> N
         print('usage: /search-files <query> [path]; quote multi-word queries')
         return
     root = resolve_workspace_path(config, session, raw_root)
-    reason = blocked_path_reason(root)
+    reason = path_safety_reason(config, session, root)
     if reason:
         print(f"search refused: {reason}")
         return
@@ -705,7 +740,7 @@ def command_search_files(config: Config, session: dict[str, Any], arg: str) -> N
         return
     if root.is_file():
         root = root.parent
-    rows = search_text_files(root, query)
+    rows = search_text_files(config, session, root, query)
     lines = [
         f"query: {query}",
         f"root: {root}",
@@ -919,7 +954,7 @@ def command_propose_edit(config: Config, session: dict[str, Any], arg: str) -> N
         return
 
     path = resolve_workspace_path(config, session, raw_path)
-    reason = blocked_path_reason(path)
+    reason = path_safety_reason(config, session, path)
     if reason:
         print(f"propose-edit refused: {reason}")
         return
@@ -1121,12 +1156,18 @@ def block_matches(lines: list[str], start: int, block: list[str]) -> bool:
 def find_hunk_start(lines: list[str], old_block: list[str], preferred: int, minimum: int) -> int:
     if not old_block:
         return max(minimum, min(preferred, len(lines)))
-    if preferred >= minimum and block_matches(lines, preferred, old_block):
+    matches = [
+        start
+        for start in range(minimum, len(lines) - len(old_block) + 1)
+        if block_matches(lines, start, old_block)
+    ]
+    if not matches:
+        return -1
+    if preferred >= minimum and preferred in matches:
         return preferred
-    for start in range(minimum, len(lines) - len(old_block) + 1):
-        if block_matches(lines, start, old_block):
-            return start
-    return -1
+    if len(matches) == 1:
+        return matches[0]
+    raise RuntimeError("hunk context appears multiple times; refusing ambiguous apply")
 
 
 def apply_unified_diff_text(original: str, patch: str) -> str:
@@ -1169,7 +1210,7 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
         return
 
     path = pathlib.Path(str(proposal.get("path") or "")).resolve()
-    reason = blocked_path_reason(path)
+    reason = path_safety_reason(config, session, path)
     if reason:
         print(f"apply refused: {reason}")
         return
@@ -1270,8 +1311,8 @@ def command_path_blocked(config: Config, session: dict[str, Any], parts: list[st
             resolved = candidate.resolve()
         except OSError:
             continue
-        if resolved.exists():
-            reason = blocked_path_reason(resolved)
+        if resolved.exists() or candidate.is_absolute():
+            reason = path_safety_reason(config, session, resolved)
             if reason:
                 return reason
     return None
@@ -1287,6 +1328,13 @@ def classify_command(config: Config, session: dict[str, Any], command: str) -> t
     blocked_path = command_path_blocked(config, session, parts)
     if blocked_path:
         return "refused", blocked_path, parts
+
+    if exe in {"python", "python3"} and parts[1:] in (["--version"], ["-V"]):
+        return "read-only", "allowed version command", parts
+    if exe == "py" and parts[1:] in (["-3", "--version"], ["-3", "-V"], ["--version"], ["-V"]):
+        return "read-only", "allowed version command", parts
+    if exe in {"git", "node", "npm", "pnpm", "rg", "sqlite3"} and parts[1:] in (["--version"], ["-v"], ["-V"]):
+        return "read-only", "allowed version command", parts
 
     destructive = {"del", "erase", "format", "rd", "rmdir", "rm", "remove-item", "diskpart"}
     network = {"curl", "wget", "ssh", "scp", "git-fetch", "git-pull", "git-push", "git-clone"}
@@ -1321,13 +1369,6 @@ def classify_command(config: Config, session: dict[str, Any], command: str) -> t
     if exe in {"dir", "ls", "pwd", "type", "cat"}:
         return "read-only", "allowed internal read-only command", parts
 
-    if exe in {"python", "python3"} and parts[1:] in (["--version"], ["-V"]):
-        return "read-only", "allowed version command", parts
-    if exe == "py" and parts[1:] in (["-3", "--version"], ["-3", "-V"], ["--version"], ["-V"]):
-        return "read-only", "allowed version command", parts
-    if exe in {"git", "node", "npm", "pnpm", "rg", "sqlite3"} and parts[1:] in (["--version"], ["-v"], ["-V"]):
-        return "read-only", "allowed version command", parts
-
     if exe in {"npm", "pnpm", "pip", "pip3"}:
         return "network", "package-manager command refused in Phase 5A", parts
     if exe in network:
@@ -1339,7 +1380,7 @@ def classify_command(config: Config, session: dict[str, Any], command: str) -> t
 def internal_dir(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
     raw = parts[1] if len(parts) > 1 else "."
     path = resolve_workspace_path(config, session, raw)
-    reason = blocked_path_reason(path)
+    reason = path_safety_reason(config, session, path)
     if reason:
         return 1, f"refused: {reason}"
     if not path.exists():
@@ -1348,7 +1389,7 @@ def internal_dir(config: Config, session: dict[str, Any], parts: list[str]) -> t
         return 0, str(path)
     rows = []
     for child in sorted(path.iterdir(), key=lambda item: (item.is_file(), item.name.lower()))[:MAX_TREE_ENTRIES]:
-        if blocked_path_reason(child):
+        if child.is_symlink() or path_safety_reason(config, session, child):
             continue
         suffix = "/" if child.is_dir() else ""
         rows.append(f"{child.name}{suffix}")
@@ -1359,7 +1400,7 @@ def internal_type(config: Config, session: dict[str, Any], parts: list[str]) -> 
     if len(parts) < 2:
         return 1, "usage: type <path>"
     path = resolve_workspace_path(config, session, parts[1])
-    reason = blocked_path_reason(path)
+    reason = path_safety_reason(config, session, path)
     if reason:
         return 1, f"refused: {reason}"
     if not path.exists() or not path.is_file():
@@ -1372,20 +1413,27 @@ def internal_type(config: Config, session: dict[str, Any], parts: list[str]) -> 
     return 0, text
 
 
-def run_readonly_command(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
+def run_readonly_command(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str, str]:
     exe = parts[0].lower()
     if exe in {"dir", "ls"}:
-        return internal_dir(config, session, parts)
+        code, output = internal_dir(config, session, parts)
+        return code, output, f"internal:{exe}"
     if exe == "pwd":
-        return 0, str(workspace_path(config, session))
+        return 0, str(workspace_path(config, session)), "internal:pwd"
     if exe in {"type", "cat"}:
-        return internal_type(config, session, parts)
+        code, output = internal_type(config, session, parts)
+        return code, output, f"internal:{exe}"
 
     argv = parts
     if exe == "git" and len(parts) > 1 and parts[1].lower() in {"diff", "log", "show"}:
         argv = ["git", "--no-pager", *parts[1:]]
         if parts[1].lower() == "diff" and "--no-ext-diff" not in parts:
             argv = ["git", "--no-pager", "diff", "--no-ext-diff", *parts[2:]]
+
+    resolved_exe = shutil.which(argv[0])
+    if not resolved_exe:
+        return 127, f"executable not found: {argv[0]}", ""
+    argv = [resolved_exe, *argv[1:]]
 
     result = subprocess.run(
         argv,
@@ -1396,7 +1444,7 @@ def run_readonly_command(config: Config, session: dict[str, Any], parts: list[st
         timeout=config.cmd_timeout,
         check=False,
     )
-    return result.returncode, result.stdout.strip()
+    return result.returncode, result.stdout.strip(), resolved_exe
 
 
 def command_output_block(
@@ -1407,6 +1455,7 @@ def command_output_block(
     exit_code: int | str,
     output: str,
     reason: str = "",
+    executable: str = "",
 ) -> str:
     text = output.strip()
     truncated = False
@@ -1422,6 +1471,8 @@ def command_output_block(
         f"exit_code: {exit_code}",
         f"truncated: {str(truncated).lower()}",
     ]
+    if executable:
+        lines.append(f"executable: {executable}")
     if reason:
         lines.append(f"reason: {reason}")
     lines.extend(["", text or "(no output)"])
@@ -1435,6 +1486,7 @@ def record_command(
     exit_code: int | str,
     output: str,
     reason: str = "",
+    executable: str = "",
 ) -> None:
     session.setdefault("commands", []).append(
         {
@@ -1443,6 +1495,7 @@ def record_command(
             "class": class_name,
             "exit_code": exit_code,
             "reason": reason,
+            "executable": executable,
             "output": output[:MAX_CMD_OUTPUT_CHARS],
         }
     )
@@ -1464,21 +1517,22 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
             exit_code="refused",
             output=output,
             reason=reason,
+            executable="not-run",
         )
-        record_command(session, command, class_name, "refused", output, reason)
+        record_command(session, command, class_name, "refused", output, reason, "not-run")
         add_context(session, f"/cmd {command}", block)
         print(block)
         print()
         print("refused command context added")
         return
     try:
-        exit_code, output = run_readonly_command(config, session, parts)
+        exit_code, output, executable = run_readonly_command(config, session, parts)
     except subprocess.TimeoutExpired:
-        exit_code, output = 124, f"command timed out after {config.cmd_timeout}s"
+        exit_code, output, executable = 124, f"command timed out after {config.cmd_timeout}s", ""
     except FileNotFoundError as exc:
-        exit_code, output = 127, str(exc)
+        exit_code, output, executable = 127, str(exc), ""
     except Exception as exc:
-        exit_code, output = 1, str(exc)
+        exit_code, output, executable = 1, str(exc), ""
 
     block = command_output_block(
         command=command,
@@ -1487,8 +1541,9 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
         exit_code=exit_code,
         output=output,
         reason=reason,
+        executable=executable,
     )
-    record_command(session, command, class_name, exit_code, output, reason)
+    record_command(session, command, class_name, exit_code, output, reason, executable)
     add_context(session, f"/cmd {command}", block)
     print(block)
     print()
