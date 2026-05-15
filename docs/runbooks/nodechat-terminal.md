@@ -6,6 +6,8 @@ Status: early implementation of the Nodehome local agentic terminal environment.
 
 Auto-routing is on for AI History, repo files, and fresh public web context. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. When the prompt includes a URL, Nodechat auto-fetches it; when the prompt clearly needs fresh public data (`latest`, releases, versions, CVEs, current pricing/availability, etc.) and names a public object, Nodechat auto-routes a bounded DuckDuckGo HTML search. Vague local-status phrases, vague repo topic phrases, and bare filenames do not auto-route. Every auto-routed turn prints a one-line disclosure above the assistant reply and writes an `auto_route_*` audit event. Slash commands remain the manual override and the visibility surface.
 
+Live-node auto-routing is also in place for fixed Observe-tier checks. Clear live Nodehome status prompts can inject `LIVE_NODE_STATUS` for GPUs, vLLM/Ollama/Open WebUI/Docker, storage, BMC/IPMI, UPS, or power caps. Use `/live-mode auto|manual|off` to control that lane.
+
 Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
 A small `NODECHAT_RUNTIME` system message is injected on every request so the model answers identity questions from the actual configured model and endpoint instead of inventing one.
@@ -75,6 +77,7 @@ Inside `nodechat`:
 /history-mode [auto|manual|off]
 /repo-mode [auto|manual|off]
 /web-mode [auto|manual|off]
+/live-mode [auto|manual|off]
 /evidence
 /forget [n|latest|all]
 /pwd
@@ -85,6 +88,7 @@ Inside `nodechat`:
 /web-search <query>
 /web-fetch <url>
 /web-open <url>
+/live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]
 /propose-edit <path> :: <instruction>
 /diff [all]
 /apply [n|latest] [--check|--confirm]
@@ -162,6 +166,8 @@ NODECHAT_MODEL
 NODECHAT_API_KEY
 NODECHAT_HISTORY_URL
 NODECHAT_HISTORY_TOKEN
+NODECHAT_LIVE_SSH
+NODECHAT_LIVE_ROOT
 NODECHAT_SESSION_ROOT
 NODECHAT_WORKSPACE
 NODECHAT_TEMPERATURE
@@ -215,6 +221,33 @@ Web fetch and search are auto-routed for direct URLs and prompts that clearly ne
 `/web-search` uses DuckDuckGo HTML results and stores titles/URLs as leads. Use `/web-fetch` or `/web-open` on a result before treating the source text as evidence.
 
 Use `/web-mode manual` to require explicit `/web-search` or `/web-fetch`. Use `/web-mode off` to disable web routing for the session. Manual web commands still work when mode is `manual`; `off` only affects auto-routing.
+
+## Live Node Tools
+
+Live-node context auto-routes for clear Nodehome status prompts and can also be invoked explicitly:
+
+```text
+/live
+/live gpu vllm
+/live all
+/live smart /dev/sda
+/live-mode auto
+/live-mode manual
+/live-mode off
+```
+
+Default `/live` runs the fixed `health` check. `/live all` currently expands to health, GPU, power, Docker, vLLM, Ollama, and storage checks. These commands are Observe-tier status reads only. They do not restart services, change power caps, write configs, or install packages.
+
+By default, live checks run from the current machine. From Windows, point Nodechat at the homelab with:
+
+```bat
+set NODECHAT_LIVE_SSH=bmoore_77@192.168.1.198
+set NODECHAT_LIVE_ROOT=~/nodehome
+```
+
+Automatic live checks use `ssh -o BatchMode=yes`, so they require key-based SSH or another noninteractive auth path. If SSH is not configured, the check records an error block and the chat turn continues.
+
+Live context is injected as `LIVE_NODE_STATUS` with the check name, target, command, exit code, resolved executable when available, and bounded command output. The audit log records `live_check_executed` for manual `/live` and `auto_route_live` for automatic live routing.
 
 ## Proposed Edit Tools
 
@@ -316,6 +349,8 @@ Current coverage:
 - `/apply` still works when repeated hunk context has an exact preferred location.
 - `/cmd` read-only subprocess execution records a resolved executable path.
 - Persistent audit records refused commands, queued approvals, executed approvals, blocked approvals, and apply check/confirm events.
+- Live routing detection avoids history-style prompts such as "what did we decide about GPU2?"
+- Live checks can run through an optional SSH target, validate SMART device paths, disclose provenance, and respect `/live-mode off`.
 
 ## Capability Lanes
 
@@ -334,15 +369,17 @@ chat with local vLLM (streaming, sessioned, slash-command UX)
 /web-search <query>        DuckDuckGo HTML, leads only
 /web-fetch <url>           bounded text fetch
 /web-open <url>            same as fetch but opens in session view
+/live [check]              fixed live-node status checks; optional SSH target
 /cmd <read-only command>   allowlisted: git read subcommands, rg, dir/ls, type/cat, pwd, --version
 /history-mode [auto|manual|off]
 /repo-mode [auto|manual|off]
 /web-mode [auto|manual|off]
+/live-mode [auto|manual|off]
 /evidence                  list context blocks with source + provenance
 /forget [n|latest|all]     drop a context block
 ```
 
-Auto-routing covers AI History (prior-decision phrasing), repo files (concrete artifacts only), and fresh public web context (direct URLs and current/release/CVE/pricing-style prompts) with disclosed provenance and audit. `/cmd` is manual-only today; a tier-gated live-node operator is the next lane (see scope doc).
+Auto-routing covers AI History (prior-decision phrasing), repo files (concrete artifacts only), fresh public web context (direct URLs and current/release/CVE/pricing-style prompts), and live-node status checks with disclosed provenance and audit. `/cmd` remains manual-only today.
 
 ### Prepare lane (Done)
 

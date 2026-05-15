@@ -119,10 +119,12 @@ TEXT_EXTENSIONS = {
 DEFAULT_HISTORY_MODE = "auto"
 DEFAULT_REPO_MODE = "auto"
 DEFAULT_WEB_MODE = "auto"
+DEFAULT_LIVE_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
 REPO_AUTO_LIMIT = 2
 WEB_AUTO_URL_LIMIT = 2
 WEB_AUTO_TIMEOUT = 12
+LIVE_AUTO_LIMIT = 3
 
 HISTORY_AUTO_PATTERNS = (
     re.compile(r"\bwhat did we\b", re.I),
@@ -191,6 +193,19 @@ WEB_LOCAL_ONLY_RE = re.compile(
     re.I,
 )
 
+LIVE_TRIGGER_RE = re.compile(
+    r"\b(live|current|currently|status|health|healthy|running|up|down|check|diagnose|"
+    r"verify|what is running|what's running|how is)\b",
+    re.I,
+)
+LIVE_OBJECT_RE = re.compile(
+    r"\b(node|nodehome|homelab|stack|service|gpu|nvidia|docker|container|vllm|ollama|"
+    r"open webui|webui|disk|storage|filesystem|df|bmc|ipmi|power cap|power limit|"
+    r"healthcheck|ups)\b",
+    re.I,
+)
+SMART_DEVICE_RE = re.compile(r"^/dev/[A-Za-z0-9_.\-/]+$")
+
 DEFAULT_SYSTEM_PROMPT = """\
 You are Nodechat, the local agentic terminal environment for the Nodehome homelab.
 
@@ -200,14 +215,14 @@ system message. If asked what model you are, answer from that runtime message.
 Do not claim to be custom-built or model-less.
 
 Some context is auto-routed into the conversation when the user prompt clearly
-calls for it (private AI History, repo files, fresh public web context). Other
-context is injected only when the user runs a slash command such as /history,
-/read, /tree, /search-files, /git-status, /web-fetch, /web-search, /cmd, or
-approved command output from /approve. Treat HISTORY_CONTEXT and
-NODECHAT_TOOL_CONTEXT blocks as evidence with provenance, not as general world
-knowledge. Do not claim to have searched private history, read a file, or
-searched/fetched the web unless the corresponding context block is present in
-this conversation.
+calls for it (private AI History, repo files, fresh public web context, live
+node status). Other context is injected only when the user runs a slash command
+such as /history, /read, /tree, /search-files, /git-status, /web-fetch,
+/web-search, /live, /cmd, or approved command output from /approve. Treat
+HISTORY_CONTEXT and NODECHAT_TOOL_CONTEXT blocks as evidence with provenance,
+not as general world knowledge. Do not claim to have searched private history,
+read a file, searched/fetched the web, or checked live node state unless the
+corresponding context block is present in this conversation.
 
 Patch proposals created by /propose-edit are proposals only. Do not claim they
 were applied unless the user explicitly applies them.
@@ -233,6 +248,8 @@ class Config:
     history_token: str
     history_limit: int
     cmd_timeout: int
+    live_ssh: str
+    live_root: str
 
 
 def utc_now() -> str:
@@ -291,6 +308,7 @@ def make_session(config: Config) -> dict[str, Any]:
         "history_mode": DEFAULT_HISTORY_MODE,
         "repo_mode": DEFAULT_REPO_MODE,
         "web_mode": DEFAULT_WEB_MODE,
+        "live_mode": DEFAULT_LIVE_MODE,
     }
 
 
@@ -584,6 +602,8 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
     repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
     web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
+    live_mode = session.get("live_mode", DEFAULT_LIVE_MODE)
+    live_target = config.live_ssh or "local"
     return "\n".join(
         [
             "NODECHAT_RUNTIME",
@@ -591,11 +611,13 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
             f"workspace: {session.get('cwd') or config.workspace}",
-            "tool_access: auto-routed AI History, repo files, and web context when prompt indicates; explicit read-only local context; explicit web fetch/search; read-only /cmd; and selected /approve command output",
+            "tool_access: auto-routed AI History, repo files, web context, and live node status when prompt indicates; explicit read-only local context; explicit web fetch/search; explicit live checks; read-only /cmd; and selected /approve command output",
             "no_access: no arbitrary shell, no freeform file writes (only /apply --confirm)",
             f"history_mode: {history_mode}",
             f"repo_mode: {repo_mode}",
             f"web_mode: {web_mode}",
+            f"live_mode: {live_mode}",
+            f"live_target: {live_target}",
         ]
     )
 
@@ -766,6 +788,45 @@ def detect_web_targets(prompt: str) -> dict[str, Any] | None:
     if public_object and fresh and re.search(r"\b(release|version|changelog|pricing|price|cost|cve|vulnerability|advisory|availability|stock)\b", text, re.I):
         return {"urls": [], "query": text}
     return None
+
+
+def detect_live_targets(prompt: str) -> list[str]:
+    """Return read-only live checks to auto-run for clear live-status prompts."""
+    if not prompt or not prompt.strip():
+        return []
+    text = prompt.strip()
+    lowered = text.lower()
+    if not LIVE_TRIGGER_RE.search(text) or not LIVE_OBJECT_RE.search(text):
+        return []
+
+    checks: list[str] = []
+
+    def add(name: str) -> None:
+        if name not in checks:
+            checks.append(name)
+
+    if re.search(r"\b(health|healthy|healthcheck|stack|nodehome|homelab|node)\b", text, re.I):
+        add("health")
+    if re.search(r"\b(gpu|nvidia|temperature|temp|temps|power draw|utilization|utilisation|vram)\b", text, re.I):
+        add("gpu")
+    if re.search(r"\b(power cap|power limit)\b", text, re.I):
+        add("power")
+    if re.search(r"\b(docker|container|containers|open webui|webui)\b", text, re.I):
+        add("docker")
+    if "vllm" in lowered:
+        add("vllm")
+    if "ollama" in lowered:
+        add("ollama")
+    if re.search(r"\b(disk|storage|filesystem|df|free space|space)\b", text, re.I):
+        add("storage")
+    if re.search(r"\b(bmc|ipmi)\b", text, re.I):
+        add("bmc")
+    if re.search(r"\b(ups)\b", text, re.I):
+        add("ups")
+
+    if not checks and re.search(r"\b(running|up|down|service|services)\b", text, re.I):
+        add("docker")
+    return checks[:LIVE_AUTO_LIMIT]
 
 
 def _short_error(exc: Exception) -> str:
@@ -959,6 +1020,36 @@ def auto_route_turn(
                         chars=len(content),
                     )
                     parts.append(f'web(search {result_count} results, "{_trunc(str(query), 48)}")')
+
+    live_mode = session.get("live_mode", DEFAULT_LIVE_MODE)
+    if live_mode == "auto":
+        checks = detect_live_targets(prompt)
+        if checks:
+            results = run_live_checks(config, checks)
+            block = live_context_block(results)
+            add_context(
+                session,
+                f"auto:/live {','.join(checks)}",
+                context_block("live_status", ",".join(checks), block),
+                source="auto-live",
+                provenance={
+                    "checks": checks,
+                    "target": config.live_ssh or "local",
+                    "exit_codes": [row.get("exit_code") for row in results],
+                    "chars": len(block),
+                },
+            )
+            audit_event(
+                config,
+                session,
+                "auto_route_live",
+                status="ok",
+                checks=checks,
+                target=config.live_ssh or "local",
+                exit_codes=[row.get("exit_code") for row in results],
+                **output_digest(block),
+            )
+            parts.append(f"live({', '.join(checks)})")
 
     if not parts:
         return None
@@ -1453,6 +1544,273 @@ def command_web_search(config: Config, session: dict[str, Any], arg: str) -> Non
         },
     )
     print(f"web search context added: {query} ({result_count} results)")
+
+
+LIVE_CHECKS: dict[str, dict[str, Any]] = {
+    "health": {
+        "description": "repo healthcheck.sh summary",
+        "local": ["bash", "scripts/healthcheck.sh"],
+        "remote": "./scripts/healthcheck.sh",
+        "needs_root": True,
+    },
+    "gpu": {
+        "description": "GPU temperature/utilization/VRAM/power snapshot",
+        "local": [
+            "nvidia-smi",
+            "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,pstate",
+            "--format=csv",
+        ],
+        "remote": "nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,pstate --format=csv",
+    },
+    "power": {
+        "description": "GPU0/GPU1 configured power limits",
+        "local": [
+            "nvidia-smi",
+            "-i",
+            "0,1",
+            "--query-gpu=index,power.limit",
+            "--format=csv",
+        ],
+        "remote": "nvidia-smi -i 0,1 --query-gpu=index,power.limit --format=csv",
+    },
+    "docker": {
+        "description": "Docker container status",
+        "local": ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
+        "remote": "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'",
+    },
+    "vllm": {
+        "description": "vLLM container state",
+        "local": [
+            "docker",
+            "inspect",
+            "vllm-server",
+            "--format",
+            "status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} started={{.State.StartedAt}}",
+        ],
+        "remote": "docker inspect vllm-server --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} started={{.State.StartedAt}}'",
+    },
+    "ollama": {
+        "description": "Ollama systemd service status",
+        "local": ["systemctl", "status", "ollama", "--no-pager", "--lines=8"],
+        "remote": "systemctl status ollama --no-pager --lines=8",
+    },
+    "storage": {
+        "description": "filesystem free space",
+        "local": ["df", "-h"],
+        "remote": "df -h",
+    },
+    "bmc": {
+        "description": "BMC LAN channel summary",
+        "local": ["ipmitool", "lan", "print", "1"],
+        "remote": "ipmitool lan print 1",
+    },
+    "ups": {
+        "description": "UPS daemon status if installed",
+        "local": ["upsc", "ups"],
+        "remote": "upsc ups",
+    },
+}
+
+
+def _remote_cd_prefix(path: str) -> str:
+    root = (path or "~/nodehome").strip()
+    if root == "~/nodehome":
+        return "cd ~/nodehome"
+    if re.fullmatch(r"~/[A-Za-z0-9_./-]+", root):
+        return "cd " + root
+    return "cd " + shlex.quote(root)
+
+
+def _format_argv(parts: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def parse_live_arg(arg: str) -> tuple[list[str], str]:
+    raw = (arg or "").strip()
+    if not raw:
+        return ["health"], ""
+    parts = split_command_line(raw)
+    if not parts:
+        return ["health"], ""
+    name = parts[0].lower()
+    if name == "smart":
+        device = parts[1] if len(parts) > 1 else ""
+        return ["smart"], device
+    names = []
+    for part in parts:
+        for chunk in part.split(","):
+            value = chunk.strip().lower()
+            if value:
+                names.append(value)
+    return names or ["all"], ""
+
+
+def expand_live_checks(names: list[str]) -> list[str]:
+    if any(name in {"all", "stack"} for name in names):
+        return ["health", "gpu", "power", "docker", "vllm", "ollama", "storage"]
+    out: list[str] = []
+    aliases = {
+        "containers": "docker",
+        "disk": "storage",
+        "filesystem": "storage",
+        "gpus": "gpu",
+        "healthcheck": "health",
+        "open-webui": "docker",
+        "openwebui": "docker",
+        "webui": "docker",
+    }
+    for name in names:
+        value = aliases.get(name, name)
+        if value not in out:
+            out.append(value)
+    return out
+
+
+def live_command_for_check(config: Config, check: str, extra: str = "") -> tuple[list[str], str]:
+    if check == "smart":
+        device = extra.strip()
+        if not device or not SMART_DEVICE_RE.fullmatch(device):
+            raise RuntimeError("usage: /live smart /dev/<device>")
+        local = ["smartctl", "-a", device]
+        remote = "smartctl -a " + shlex.quote(device)
+    else:
+        spec = LIVE_CHECKS.get(check)
+        if not spec:
+            raise RuntimeError(f"unknown live check: {check}")
+        local = list(spec["local"])
+        remote = str(spec["remote"])
+        if spec.get("needs_root"):
+            remote = _remote_cd_prefix(config.live_root) + " && " + remote
+
+    if config.live_ssh:
+        remote_command = remote
+        return ["ssh", "-o", "BatchMode=yes", config.live_ssh, remote_command], "ssh:" + config.live_ssh
+    return local, "local"
+
+
+def run_live_check(config: Config, check: str, extra: str = "") -> dict[str, Any]:
+    argv, target = live_command_for_check(config, check, extra)
+    display = " ".join(argv) if target.startswith("ssh:") else _format_argv(argv)
+    resolved = shutil.which(argv[0])
+    if not resolved:
+        return {
+            "check": check,
+            "target": target,
+            "command": display,
+            "exit_code": 127,
+            "executable": "",
+            "output": f"executable not found: {argv[0]}",
+        }
+    run_argv = [resolved, *argv[1:]]
+    result = subprocess.run(
+        run_argv,
+        cwd=str(pathlib.Path.cwd() if config.live_ssh else config.workspace),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=config.cmd_timeout,
+        check=False,
+    )
+    return {
+        "check": check,
+        "target": target,
+        "command": display,
+        "exit_code": result.returncode,
+        "executable": resolved,
+        "output": result.stdout.strip(),
+    }
+
+
+def live_context_block(results: list[dict[str, Any]]) -> str:
+    lines = ["LIVE_NODE_STATUS", f"timestamp: {utc_now()}"]
+    for result in results:
+        output = str(result.get("output") or "")
+        truncated = False
+        if len(output) > MAX_CMD_OUTPUT_CHARS:
+            output = output[:MAX_CMD_OUTPUT_CHARS] + "\n...[truncated for nodechat live output cap]"
+            truncated = True
+        lines.extend(
+            [
+                "",
+                f"check: {result.get('check', '')}",
+                f"target: {result.get('target', '')}",
+                f"command: {result.get('command', '')}",
+                f"exit_code: {result.get('exit_code', '')}",
+                f"truncated: {str(truncated).lower()}",
+            ]
+        )
+        if result.get("executable"):
+            lines.append(f"executable: {result.get('executable')}")
+        lines.extend(["", output or "(no output)"])
+    return "\n".join(lines).strip()
+
+
+def run_live_checks(config: Config, checks: list[str], extra: str = "") -> list[dict[str, Any]]:
+    results = []
+    for check in checks:
+        try:
+            results.append(run_live_check(config, check, extra if check == "smart" else ""))
+        except subprocess.TimeoutExpired:
+            results.append(
+                {
+                    "check": check,
+                    "target": config.live_ssh or "local",
+                    "command": check,
+                    "exit_code": 124,
+                    "executable": "",
+                    "output": f"live check timed out after {config.cmd_timeout}s",
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "check": check,
+                    "target": config.live_ssh or "local",
+                    "command": check,
+                    "exit_code": "error",
+                    "executable": "",
+                    "output": str(exc),
+                }
+            )
+    return results
+
+
+def command_live(config: Config, session: dict[str, Any], arg: str) -> None:
+    raw_names, extra = parse_live_arg(arg)
+    checks = expand_live_checks(raw_names)
+    invalid = [name for name in checks if name != "smart" and name not in LIVE_CHECKS]
+    if invalid:
+        print(f"unknown live check(s): {', '.join(invalid)}")
+        print("usage: /live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]")
+        return
+    results = run_live_checks(config, checks, extra)
+    block = live_context_block(results)
+    add_context(
+        session,
+        f"/live {arg.strip() or 'health'}",
+        context_block("live_status", ",".join(checks), block),
+        source="manual-live",
+        provenance={
+            "command": "/live",
+            "checks": checks,
+            "target": config.live_ssh or "local",
+            "exit_codes": [row.get("exit_code") for row in results],
+            "chars": len(block),
+        },
+    )
+    audit_event(
+        config,
+        session,
+        "live_check_executed",
+        status="ok",
+        checks=checks,
+        target=config.live_ssh or "local",
+        exit_codes=[row.get("exit_code") for row in results],
+        **output_digest(block),
+    )
+    print(block)
+    print()
+    print(f"live context added: {', '.join(checks)}")
 
 
 def parse_propose_args(arg: str) -> tuple[str, str]:
@@ -2581,6 +2939,7 @@ def command_routing_mode(
         "history_mode": DEFAULT_HISTORY_MODE,
         "repo_mode": DEFAULT_REPO_MODE,
         "web_mode": DEFAULT_WEB_MODE,
+        "live_mode": DEFAULT_LIVE_MODE,
     }
     default = defaults.get(key, "auto")
     raw = (arg or "").strip().lower()
@@ -2600,7 +2959,8 @@ def command_evidence(session: dict[str, Any]) -> None:
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
     repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
     web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
-    print(f"history_mode={history_mode}  repo_mode={repo_mode}  web_mode={web_mode}")
+    live_mode = session.get("live_mode", DEFAULT_LIVE_MODE)
+    print(f"history_mode={history_mode}  repo_mode={repo_mode}  web_mode={web_mode}  live_mode={live_mode}")
     if not blocks:
         print("No active context blocks.")
         return
@@ -2801,6 +3161,7 @@ def print_help() -> None:
               /web-search <query>   add web search result context
               /web-fetch <url>      add fetched web page text context
               /web-open <url>       alias for /web-fetch
+              /live [check]         add read-only live node status context
               /propose-edit <path> :: <instruction>
                                     generate and store a patch proposal only
               /diff [all]           show latest or all stored patch proposals
@@ -2819,6 +3180,8 @@ def print_help() -> None:
                                     show or set repo file auto-routing mode (default auto)
               /web-mode [auto|manual|off]
                                     show or set web auto-routing mode (default auto)
+              /live-mode [auto|manual|off]
+                                    show or set live-node auto-routing mode (default auto)
               /evidence             list active context blocks with source + provenance
               /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
@@ -2827,10 +3190,11 @@ def print_help() -> None:
               /paste                paste multi-line prompt, end with a single .
 
             Notes
-              AI History, repo files, and web context auto-route on prompts that clearly call for them.
+              AI History, repo files, web context, and live node status auto-route on prompts that clearly call for them.
               The disclosure line above the assistant reply names every routed source.
-              /history-mode, /repo-mode, and /web-mode toggle auto-routing; manual slash commands always work.
+              /history-mode, /repo-mode, /web-mode, and /live-mode toggle auto-routing; manual slash commands always work.
               Web search results are leads, not proof; fetch/open source text before relying on a claim.
+              /live runs fixed read-only checks only; mutations stay behind future approval gates.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
               /undo-apply restores only if the file still matches the applied proposal.
@@ -3013,6 +3377,10 @@ def handle_command(
         command_web_search(config, session, arg)
         return "handled", session, None
 
+    if command == "live":
+        command_live(config, session, arg)
+        return "handled", session, None
+
     if command in {"propose-edit", "propose"}:
         command_propose_edit(config, session, arg)
         return "handled", session, None
@@ -3059,6 +3427,10 @@ def handle_command(
 
     if command in {"web-mode", "webmode"}:
         command_routing_mode(session, "web_mode", "web-mode", arg)
+        return "handled", session, None
+
+    if command in {"live-mode", "livemode"}:
+        command_routing_mode(session, "live_mode", "live-mode", arg)
         return "handled", session, None
 
     if command == "evidence":
@@ -3164,6 +3536,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--history-limit", type=int, default=int(os.environ.get("NODECHAT_HISTORY_LIMIT", "8")))
     parser.add_argument("--cmd-timeout", type=int, default=int(os.environ.get("NODECHAT_CMD_TIMEOUT", "20")))
+    parser.add_argument(
+        "--live-ssh",
+        default=os.environ.get("NODECHAT_LIVE_SSH", ""),
+        help="optional SSH target for live-node checks, e.g. bmoore_77@192.168.1.198",
+    )
+    parser.add_argument(
+        "--live-root",
+        default=os.environ.get("NODECHAT_LIVE_ROOT", "~/nodehome"),
+        help="repo path on the live node for checks that need the nodehome repo",
+    )
     return parser.parse_args(argv)
 
 
@@ -3183,6 +3565,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         history_token=str(args.history_token or ""),
         history_limit=int(args.history_limit),
         cmd_timeout=int(args.cmd_timeout),
+        live_ssh=str(args.live_ssh or ""),
+        live_root=str(args.live_root or "~/nodehome"),
     )
 
 
@@ -3214,6 +3598,7 @@ def main(argv: list[str] | None = None) -> int:
     session.setdefault("history_mode", DEFAULT_HISTORY_MODE)
     session.setdefault("repo_mode", DEFAULT_REPO_MODE)
     session.setdefault("web_mode", DEFAULT_WEB_MODE)
+    session.setdefault("live_mode", DEFAULT_LIVE_MODE)
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")

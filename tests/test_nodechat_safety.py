@@ -34,6 +34,8 @@ def make_config(workspace: pathlib.Path, session_root: pathlib.Path):
         history_token="",
         history_limit=3,
         cmd_timeout=5,
+        live_ssh="",
+        live_root="~/nodehome",
     )
 
 
@@ -725,6 +727,101 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                 )
             )
 
+    def test_live_routing_detects_status_prompts_and_skips_history_style_prompts(self):
+        self.assertEqual(
+            nodechat.detect_live_targets("is vLLM running and are GPU temps okay?"),
+            ["gpu", "vllm"],
+        )
+        self.assertEqual(
+            nodechat.detect_live_targets("check docker and storage status on the node"),
+            ["health", "docker", "storage"],
+        )
+        self.assertEqual(
+            nodechat.detect_live_targets("what did we decide about GPU2?"),
+            [],
+        )
+
+    def test_live_command_uses_optional_ssh_target_for_fixed_checks(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            config.live_ssh = "bmoore_77@192.168.1.198"
+            self.assertEqual(nodechat.parse_live_arg(""), (["health"], ""))
+            argv, target = nodechat.live_command_for_check(config, "health")
+            self.assertEqual(target, "ssh:bmoore_77@192.168.1.198")
+            self.assertEqual(argv[:3], ["ssh", "-o", "BatchMode=yes"])
+            self.assertIn("cd ~/nodehome && ./scripts/healthcheck.sh", argv)
+
+    def test_auto_route_live_skips_when_live_mode_off(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["live_mode"] = "off"
+            original = nodechat.run_live_checks
+            try:
+                nodechat.run_live_checks = lambda config, checks, extra="": (_ for _ in ()).throw(
+                    AssertionError("live checks should not run")
+                )
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "is vLLM running and are GPU temps okay?"
+                )
+            finally:
+                nodechat.run_live_checks = original
+            self.assertIsNone(disclosure)
+            self.assertEqual(session.get("context_blocks"), [])
+
+    def test_auto_route_live_adds_disclosure_provenance_and_audit(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.run_live_checks
+            try:
+                nodechat.run_live_checks = lambda config, checks, extra="": [
+                    {
+                        "check": check,
+                        "target": "local",
+                        "command": check,
+                        "exit_code": 0,
+                        "executable": "mock",
+                        "output": f"{check} ok",
+                    }
+                    for check in checks
+                ]
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "is vLLM running and are GPU temps okay?"
+                )
+            finally:
+                nodechat.run_live_checks = original
+
+            self.assertIsNotNone(disclosure)
+            self.assertIn("live(gpu, vllm)", disclosure or "")
+            blocks = session.get("context_blocks", [])
+            self.assertEqual(len(blocks), 1)
+            self.assertEqual(blocks[0].get("source"), "auto-live")
+            prov = blocks[0].get("provenance") or {}
+            self.assertEqual(prov.get("checks"), ["gpu", "vllm"])
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(
+                any(
+                    r["event_type"] == "auto_route_live"
+                    and r.get("status") == "ok"
+                    and r.get("checks") == ["gpu", "vllm"]
+                    for r in rows
+                )
+            )
+
+    def test_live_smart_requires_dev_path(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            with self.assertRaisesRegex(RuntimeError, "usage: /live smart"):
+                nodechat.live_command_for_check(config, "smart", "C:\\Users\\bmoor\\secret")
+            argv, target = nodechat.live_command_for_check(config, "smart", "/dev/sda")
+            self.assertEqual(target, "local")
+            self.assertEqual(argv, ["smartctl", "-a", "/dev/sda"])
+
     def test_routing_mode_set_get_and_invalid(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -750,6 +847,9 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 nodechat.command_routing_mode(session, "web_mode", "web-mode", "manual")
             self.assertEqual(session["web_mode"], "manual")
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_routing_mode(session, "live_mode", "live-mode", "manual")
+            self.assertEqual(session["live_mode"], "manual")
 
     def test_evidence_lists_source_and_provenance_and_handles_legacy(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
@@ -771,6 +871,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             text = buf.getvalue()
             self.assertIn("history_mode=auto", text)
             self.assertIn("web_mode=auto", text)
+            self.assertIn("live_mode=auto", text)
             self.assertIn("[auto-history]", text)
             self.assertIn("query=q", text)
             self.assertIn("[manual-legacy]", text)
