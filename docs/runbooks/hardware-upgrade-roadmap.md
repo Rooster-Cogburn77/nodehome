@@ -1,7 +1,7 @@
 # Hardware Upgrade Roadmap
 
 **Status:** Living document. Captures prioritized future hardware spends with concrete triggers, not a fixed plan.
-**Last Updated:** 2026-05-13
+**Last Updated:** 2026-05-14
 
 The build is operationally complete as of Session 19. This roadmap covers what to spend on next, when triggers fire, and what to defer. Ordered by value-per-dollar in the current build state, not by absolute cost.
 
@@ -80,7 +80,7 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 
 ### Storage expansion (16TB+ external)
 
-**Current state:** Two 12TB drives landing this week (Drive #1 Walmart, Drive #2 PayMore). 24 TB total bulk capacity plus 2 TB NVMe. Comfortably matches near-term household media + photo + backup workload.
+**Current state:** Two 12TB drives are in flight after Walmart canceled the original Drive #1. Replacement Drive #1 is a low-hour WD Easystore 12TB from sv2deals (`54` hours in seller SMART screenshot, serial `5PJHV96C`); Drive #2 is the PayMore WD My Book 12TB. If both validate on arrival, the node has 24 TB total bulk capacity plus 2 TB NVMe, comfortably matching near-term household media + photo + backup workload.
 
 **Trigger:** Sustained >70% utilization of the 24 TB bulk array, OR a specific workload (Plex 4K library buildout, photo archive expansion past 2 TB) that demands more capacity.
 

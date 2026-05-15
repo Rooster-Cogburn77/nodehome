@@ -1,6 +1,6 @@
 # Home Media Server — Scope and Plan
 
-**Status:** SCOPE — architecture and parts decided, purchase not yet executed.
+**Status:** PROCUREMENT IN PROGRESS — architecture decided; two 12TB external drives ordered; install waits on arrival and SMART validation.
 **Authored:** 2026-05-11 (Session 17 planning).
 
 ## Goal
@@ -25,6 +25,13 @@ Drives plug into the AI node via USB and mount as `/mnt/storage` (or similar). T
 |---|---|---|---|
 | WD Easystore 12TB external USB 3.0 desktop HDD | 2× | Best Buy / Amazon / B&H | $200-220 each (~$420 total) |
 | **Total** | | | **~$420** |
+
+### Procurement state — 2026-05-14
+
+- Walmart order `2000146-01251834` for WD My Book 12TB (`WDBBGB0120HBK-Newm`) was canceled as out of stock; `$269.54` temporary hold should release within 10 business days.
+- Replacement Drive #1 is WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals`, accepted offer `$220` plus `$13.16` listed shipping. Listing SMART screenshot: `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, `54` power-on hours, `15` power cycles, zero reallocated / pending / uncorrectable / UDMA CRC errors. Verify same serial and counters on arrival before formatting.
+- Drive #2 is WD My Book 12TB from PayMore Westport / SPEEKS Technology, eBay order `03-14645-30973`, `$259.79` total with delivery estimated May 16-20 and return window through June 19. Treat as grey-market/no manufacturer warranty until physical seal and SMART checks prove condition.
+- Known subtotal before any sv2deals tax: `$492.95`; final all-in total depends on eBay tax.
 
 Why **2× 12TB**:
 - Best $/TB at this price point (~$18-22/TB)
@@ -67,9 +74,9 @@ The 3× 3090s have HDMI/DisplayPort outputs on the back. They are **not used** i
 - **Storage for Immich (photos) at scale.** If photo ingest grows past 1-2 TB, may need dedicated photo storage. Plenty of headroom in 24 TB for years of photo growth.
 - **IPMI hardening Phase 2/3.** Separate networking spend, not part of this scope.
 
-## Open items before purchase
+## Open items before install
 
-- Confirm Best Buy / Amazon stock and exact pricing on order day. WD Easystore pricing fluctuates with sale cycles; 14TB sometimes drops within $20-30 of 12TB and becomes the better $/TB pick.
+- No additional drive purchase is planned unless one incoming drive fails arrival verification.
 - Confirm USB ports available on the AI node (need 2× USB 3.x). Each Easystore needs its own AC brick — plan rack outlet capacity.
 - Decide library layout on the drives:
   - Option 1: Drive 1 = TV, Drive 2 = movies (clear separation)

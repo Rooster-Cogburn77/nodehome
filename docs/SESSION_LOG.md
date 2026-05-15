@@ -1,6 +1,16 @@
 # Sovereign Node - Session Log
 <!-- Current month only. Archive previous months under docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-05-14 (Session 21)
+**Focus:** Storage procurement recovery after Walmart canceled the first 12TB drive.
+**What was done:**
+- **Walmart canceled Drive #1 despite earlier support assurances.** Order `2000146-01251834` for WD My Book 12TB (`WDBBGB0120HBK-Newm`) was canceled as out of stock. Walmart email says the VISA ending `3415` temporary hold for `$269.54` should release within 10 business days. This replaces the prior "Walmart delivery delayed / fulfillment pending" state.
+- **Replacement Drive #1 secured within the same evening.** Found a just-listed WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals` (`499`, `100%` positive). Seller listed at `$225` plus `$13.16` shipping, declined `$200` and `$210`, then accepted a `$220` best offer. Payment was processing at the time of the update.
+- **SMART evidence made the replacement materially better than a random used drive.** Seller screenshot showed internal model `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, size `12 TB`, USB interface, temp `29 C`, uptime `2 days, 6 hours`, `54` power-on hours, `15` power cycles, and zero reallocated sectors / pending sectors / uncorrectable sectors / UDMA CRC errors. Treat as near-new usage but still verify the same serial and counters on arrival before trusting it.
+- **Current storage procurement state:** PayMore WD My Book 12TB order `03-14645-30973` remains in flight at `$259.79` total with May 16-20 delivery estimate and return window through June 19. The sv2deals Easystore replaces the canceled Walmart unit. Known subtotal before any sv2deals tax is `$492.95` (`$259.79 + $220 + $13.16`), likely near or slightly over the original `$500` ceiling after tax but still defensible in the current HDD shortage market.
+**Commits:** This documentation update.
+**Next:** On arrival, verify sv2deals serial `5PJHV96C` and SMART counters before formatting. On PayMore arrival, photograph packaging seals and verify Power-On Hours before accepting. If both validate clean, format/mount as the two Jellyfin/media drives on the existing U7 shelf.
+
 ## 2026-05-14 (Session 20)
 **Focus:** 2-GPU vLLM validation under the GPU 3 temporary-pigtail constraint.
 **What was done:**

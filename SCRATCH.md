@@ -1,14 +1,13 @@
-# Session Scratch - 2026-05-12 (Session 18, afternoon)
-Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt in progress. Continuation of morning's digest review and sweep pipeline maintenance.
+# Session Scratch - 2026-05-14 (Session 21, evening)
+Focus: Storage procurement recovery after Walmart canceled Drive #1; replacement 12TB Easystore secured through eBay within the same market window.
 
 ## What was decided/executed this session
-- **Drive #1 purchased:** WD My Book 12TB (`WDBBGB0120HBK-Newm`), Walmart, $249. Last 2 in stock at that location. Arrives 2026-05-12 evening.
+- **Walmart Drive #1 canceled:** order `2000146-01251834`, WD My Book 12TB (`WDBBGB0120HBK-Newm`), was canceled as out of stock after support had previously said the order would remain active and be fulfilled. Walmart email says temporary hold on VISA ending `3415` for `$269.54` should release within 10 business days.
+- **Replacement Drive #1 secured:** WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals` (`499`, `100%` positive). Seller declined `$200` and `$210`; accepted `$220` best offer. Listed shipping was `$13.16`; final tax/all-in amount should be verified from order details once payment finishes processing.
+- **Replacement SMART evidence is strong:** listing screenshot showed `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, 12 TB, USB, temp `29 C`, uptime `2 days, 6 hours`, `54` power-on hours, `15` power cycles, and zero reallocated / pending / uncorrectable / UDMA CRC errors. Treat as near-new usage but still used/no-retail-warranty until arrival verifies the same serial and SMART data.
+- **PayMore Drive #2 still in flight:** WD My Book 12TB "new" from PayMore Westport (seller LLC: SPEEKS Technology, Overland Park KS), eBay order `03-14645-30973`, `$259.79` total with free shipping, delivery May 16-20 via USPS Ground.
 - **Market shock confirmed industry-wide.** Same SKU spiked to $323.49 hours after purchase. Multi-retailer check confirmed: WD sold out for 2026, prices up ~46% since Sept 2025, Best Buy 12TB Easystore sold out, Newegg $440. Root cause: AI-hyperscaler nearline HDD demand.
 - **New durable doc:** `docs/wiki/concepts/hardware-supply-2026.md` capturing the market context, related DDR4 ECC RDIMM trajectory, decision rules for spending in this market.
-- **Drive #2 hunt in progress** (no commit yet):
-  - YellowChoo 12TB Easystore: opened $150 best offer → seller countered $175 → user re-countered $160 (pending).
-  - savsystems 14TB Elements "for parts": $30 best offer sent (technical-buyer side bet, recoverable-drive odds ~60-65%).
-  - Reviewed and passed on two used 14TB drives with concerning SMART data (34-36k power-on hours, 30,710 Read Recovery Attempts on one of them).
 - **Drive placement decision:** existing 1U cantilever shelf at U7 above the RM400. No purchase needed. Drives side-by-side, USB cables with slack loop for slide-out.
 
 ## Validation backlog (re-ranked 2026-05-13 with safety edges tightened)
@@ -33,8 +32,8 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
 
 ## Open follow-ons
 - **AI history KB long-termization:** repo utility `scripts/ai_history_kb.py` now owns the unified Claude/Codex/Claude Code history resource flow; runbook is `docs/runbooks/ai-history-knowledge-base.md`. First unified DB on node is `~/node-private/chat-exports/unified/index/ai-history-2026-05-14.sqlite` with 210,064 indexed items. Next integration step is Open WebUI tool/function wiring to the local HTTP API, not treating the DB as always-on model memory.
-- Receive Drive #1 when Walmart ships (delivery TBD; was originally 2026-05-12 evening but delayed). On arrival: lsblk, dmesg, smartctl `-d sat`, wipefs, mkfs.ext4, fstab with `nofail`+`noatime`, dd burn-in, optional smartctl long test overnight. Mount at `/mnt/storage`.
-- **Drive #2 ordered 2026-05-13 at 3:50 PM:** WD My Book 12TB "new" from PayMore Westport (seller LLC: SPEEKS Technology, Overland Park KS), eBay order `03-14645-30973`. **$239.99 + $19.80 TX sales tax = $259.79 total** with free shipping. Delivery May 16-20 via USPS Ground. Returns through June 19. **On arrival verification protocol:** photograph packaging seals before opening; plug in, run `smartctl -d sat -a /dev/sdX` BEFORE formatting; check Power-On Hours (<30 = genuinely new, >200 = wiped-used, file return). If clean: wipefs + ext4 + mount as `/mnt/storage` next to Drive #1 (assuming drive 1 lands first).
+- **Replacement Drive #1 arrival protocol:** on the sv2deals Easystore, first confirm serial `5PJHV96C`, then run `smartctl -d sat -a /dev/sdX` before formatting. Accept only if the SMART story still matches the screenshot: roughly `54` hours, `15` power cycles, and zero reallocated / pending / uncorrectable / CRC errors. If clean: wipefs + ext4 + mount as one of the media drives.
+- **Drive #2 arrival protocol:** PayMore WD My Book 12TB is still treated as "new sealed but grey-market/no MFG warranty." Photograph packaging seals before opening; plug in, run `smartctl -d sat -a /dev/sdX` BEFORE formatting; check Power-On Hours (<30 = genuinely new, >200 = wiped-used, file return). If clean: wipefs + ext4 + mount next to Drive #1.
 - **SCW RAM return shipped 2026-05-13** (dropped off today). Tracking via eBay return label; awaiting carrier confirmation, then SCW receipt, then $454.65 refund processing (typically 2-5 business days after receipt).
 - YellowChoo path dropped (declined $160 / expired; drive showed visible cosmetic damage scratches + chipped enclosure + no SMART data — backed out for cause).
 - savsystems $30 parts-drive offer: still pending response, can let it ride.
@@ -42,12 +41,13 @@ Focus: Drive #1 purchase + real-time market-shock confirmation + Drive #2 hunt i
 - **Open decision still on the docket: leave factual negative seller feedback for SCW.** Window closes ~2026-06-03 (60 days from 2026-04-04 purchase). Decision deferred — undecided. If yes, factual not emotional. Come back after refund clears.
 - **Second rack fan research — circle back after TP=3 thermal data lands.** Researched 2026-05-14 during 300W soak. Existing top fan is AC-powered (wall-wart → DC → fan), plugs directly into rack PDU. **Recommended spec: AC Infinity MULTIFAN S5 (~$25)** — single 120mm + included AC adapter + 3-speed inline controller, designed for AV cabinet exhaust, matches existing fan's plug-and-play AC-PDU pattern. Avoid the chassis-fan path (be quiet! Silent Wings Pro 4 BL098 or Noctua NF-A12x25) — both are 4-pin PWM 12V DC and would require retrofit power delivery for our setup. **Pre-buy task:** identify existing top fan brand/model (photo of fan + wall wart label) — if it's already AC Infinity, just clone it. **Trigger to act:** GPU 0 plateau > 80°C during TP=3 sustained load. If TP=3 stays ≤ 80°C with current setup, no second fan needed.
 
-## Budget state (updated 2026-05-13)
-- Drive #1 (Walmart WD My Book 12TB): $249 list (+ TX sales tax ≈ $269 total estimated)
-- Drive #2 (PayMore via eBay WD My Book 12TB): $259.79 (with tax, free shipping)
-- **Total drive spend: ~$528.79** — $28.79 over the original $500 ceiling
+## Budget state (updated 2026-05-14)
+- Walmart WD My Book 12TB: canceled; `$269.54` temporary hold to release, net `$0` once settled.
+- Replacement Drive #1 (sv2deals WD Easystore 12TB): `$220` accepted offer + `$13.16` listed shipping; final tax/all-in amount pending order details.
+- Drive #2 (PayMore via eBay WD My Book 12TB): `$259.79` (with tax, free shipping).
+- **Known subtotal before sv2deals tax: `$492.95`** (`$259.79 + $220 + $13.16`). Likely near or slightly above the original `$500` ceiling after tax, but still defensible in the current 12TB market given one unit is near-new SMART and the other has a return window.
 - savsystems $30 experiment: still pending, not budget-counted
-- Justification: market shock confirmed mid-purchase (WD sold out 2026, prices up ~46% since Sept 2025); two 12TB drives for $528 in a market where one new 12TB drive is $300-440 retail at authorized channels is a defensible outcome. Original budget targeted a pre-shortage market that no longer exists.
+- Justification: market shock confirmed mid-purchase (WD sold out 2026, prices up ~46% since Sept 2025); two 12TB drives near the original $500 target is a defensible outcome in a market where one new 12TB drive is $300-440 retail at authorized channels. Original budget targeted a pre-shortage market that no longer exists.
 
 ## Carried forward from this morning (Session 18 core)
 - Sweep pipeline bugs (4 open, see `sweeps/PIPELINE_FOLLOWUPS.md`): vLLM title-swallow [recurring], synthesis boilerplate, consumer-gaming mis-classification, GitHub activity duplicates, partial-keyword mis-tags.
