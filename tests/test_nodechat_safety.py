@@ -876,6 +876,38 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("query=q", text)
             self.assertIn("[manual-legacy]", text)
 
+    def test_evidence_groups_by_source_and_preserves_forget_indexes(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session, "auto:/history q0", "history zero",
+                source="auto-history", provenance={"query": "q0", "chars": 10},
+            )
+            nodechat.add_context(
+                session, "/read docs/CURRENT_STATE.md", "read body",
+                source="manual-read", provenance={"path": "docs/CURRENT_STATE.md"},
+            )
+            nodechat.add_context(
+                session, "auto:/history q2", "history two",
+                source="auto-history", provenance={"query": "q2", "chars": 20},
+            )
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_evidence(session)
+            text = buf.getvalue()
+
+            self.assertIn("3 context block(s), 2 source group(s), total_chars=39", text)
+            self.assertIn("Use /forget <index>", text)
+            self.assertIn("[auto-history] blocks=2 chars=30", text)
+            self.assertIn("refs: query=q0 | query=q2", text)
+            self.assertIn("  1.", text)
+            self.assertIn("  3.", text)
+            self.assertIn("[manual-read] blocks=1 chars=9", text)
+            self.assertIn("path=docs/CURRENT_STATE.md", text)
+
     def test_forget_drops_block_by_index_and_all(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)

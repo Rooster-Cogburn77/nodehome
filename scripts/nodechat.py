@@ -2954,6 +2954,51 @@ def command_routing_mode(
     print(f"{label}: {raw}")
 
 
+def context_block_chars(block: dict[str, Any]) -> int:
+    prov = block.get("provenance") or {}
+    chars = prov.get("chars")
+    if isinstance(chars, int):
+        return chars
+    return len(str(block.get("content") or ""))
+
+
+def evidence_value(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(str(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return str(value)
+
+
+def evidence_ref(block: dict[str, Any]) -> str:
+    prov = block.get("provenance") or {}
+    for key in (
+        "path",
+        "url",
+        "query",
+        "command",
+        "checks",
+        "target",
+        "root",
+        "approval_id",
+    ):
+        value = prov.get(key)
+        if value not in ("", None, []):
+            return f"{key}={_trunc(evidence_value(value), 100)}"
+    query = str(block.get("query") or "").strip()
+    return "query=" + _trunc(query, 100) if query else "ref=(none)"
+
+
+def evidence_provenance_pairs(block: dict[str, Any]) -> list[str]:
+    prov = block.get("provenance") or {}
+    pairs = []
+    for key, value in prov.items():
+        if key == "chars" or value in ("", None, []):
+            continue
+        pairs.append(f"{key}={_trunc(evidence_value(value), 100)}")
+    return pairs
+
+
 def command_evidence(session: dict[str, Any]) -> None:
     blocks = session.get("context_blocks", [])
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
@@ -2964,23 +3009,34 @@ def command_evidence(session: dict[str, Any]) -> None:
     if not blocks:
         print("No active context blocks.")
         return
-    print(f"{len(blocks)} context block(s):")
+    grouped: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for idx, block in enumerate(blocks, 1):
-        source = block.get("source", "manual-legacy")
-        created = block.get("created_at", "")
-        prov = block.get("provenance") or {}
-        chars = prov.get("chars")
-        if not isinstance(chars, int):
-            chars = len(str(block.get("content") or ""))
-        prov_pairs = [
-            f"{k}={v}"
-            for k, v in prov.items()
-            if k != "chars" and v not in ("", None)
-        ]
-        line = f"{idx}. [{source}] {created} | chars={chars}"
-        if prov_pairs:
-            line += " | " + ", ".join(prov_pairs)
-        print(line)
+        source = str(block.get("source", "manual-legacy"))
+        grouped.setdefault(source, []).append((idx, block))
+
+    total_chars = sum(context_block_chars(block) for block in blocks)
+    print(
+        f"{len(blocks)} context block(s), "
+        f"{len(grouped)} source group(s), total_chars={total_chars}"
+    )
+    print("Use /forget <index> to drop a block; indexes below are global.")
+
+    for source in sorted(grouped):
+        rows = grouped[source]
+        source_chars = sum(context_block_chars(block) for _, block in rows)
+        refs = [evidence_ref(block) for _, block in rows[:3]]
+        print("")
+        print(f"[{source}] blocks={len(rows)} chars={source_chars}")
+        if refs:
+            print("refs: " + " | ".join(refs))
+        for idx, block in rows:
+            created = block.get("created_at", "")
+            chars = context_block_chars(block)
+            prov_pairs = evidence_provenance_pairs(block)
+            line = f"  {idx}. {created} | chars={chars}"
+            if prov_pairs:
+                line += " | " + ", ".join(prov_pairs)
+            print(line)
 
 
 def command_forget(session: dict[str, Any], arg: str) -> None:
@@ -3182,7 +3238,7 @@ def print_help() -> None:
                                     show or set web auto-routing mode (default auto)
               /live-mode [auto|manual|off]
                                     show or set live-node auto-routing mode (default auto)
-              /evidence             list active context blocks with source + provenance
+              /evidence             group active context blocks by source with provenance
               /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
               /clear-context        remove injected context blocks

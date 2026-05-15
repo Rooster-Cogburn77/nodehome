@@ -32,6 +32,7 @@ Establish a private, independent AI research lab (The Sovereign Node) centered o
 4. **Energy Logic:** Solar/Jackery is a supplemental buffer. Idle costs are covered; heavy research happens on the grid or in peak sun.
 5. **Hardware Safety:** No intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up.
 6. **Documentation First:** Never make a major technical decision without updating the relevant durable docs and `SCRATCH.md`.
+7. **Never suggest ending the session.** Do not ask "want to call the session?", "or call it a session", "good place to stop?", "ready to wrap?", "if you're done for the night", "if you have time", "fresh head tomorrow", or any variant. Do not frame recommendations around the user's energy, focus, or time of day. State what shipped, list the real next options, and let the user pick. Offering "stop" as an option is banned. The user's pace is the user's call.
 
 ## Session Protocol
 1. **Startup:** Read `ATTITUDE.md`, `SCRATCH.md`, `docs/CURRENT_STATE.md`, and the current `docs/SESSION_LOG.md`.

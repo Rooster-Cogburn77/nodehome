@@ -8,18 +8,22 @@ Focus: Re-frame Nodechat scope as full agentic terminal environment, land Observ
 - **Undo lane implemented.** `/undo-apply [n|latest] [--check]` restores an applied proposal from its apply-time backup after verifying the current file still matches the exact applied content. It refuses post-apply file drift, writes an undo safety backup, records `undone_at`/`undo_backup_path`, injects `manual-undo-apply` context, and audits check/confirm/refusal paths.
 - **Web auto-routing lane implemented.** `/web-mode auto|manual|off` now controls Observe-tier web routing. Direct URLs auto-fetch; fresh-public prompts (latest/release/version/CVE/pricing/availability/market) plus a public object auto-route through DuckDuckGo HTML search. Local-only status phrasing intentionally skips web. Auto web uses the same bounded `/web-search` and `/web-fetch` internals, a short timeout, disclosure, `auto-web-search` / `auto-web-fetch` context sources, and `auto_route_web` audit events.
 - **Live-node operator lane implemented.** `/live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]` runs fixed Observe-tier status checks locally or through optional SSH (`NODECHAT_LIVE_SSH`, default root `~/nodehome`). `/live-mode auto|manual|off` controls auto-routing. Live prompts can inject `LIVE_NODE_STATUS` with commands, exit codes, executable provenance, bounded output, and `auto_route_live` / `live_check_executed` audit events. Mutating service actions remain out of scope for this lane.
-- **Tests:** 40/40 passing (13 prior + 12 first auto-routing + 2 reliability regressions + 4 undo/apply-backup + 4 web-routing + 5 live-operator tests). Includes the user-mandated "vague repo topic does not route" guardrail, a local-status web false-positive guardrail, and a live-status-vs-history false-positive guardrail.
+- **Grouped evidence view implemented.** `/evidence` now groups active context blocks by `source`, shows source-level counts and char totals, prints reference summaries, and preserves global block indexes for `/forget <n>`.
+- **Tests:** 41/41 passing (13 prior + 12 first auto-routing + 2 reliability regressions + 4 undo/apply-backup + 4 web-routing + 5 live-operator + 1 grouped-evidence test). Includes the user-mandated "vague repo topic does not route" guardrail, a local-status web false-positive guardrail, and a live-status-vs-history false-positive guardrail.
 
-## End-of-session status
-- **Session commits on `origin/main` before this web-routing work.** `938f3cd` (scope), `e0c83da` (auto-routing), `2a71947` (undo), `9ef17b0` (end-of-session log refresh). New web-routing work is in progress until committed.
-- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`, live-node Observe checks + `/live-mode`.
+## Current status
+- **Commits on `origin/main`:** `938f3cd` (scope), `e0c83da` (auto-routing), `2a71947` (undo), `9ef17b0` (log refresh), `a13d374` (web), `4dfb050` (live-node operator). Grouped `/evidence` is in working tree, not yet committed.
+- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`, live-node Observe checks + `/live-mode`, grouped `/evidence` (working tree).
 - **No regressions** in the existing apply/approve/cmd/audit/workspace-confinement surface.
+
+## Behavior rule (added 2026-05-15 mid-session, hard rule)
+Never suggest ending the session in any form. Banned: "or call the session", "or call it a session", "good place to stop", "ready to wrap", "if you're done for the night", "if you have time", "fresh head tomorrow", or any variant. Do not frame around energy / focus / time of day. State what shipped, list real next options, let the user pick. Mirrored in `CLAUDE.md` Hard Rule 7 and in `memory/feedback_no_tired_or_end_of_day_framing.md`.
 
 ## Plan (next session)
 **Nodechat — remaining roadmap per `docs/runbooks/nodechat-scope.md`:**
-1. Grouped evidence view. `/evidence` today is flat; group by source with per-source totals and links.
-2. Auto-routing recall pass. Widen heuristics with confusion-matrix evidence rather than guesses.
-3. Broader operator approvals. Extend from selected Git operations into individually justified live-node mutations only after the evidence and rollback surfaces are strong enough.
+1. Auto-routing recall pass. Widen heuristics with confusion-matrix evidence rather than guesses.
+2. Broader operator approvals. Extend from selected Git operations into individually justified live-node mutations only after the evidence and rollback surfaces are strong enough.
+3. Model routing. Add explicit local/remote model selection only after the current single-model terminal loop remains stable.
 
 **Out-of-Nodechat work still open today:**
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).

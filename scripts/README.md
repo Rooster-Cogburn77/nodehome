@@ -176,9 +176,9 @@ For private-history support from Windows, open the SSH tunnel first:
 scripts\windows\nodechat-tunnel.cmd
 ```
 
-Today's capabilities: streaming chat against the local vLLM endpoint, saved sessions, auto-routing for AI History / repo files / fresh public web context / live-node status (`/history-mode`, `/repo-mode`, `/web-mode`, `/live-mode`), manual AI History lookup (`/history`), read-only local context (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), web context (`/web-search`, `/web-fetch`, `/web-open`), live-node checks (`/live`), single-file patch proposals + approval-gated apply/undo with backups (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`, `/undo-apply`), read-only command capture (`/cmd`), and a narrow Git approval queue (`/approvals`, `/approve`, `/reject`) for `git fetch` variants, `git pull --ff-only`, and `git push`. Persistent JSONL audit at `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
+Today's capabilities: streaming chat against the local vLLM endpoint, saved sessions, auto-routing for AI History / repo files / fresh public web context / live-node status (`/history-mode`, `/repo-mode`, `/web-mode`, `/live-mode`), grouped evidence view (`/evidence`, `/forget`), manual AI History lookup (`/history`), read-only local context (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), web context (`/web-search`, `/web-fetch`, `/web-open`), live-node checks (`/live`), single-file patch proposals + approval-gated apply/undo with backups (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`, `/undo-apply`), read-only command capture (`/cmd`), and a narrow Git approval queue (`/approvals`, `/approve`, `/reject`) for `git fetch` variants, `git pull --ff-only`, and `git push`. Persistent JSONL audit at `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
 
-Next implementation lanes are grouped evidence view, an auto-routing recall pass, and broader operator approvals after the evidence/rollback surface is strong enough (see scope doc).
+Next implementation lanes are an auto-routing recall pass and broader operator approvals after the evidence/rollback surface is strong enough (see scope doc).
 
 Open WebUI integration assets:
 

@@ -76,17 +76,16 @@ Nodechat today is an early, partial implementation of the intended scope. What i
 - **Live-node operator checks**, conservative day-one Observe tier. `/live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]` runs fixed status commands locally or through optional SSH (`NODECHAT_LIVE_SSH` / `--live-ssh`, default root `~/nodehome`). Auto live routing triggers only on clear live-status prompts about the node, GPUs, vLLM/Ollama/Open WebUI/Docker, storage, BMC/IPMI, UPS, or power caps. It injects `LIVE_NODE_STATUS` with commands, exit codes, executable provenance, and bounded output. Mutating service operations are not part of this lane.
 - Live routing uses `/live-mode auto|manual|off`, discloses as `live(...)` in the auto-routing line, and records `auto_route_live` plus `live_check_executed` audit events.
 - **Disclosure line printed before every assistant reply** that auto-routed anything, e.g. `[auto-routed: history(2403 chars, "what did we decide about gpu2") | repo(read docs/CURRENT_STATE.md) | web(search 8 results, "latest vLLM release")]`. Skips and errors are disclosed inline (`history(error: …)`, `web(search error: …)`).
-- **Context controls.** `/history-mode auto|manual|off`, `/repo-mode auto|manual|off`, `/web-mode auto|manual|off` (defaults `auto`); `/evidence` lists active blocks with source + provenance; `/forget [n|latest|all]` drops blocks.
+- **Context controls.** `/history-mode auto|manual|off`, `/repo-mode auto|manual|off`, `/web-mode auto|manual|off`, `/live-mode auto|manual|off` (defaults `auto`); `/evidence` groups active blocks by source with counts, total chars, reference summaries, and global indexes; `/forget [n|latest|all]` drops blocks.
 - **Structured provenance on every context block.** Each block carries `source` (e.g. `auto-history`, `auto-repo`, `manual-read`, `manual-cmd`, `manual-approve`, …) and a `provenance` dict (paths, queries, exit codes, approval ids, etc.). Legacy blocks render under `manual-legacy`.
 - **Audit covers routing too.** `auto_route_history`, `auto_route_repo`, and `auto_route_web` events log status (`ok|error`), query/path/URL/action, chars/results, and reason on skip.
 - Workspace confinement, secret-path refusal, ambiguous-hunk refusal, resolved executable provenance.
 - Persistent JSONL audit log under `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
-- Safety test suite in `tests/test_nodechat_safety.py` (40 tests passing).
+- Safety test suite in `tests/test_nodechat_safety.py` (41 tests passing).
 - Windows launchers `scripts/windows/nodechat.cmd` and `scripts/windows/nodechat-tunnel.cmd`.
 
 What is **not** in place yet (gap between current state and intended scope):
 
-- Better evidence view: today `/evidence` is a flat list; future versions should group by source and show grouped totals.
 - Model routing across local + remote.
 - Broader command classes beyond the current Git approval set.
 
@@ -96,9 +95,9 @@ These are the next implementation lanes, not future-maybes.
 
 In rough order. Each lane should land with audit + tier-correct approval; capability without provenance is a regression.
 
-1. **Better evidence view.** Group injected context by source; show grouped totals and per-source links; surface evidence as the default visibility surface.
-2. **Auto-routing recall pass.** Once the Observe lanes above land, widen the day-one heuristics with confusion-matrix evidence rather than guesses.
-3. **Broader operator approvals.** Extend the approval queue from selected Git operations into individually justified live-node mutations (`docker restart`, `systemctl restart`, config changes) only after the evidence and rollback surfaces are strong enough.
+1. **Auto-routing recall pass.** Once the Observe lanes above land, widen the day-one heuristics with confusion-matrix evidence rather than guesses.
+2. **Broader operator approvals.** Extend the approval queue from selected Git operations into individually justified live-node mutations (`docker restart`, `systemctl restart`, config changes) only after the evidence and rollback surfaces are strong enough.
+3. **Model routing.** Add explicit local/remote model selection only after the current single-model terminal loop remains stable.
 
 ## What Nodechat Is Not
 

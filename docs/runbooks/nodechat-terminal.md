@@ -206,7 +206,7 @@ Rules:
 - `/search-files` searches text files only and returns bounded filename/line matches.
 - `/git-status` runs only the fixed read-only `git status --short --branch` command.
 - Secret-ish paths and generated/private stores are refused rather than injected, both for manual `/read` and for auto-repo routing.
-- `/evidence` lists the active context blocks with their `source` and `provenance` fields. `/forget [n|latest|all]` drops one or all of them.
+- `/evidence` groups active context blocks by source, shows per-source counts, char totals, reference summaries, and the global indexes used by `/forget`. `/forget [n|latest|all]` drops one or all of them.
 
 ## Web Context Tools
 
@@ -349,6 +349,7 @@ Current coverage:
 - `/apply` still works when repeated hunk context has an exact preferred location.
 - `/cmd` read-only subprocess execution records a resolved executable path.
 - Persistent audit records refused commands, queued approvals, executed approvals, blocked approvals, and apply check/confirm events.
+- `/evidence` groups blocks by source while preserving global `/forget` indexes.
 - Live routing detection avoids history-style prompts such as "what did we decide about GPU2?"
 - Live checks can run through an optional SSH target, validate SMART device paths, disclose provenance, and respect `/live-mode off`.
 
@@ -375,7 +376,7 @@ chat with local vLLM (streaming, sessioned, slash-command UX)
 /repo-mode [auto|manual|off]
 /web-mode [auto|manual|off]
 /live-mode [auto|manual|off]
-/evidence                  list context blocks with source + provenance
+/evidence                  group context blocks by source with provenance
 /forget [n|latest|all]     drop a context block
 ```
 
