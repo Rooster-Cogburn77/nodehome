@@ -148,6 +148,38 @@ python3 ~/nodehome/scripts/ai_history_kb.py serve --host 127.0.0.1 --port 8765
 
 Runbook: [docs/runbooks/ai-history-knowledge-base.md](../docs/runbooks/ai-history-knowledge-base.md)
 
+## Nodechat Terminal Client
+
+`nodechat.py` is the repo-owned terminal chat client for the local OpenAI-compatible vLLM endpoint.
+
+Run on the homelab node:
+
+```bash
+python3 ~/nodehome/scripts/nodechat.py
+```
+
+Run from Windows against the homelab:
+
+```powershell
+python scripts\nodechat.py --base-url http://192.168.1.198:8000/v1
+```
+
+Or use the Windows launcher:
+
+```bat
+scripts\windows\nodechat.cmd
+```
+
+For private-history support from Windows, open the SSH tunnel first:
+
+```bat
+scripts\windows\nodechat-tunnel.cmd
+```
+
+It supports streaming responses, saved sessions, slash commands, and explicit AI History lookup through `/history <query>`. It does not execute shell commands or edit files.
+
+Runbook: [docs/runbooks/nodechat-terminal.md](../docs/runbooks/nodechat-terminal.md)
+
 Open WebUI integration assets:
 
 - `scripts/systemd/ai-history-kb.service` — persistent host API service.
