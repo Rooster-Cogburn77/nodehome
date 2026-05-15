@@ -4,9 +4,9 @@ Status: validated terminal chat client with explicit read-only local context too
 
 `scripts/nodechat.py` is a small stdlib-only terminal client for talking to the Nodehome local model stack through an OpenAI-compatible endpoint such as vLLM. It is meant to mirror the useful feel of Codex/Claude Code: terminal-first, sessioned, slash-command driven, and project-context aware.
 
-It is not a write-capable coding agent. It can now inject explicitly requested read-only local context and explicitly requested web context into the chat. It still does not edit files, run arbitrary shell commands, browse automatically, or persist fetched web content unless the user explicitly saves it outside Nodechat.
+It is not an unrestricted coding agent. It can now inject explicitly requested read-only local context and explicitly requested web context into the chat. It still does not run arbitrary shell commands, browse automatically, expose unrestricted filesystem access, or persist fetched web content unless the user explicitly saves it outside Nodechat.
 
-It can also generate patch proposals with `/propose-edit`, but those proposals are stored only in the Nodechat session. Nodechat does not apply them to disk.
+It can also generate patch proposals with `/propose-edit`, but those proposals are stored only in the Nodechat session until the user explicitly runs `/apply ... --confirm`.
 
 Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/apply` validates the proposal first, writes a backup under the Nodechat session directory, and only supports bounded single-file text edits.
 
@@ -141,6 +141,8 @@ Contents:
 ```text
 NODECHAT_HISTORY_TOKEN=paste-saved-token-here
 ```
+
+`AI_HISTORY_TOKEN=paste-saved-token-here` also works; the Windows launcher maps it to `NODECHAT_HISTORY_TOKEN` before starting Nodechat.
 
 Do not put this token in the repo.
 

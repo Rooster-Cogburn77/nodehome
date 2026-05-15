@@ -12,6 +12,7 @@ if exist "%NODECHAT_ENV_FILE%" (
 if "%NODECHAT_BASE_URL%"=="" set "NODECHAT_BASE_URL=http://192.168.1.198:8000/v1"
 if "%NODECHAT_HISTORY_URL%"=="" set "NODECHAT_HISTORY_URL=http://127.0.0.1:8765"
 if "%NODECHAT_WORKSPACE%"=="" set "NODECHAT_WORKSPACE=%~dp0..\.."
+if "%NODECHAT_HISTORY_TOKEN%"=="" if not "%AI_HISTORY_TOKEN%"=="" set "NODECHAT_HISTORY_TOKEN=%AI_HISTORY_TOKEN%"
 
 if "%NODECHAT_HISTORY_TOKEN%"=="" (
   echo warning: NODECHAT_HISTORY_TOKEN is not set. /history will fail if the AI History API requires auth.
