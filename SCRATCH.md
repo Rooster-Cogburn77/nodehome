@@ -1,7 +1,17 @@
-# Session Scratch - 2026-05-14 / 2026-05-15 (Session 21, evening)
-Focus: Storage procurement recovery after Walmart canceled Drive #1; replacement 12TB Easystore secured through eBay within the same market window; `whichllm` evaluated as a model-scouting tool.
+# Session Scratch - 2026-05-15 (Session 23)
+Focus: Re-frame Nodechat scope as full agentic terminal environment, then land the first auto-routing capability lane (AI History + repo files with disclosure).
 
 ## What was decided/executed this session
+- **Scope correction shipped (commit `938f3cd`).** New authoritative scope doc `docs/runbooks/nodechat-scope.md` defines Nodechat as the local agentic terminal environment for Nodehome — capability with evidence as the philosophy, 5-tier risk model (Observe / Analyze / Prepare / Mutate / Dangerous) as the control system. `nodechat-terminal.md` re-framed; `CURRENT_STATE.md` and `scripts/README.md` link the scope doc.
+- **Auto-routing lane #1 implemented and tested.** AI History routes on prior-decision phrasing; repo routes on concrete artifacts only (named files, known runbook stems, path tokens). Per user direction: vague topic phrases skip, bare filenames skip, history query is sent verbatim (no normalization), no `git status` injection on vague repo prompts. Two-file cap on repo routing per turn. Failures never block the chat turn — they emit an `auto_route_*` audit event with `status=error` and disclose inline.
+- **Disclosure + context controls + structured provenance + audit landed together.** `[auto-routed: ...]` line above every assistant reply that routed anything. `/history-mode`, `/repo-mode`, `/evidence`, `/forget` commands. Every context block now carries `source` and `provenance`; legacy blocks render under `manual-legacy`. New audit event types: `auto_route_history`, `auto_route_repo`.
+- **Tests:** 27/27 passing (13 prior + 12 new auto-routing + 2 reliability regressions). Includes the user-mandated "vague repo topic does not route" guardrail.
+
+## Pre-session work (carry-forward from Session 21 evening, still relevant)
+
+Focus carryover: Storage procurement recovery after Walmart canceled Drive #1; replacement 12TB Easystore secured through eBay within the same market window; `whichllm` evaluated as a model-scouting tool.
+
+### What was decided/executed in Session 21 (evening)
 - **Walmart Drive #1 canceled:** order `2000146-01251834`, WD My Book 12TB (`WDBBGB0120HBK-Newm`), was canceled as out of stock after support had previously said the order would remain active and be fulfilled. Walmart email says temporary hold on VISA ending `3415` for `$269.54` should release within 10 business days.
 - **Replacement Drive #1 secured:** WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals` (`499`, `100%` positive). Seller declined `$200` and `$210`; accepted `$220` best offer. Listed shipping was `$13.16`; final tax/all-in amount should be verified from order details once payment finishes processing.
 - **Replacement SMART evidence is strong:** listing screenshot showed `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, 12 TB, USB, temp `29 C`, uptime `2 days, 6 hours`, `54` power-on hours, `15` power cycles, and zero reallocated / pending / uncorrectable / UDMA CRC errors. Treat as near-new usage but still used/no-retail-warranty until arrival verifies the same serial and SMART data.

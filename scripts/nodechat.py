@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Terminal chat client for the local Nodehome model stack.
+"""Terminal client for the local Nodehome model stack.
 
-This is intentionally a terminal copilot, not an autonomous shell agent. It
-talks to an OpenAI-compatible local endpoint such as vLLM, persists sessions,
-and can explicitly pull context from the private AI History KB.
+Local agentic terminal environment for Nodehome. Talks to an OpenAI-compatible
+local endpoint (today: vLLM), persists sessions, auto-routes private AI History
+and repo file context when the user prompt clearly calls for it, and exposes
+explicit slash commands for context, edits, and approved-scope commands.
+
+Authoritative scope: docs/runbooks/nodechat-scope.md.
 """
 
 from __future__ import annotations
@@ -113,24 +116,79 @@ TEXT_EXTENSIONS = {
     ".yml",
 }
 
+DEFAULT_HISTORY_MODE = "auto"
+DEFAULT_REPO_MODE = "auto"
+ROUTING_MODES = ("auto", "manual", "off")
+REPO_AUTO_LIMIT = 2
+
+HISTORY_AUTO_PATTERNS = (
+    re.compile(r"\bwhat did we\b", re.I),
+    re.compile(r"\bremind me\b", re.I),
+    re.compile(r"\bwhen did we\b", re.I),
+    re.compile(r"\bhow did we\b", re.I),
+    re.compile(r"\bwhy did we\b", re.I),
+    re.compile(r"\bwhere did we\b", re.I),
+    re.compile(r"\bdid we (?:ever|already|decide)\b", re.I),
+    re.compile(r"\bwho decided\b", re.I),
+    re.compile(r"\bpreviously\b", re.I),
+    re.compile(r"\bprior (?:decision|run|incident|session)\b", re.I),
+    re.compile(r"\bearlier (?:session|today|this week|decision)\b", re.I),
+    re.compile(r"\blast (?:session|time|week|month) we\b", re.I),
+    re.compile(r"\bhistory of\b", re.I),
+)
+
+REPO_NAMED_FILE_PATTERNS = (
+    (re.compile(r"\bCURRENT_STATE(?:\.md)?\b"), "docs/CURRENT_STATE.md"),
+    (re.compile(r"\bSESSION_LOG(?:\.md)?\b"), "docs/SESSION_LOG.md"),
+    (re.compile(r"\bCLAUDE\.md\b", re.I), "CLAUDE.md"),
+    (re.compile(r"\bSCRATCH\.md\b", re.I), "SCRATCH.md"),
+    (re.compile(r"\bATTITUDE\.md\b", re.I), "ATTITUDE.md"),
+)
+
+REPO_RUNBOOK_STEMS = (
+    "nodechat-scope",
+    "nodechat-terminal",
+    "ipmi-recovery",
+    "ipmi-hardening",
+    "home-media-server",
+    "hardware-upgrade-roadmap",
+    "ai-history-knowledge-base",
+    "nvidia-power-cap",
+    "upgrade-cadence",
+    "bmc-fan-thresholds",
+)
+REPO_RUNBOOK_RE = re.compile(
+    r"\b(" + "|".join(re.escape(stem) for stem in REPO_RUNBOOK_STEMS) + r")\b",
+    re.I,
+)
+
+REPO_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_/\\])(?:docs|scripts|sweeps|site|tests|memory)[\\/][A-Za-z0-9_./\\\-]+"
+)
+
 DEFAULT_SYSTEM_PROMPT = """\
-You are Nodechat, a local terminal copilot for the Nodehome homelab.
+You are Nodechat, the local agentic terminal environment for the Nodehome homelab.
 
 Be direct, factual, and pragmatic. Separate observed facts from inference.
 Your current serving model and endpoint are provided in a NODECHAT_RUNTIME
 system message. If asked what model you are, answer from that runtime message.
 Do not claim to be custom-built or model-less.
-When private AI History context is provided, treat it as local project memory
-with provenance, not as general world knowledge. Do not claim to have searched
-private history unless a HISTORY_CONTEXT block is present in this conversation.
 
-You only have access to context explicitly injected by slash commands such as
-/history, /read, /tree, /search-files, /git-status, /web-fetch, /web-search,
-and /cmd or approved command output from /approve.
-Do not claim broad filesystem, shell, or internet access. If the needed context
-was not injected, say what slash command would retrieve it.
+Some context is auto-routed into the conversation when the user prompt clearly
+calls for it (private AI History, repo files). Other context is injected only
+when the user runs a slash command such as /history, /read, /tree,
+/search-files, /git-status, /web-fetch, /web-search, /cmd, or approved command
+output from /approve. Treat HISTORY_CONTEXT and NODECHAT_TOOL_CONTEXT blocks
+as local project memory or local file evidence with provenance, not as general
+world knowledge. Do not claim to have searched private history or read a file
+unless the corresponding context block is present in this conversation.
+
 Patch proposals created by /propose-edit are proposals only. Do not claim they
-were applied unless the user explicitly applies them outside Nodechat.
+were applied unless the user explicitly applies them.
+
+You do not have arbitrary shell, browse-the-internet, or freeform file-write
+access. Mutations require explicit user approval via /approve or
+/apply --confirm.
 """
 
 
@@ -205,6 +263,8 @@ def make_session(config: Config) -> dict[str, Any]:
         "messages": [],
         "context_blocks": [],
         "approvals": [],
+        "history_mode": DEFAULT_HISTORY_MODE,
+        "repo_mode": DEFAULT_REPO_MODE,
     }
 
 
@@ -215,7 +275,10 @@ def session_path(config: Config, session: dict[str, Any]) -> pathlib.Path:
 def save_session(config: Config, session: dict[str, Any]) -> pathlib.Path:
     session["updated_at"] = utc_now()
     path = session_path(config, session)
-    path.write_text(json.dumps(session, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        path.write_text(json.dumps(session, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: could not save nodechat session {path}: {exc}", file=sys.stderr)
     return path
 
 
@@ -235,17 +298,29 @@ def audit_event(config: Config, session: dict[str, Any], event_type: str, **fiel
         "cwd": str(workspace_path(config, session)),
         **fields,
     }
-    path = audit_log_path(config)
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    try:
+        path = audit_log_path(config)
+        with path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        # Audit is evidence, not a control-plane dependency. A locked or
+        # unwritable audit path must not block chat, routing, or command output.
+        return
 
 
 def read_recent_audit(config: Config, limit: int = 20) -> list[dict[str, Any]]:
-    path = audit_log_path(config)
+    try:
+        path = audit_log_path(config)
+    except OSError:
+        return []
     if not path.exists():
         return []
     rows = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    for line in lines:
         if not line.strip():
             continue
         try:
@@ -359,7 +434,7 @@ def build_api_messages(config: Config, session: dict[str, Any]) -> list[dict[str
         }
     )
 
-    for block in session.get("context_blocks", [])[-3:]:
+    for block in session.get("context_blocks", [])[-5:]:
         content = str(block.get("content") or "").strip()
         if content:
             messages.append({"role": "system", "content": content})
@@ -476,6 +551,8 @@ def fetch_history_context(config: Config, query: str, force: bool = True) -> str
 
 
 def runtime_context(config: Config, session: dict[str, Any]) -> str:
+    history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
+    repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
     return "\n".join(
         [
             "NODECHAT_RUNTIME",
@@ -483,8 +560,10 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
             f"workspace: {session.get('cwd') or config.workspace}",
-            "tool_access: explicit read-only local context, explicit web fetch/search, read-only /cmd, and selected /approve command output",
-            "no_access: no arbitrary shell, no file writes, no automatic browsing",
+            "tool_access: auto-routed AI History and repo files when prompt indicates, explicit read-only local context, explicit web fetch/search, read-only /cmd, and selected /approve command output",
+            "no_access: no arbitrary shell, no freeform file writes (only /apply --confirm), no automatic browsing",
+            f"history_mode: {history_mode}",
+            f"repo_mode: {repo_mode}",
         ]
     )
 
@@ -546,14 +625,190 @@ def context_block(kind: str, title: str, content: str) -> str:
     ).strip()
 
 
-def add_context(session: dict[str, Any], query: str, content: str) -> None:
+def add_context(
+    session: dict[str, Any],
+    query: str,
+    content: str,
+    *,
+    source: str = "manual-legacy",
+    provenance: dict[str, Any] | None = None,
+) -> None:
     session.setdefault("context_blocks", []).append(
         {
             "created_at": utc_now(),
             "query": query,
             "content": content,
+            "source": source,
+            "provenance": provenance or {},
         }
     )
+
+
+def detect_history_query(prompt: str) -> str | None:
+    """Return the prompt to use as a history query if any auto pattern matches."""
+    if not prompt or not prompt.strip():
+        return None
+    for pattern in HISTORY_AUTO_PATTERNS:
+        if pattern.search(prompt):
+            return prompt.strip()
+    return None
+
+
+def detect_repo_targets(
+    config: Config,
+    session: dict[str, Any],
+    prompt: str,
+) -> list[pathlib.Path]:
+    """Return safe, distinct workspace paths to auto-read for this prompt.
+
+    Day-one matches: explicit named files (CURRENT_STATE / SESSION_LOG /
+    CLAUDE.md / SCRATCH.md / ATTITUDE.md), known runbook stems, and
+    path-like tokens (docs/x, scripts/x, ...). Bare filenames and topic
+    phrases do not auto-route.
+    """
+    if not prompt or not prompt.strip():
+        return []
+    candidates: list[str] = []
+
+    for pattern, rel in REPO_NAMED_FILE_PATTERNS:
+        if pattern.search(prompt):
+            candidates.append(rel)
+
+    for match in REPO_RUNBOOK_RE.finditer(prompt):
+        candidates.append(f"docs/runbooks/{match.group(1).lower()}.md")
+
+    for match in REPO_PATH_RE.finditer(prompt):
+        candidates.append(match.group(0).replace("\\", "/"))
+
+    out: list[pathlib.Path] = []
+    seen: set[str] = set()
+    for raw in candidates:
+        path = resolve_workspace_path(config, session, raw)
+        key = os.path.normcase(str(path))
+        if key in seen:
+            continue
+        seen.add(key)
+        if path_safety_reason(config, session, path):
+            continue
+        if not path.exists() or not path.is_file():
+            continue
+        if not is_text_candidate(path):
+            continue
+        out.append(path)
+        if len(out) >= REPO_AUTO_LIMIT:
+            break
+    return out
+
+
+def _short_error(exc: Exception) -> str:
+    msg = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+    return msg[:60] + "..." if len(msg) > 60 else msg
+
+
+def _trunc(text: str, n: int) -> str:
+    text = text.strip()
+    if len(text) <= n:
+        return text
+    return text[: n - 1] + "..."
+
+
+def auto_route_turn(
+    config: Config,
+    session: dict[str, Any],
+    prompt: str,
+) -> str | None:
+    """Auto-route AI History and repo file context for a chat turn.
+
+    Returns a one-line disclosure string if anything was routed (including
+    skips/errors), or None if nothing fired. Never raises; routing failures
+    are logged to audit and reported in the disclosure line so the chat
+    turn always proceeds.
+    """
+    parts: list[str] = []
+
+    history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
+    if history_mode == "auto":
+        query = detect_history_query(prompt)
+        if query:
+            try:
+                content = fetch_history_context(config, query, force=True)
+            except Exception as exc:
+                audit_event(
+                    config,
+                    session,
+                    "auto_route_history",
+                    status="error",
+                    query=query,
+                    reason=_short_error(exc),
+                )
+                parts.append(f"history(error: {_short_error(exc)})")
+            else:
+                size = len(content)
+                add_context(
+                    session,
+                    f"auto:/history {query}",
+                    context_block("history_context", query, content),
+                    source="auto-history",
+                    provenance={"query": query, "chars": size},
+                )
+                audit_event(
+                    config,
+                    session,
+                    "auto_route_history",
+                    status="ok",
+                    query=query,
+                    chars=size,
+                )
+                parts.append(f'history({size} chars, "{_trunc(query, 48)}")')
+
+    repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
+    if repo_mode == "auto":
+        targets = detect_repo_targets(config, session, prompt)
+        if targets:
+            files_added: list[str] = []
+            for path in targets:
+                try:
+                    text, truncated = read_text_path(path)
+                except Exception as exc:
+                    audit_event(
+                        config,
+                        session,
+                        "auto_route_repo",
+                        status="error",
+                        path=str(path),
+                        reason=_short_error(exc),
+                    )
+                    continue
+                content = format_file_read(path, text, truncated)
+                rel = display_path(config, session, path)
+                add_context(
+                    session,
+                    f"auto:/read {rel}",
+                    context_block("file_read", str(path), content),
+                    source="auto-repo",
+                    provenance={
+                        "path": str(path),
+                        "rel": rel,
+                        "chars": len(text),
+                        "truncated": truncated,
+                    },
+                )
+                audit_event(
+                    config,
+                    session,
+                    "auto_route_repo",
+                    status="ok",
+                    path=str(path),
+                    chars=len(text),
+                    truncated=truncated,
+                )
+                files_added.append(rel)
+            if files_added:
+                parts.append(f"repo(read {', '.join(files_added)})")
+
+    if not parts:
+        return None
+    return "[auto-routed: " + " | ".join(parts) + "]"
 
 
 def workspace_path(config: Config, session: dict[str, Any]) -> pathlib.Path:
@@ -689,7 +944,13 @@ def command_tree(config: Config, session: dict[str, Any], arg: str) -> None:
             break
 
     content = "\n".join(lines)
-    add_context(session, f"/tree {arg}".strip(), context_block("tree", str(root), content))
+    add_context(
+        session,
+        f"/tree {arg}".strip(),
+        context_block("tree", str(root), content),
+        source="manual-tree",
+        provenance={"command": "/tree", "root": str(root), "entries": count},
+    )
     print(f"tree context added: {root} ({count} entries)")
 
 
@@ -717,7 +978,13 @@ def command_read(config: Config, session: dict[str, Any], arg: str) -> None:
         print(f"read failed: {exc}")
         return
     content = format_file_read(path, text, truncated)
-    add_context(session, f"/read {arg}", context_block("file_read", str(path), content))
+    add_context(
+        session,
+        f"/read {arg}",
+        context_block("file_read", str(path), content),
+        source="manual-read",
+        provenance={"command": "/read", "path": str(path), "chars": len(text), "truncated": truncated},
+    )
     suffix = " (truncated)" if truncated else ""
     print(f"file context added: {path}{suffix}")
 
@@ -797,7 +1064,13 @@ def command_search_files(config: Config, session: dict[str, Any], arg: str) -> N
         "",
     ]
     lines.extend(rows or ["No matches found."])
-    add_context(session, f"/search-files {arg}", context_block("file_search", query, "\n".join(lines)))
+    add_context(
+        session,
+        f"/search-files {arg}",
+        context_block("file_search", query, "\n".join(lines)),
+        source="manual-search",
+        provenance={"command": "/search-files", "query": query, "root": str(root), "matches": len(rows)},
+    )
     print(f"file search context added: {query} ({len(rows)} matches)")
 
 
@@ -818,7 +1091,13 @@ def command_git_status(config: Config, session: dict[str, Any]) -> None:
         return
     output = result.stdout.strip() or "(clean output)"
     content = "\n".join([f"cwd: {root}", f"exit_code: {result.returncode}", "", output])
-    add_context(session, "/git-status", context_block("git_status", str(root), content))
+    add_context(
+        session,
+        "/git-status",
+        context_block("git_status", str(root), content),
+        source="manual-git-status",
+        provenance={"command": "/git-status", "root": str(root), "exit_code": result.returncode},
+    )
     print(output)
     print("git status context added")
 
@@ -934,7 +1213,13 @@ def command_web_fetch(config: Config, session: dict[str, Any], arg: str) -> None
         "",
         text,
     ]
-    add_context(session, f"/web-fetch {url}", context_block("web_fetch", url, "\n".join(lines)))
+    add_context(
+        session,
+        f"/web-fetch {url}",
+        context_block("web_fetch", url, "\n".join(lines)),
+        source="manual-web-fetch",
+        provenance={"command": "/web-fetch", "url": url, "content_type": content_type or "", "truncated": truncated},
+    )
     suffix = " (truncated)" if truncated else ""
     print(f"web context added: {url}{suffix}")
 
@@ -985,7 +1270,13 @@ def command_web_search(config: Config, session: dict[str, Any], arg: str) -> Non
         "",
     ]
     lines.extend(rows or ["No parseable search results found."])
-    add_context(session, f"/web-search {query}", context_block("web_search", query, "\n".join(lines)))
+    add_context(
+        session,
+        f"/web-search {query}",
+        context_block("web_search", query, "\n".join(lines)),
+        source="manual-web-search",
+        provenance={"command": "/web-search", "query": query, "results": len(rows)},
+    )
     print(f"web search context added: {query} ({len(rows)} results)")
 
 
@@ -1078,6 +1369,8 @@ def command_propose_edit(config: Config, session: dict[str, Any], arg: str) -> N
                 ]
             ),
         ),
+        source="manual-propose",
+        provenance={"command": "/propose-edit", "path": str(path), "instruction": instruction},
     )
     print(proposal)
     print()
@@ -1334,6 +1627,13 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
                 ]
             ),
         ),
+        source="manual-apply",
+        provenance={
+            "command": "/apply --confirm",
+            "path": str(path),
+            "backup_path": str(backup),
+            "proposal_index": index + 1,
+        },
     )
     audit_event(
         config,
@@ -1742,7 +2042,19 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
                 status="pending",
             )
             block = approval_required_block(row, cwd)
-            add_context(session, f"/cmd {command}", block)
+            add_context(
+                session,
+                f"/cmd {command}",
+                block,
+                source="manual-cmd",
+                provenance={
+                    "command": "/cmd",
+                    "subcommand": command,
+                    "class": class_name,
+                    "status": "approval_queued",
+                    "approval_id": row.get("id", ""),
+                },
+            )
             print(block)
             print()
             print(f"approval queued: {row['id']}")
@@ -1769,7 +2081,19 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
             reason=reason,
             **output_digest(output),
         )
-        add_context(session, f"/cmd {command}", block)
+        add_context(
+            session,
+            f"/cmd {command}",
+            block,
+            source="manual-cmd",
+            provenance={
+                "command": "/cmd",
+                "subcommand": command,
+                "class": class_name,
+                "status": "refused",
+                "exit_code": "refused",
+            },
+        )
         print(block)
         print()
         print("refused command context added")
@@ -1804,7 +2128,20 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
         reason=reason,
         **output_digest(output),
     )
-    add_context(session, f"/cmd {command}", block)
+    add_context(
+        session,
+        f"/cmd {command}",
+        block,
+        source="manual-cmd",
+        provenance={
+            "command": "/cmd",
+            "subcommand": command,
+            "class": class_name,
+            "status": "executed",
+            "exit_code": exit_code,
+            "executable": executable,
+        },
+    )
     print(block)
     print()
     print("command output context added")
@@ -1861,6 +2198,81 @@ def command_audit(config: Config, arg: str) -> None:
         if row.get("path"):
             pieces.append(f"path={row.get('path')}")
         print(" | ".join(pieces))
+
+
+def command_routing_mode(
+    session: dict[str, Any],
+    key: str,
+    label: str,
+    arg: str,
+) -> None:
+    default = DEFAULT_HISTORY_MODE if key == "history_mode" else DEFAULT_REPO_MODE
+    raw = (arg or "").strip().lower()
+    if not raw:
+        current = session.get(key, default)
+        print(f"{label}: {current}")
+        return
+    if raw not in ROUTING_MODES:
+        print(f"{label}: invalid mode '{raw}', use one of {'|'.join(ROUTING_MODES)}")
+        return
+    session[key] = raw
+    print(f"{label}: {raw}")
+
+
+def command_evidence(session: dict[str, Any]) -> None:
+    blocks = session.get("context_blocks", [])
+    history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
+    repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
+    print(f"history_mode={history_mode}  repo_mode={repo_mode}")
+    if not blocks:
+        print("No active context blocks.")
+        return
+    print(f"{len(blocks)} context block(s):")
+    for idx, block in enumerate(blocks, 1):
+        source = block.get("source", "manual-legacy")
+        created = block.get("created_at", "")
+        prov = block.get("provenance") or {}
+        chars = prov.get("chars")
+        if not isinstance(chars, int):
+            chars = len(str(block.get("content") or ""))
+        prov_pairs = [
+            f"{k}={v}"
+            for k, v in prov.items()
+            if k != "chars" and v not in ("", None)
+        ]
+        line = f"{idx}. [{source}] {created} | chars={chars}"
+        if prov_pairs:
+            line += " | " + ", ".join(prov_pairs)
+        print(line)
+
+
+def command_forget(session: dict[str, Any], arg: str) -> None:
+    blocks = session.get("context_blocks", [])
+    raw = (arg or "").strip().lower()
+    if not raw:
+        print("usage: /forget [n|latest|all]")
+        return
+    if not blocks:
+        print("No active context blocks to forget.")
+        return
+    if raw == "all":
+        n = len(blocks)
+        session["context_blocks"] = []
+        print(f"forgot {n} context block(s)")
+        return
+    if raw == "latest":
+        target = len(blocks)
+    else:
+        try:
+            target = int(raw)
+        except ValueError:
+            print(f"forget: invalid selector '{raw}'")
+            return
+    if target < 1 or target > len(blocks):
+        print(f"forget: index {target} out of range (1..{len(blocks)})")
+        return
+    removed = blocks.pop(target - 1)
+    print(f"forgot block {target} [{removed.get('source', 'manual-legacy')}]")
 
 
 def command_reject(config: Config, session: dict[str, Any], arg: str) -> None:
@@ -1949,7 +2361,21 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
         status=row.get("status", ""),
         **output_digest(output),
     )
-    add_context(session, f"/approve {row.get('id', '')}", block)
+    add_context(
+        session,
+        f"/approve {row.get('id', '')}",
+        block,
+        source="manual-approve",
+        provenance={
+            "command": "/approve",
+            "approval_id": row.get("id", ""),
+            "subcommand": command,
+            "class": class_name,
+            "status": row.get("status", ""),
+            "exit_code": exit_code,
+            "executable": executable,
+        },
+    )
     print(block)
     print()
     if command_ran:
@@ -2008,19 +2434,26 @@ def print_help() -> None:
               /approve <id|latest>  execute a queued approved-scope command
               /reject <id|latest>   reject a queued command approval request
               /audit [limit]        show recent persistent audit events
+              /history-mode [auto|manual|off]
+                                    show or set AI History auto-routing mode (default auto)
+              /repo-mode [auto|manual|off]
+                                    show or set repo file auto-routing mode (default auto)
+              /evidence             list active context blocks with source + provenance
+              /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
               /clear-context        remove injected context blocks
               /status               check vLLM models and AI History health
               /paste                paste multi-line prompt, end with a single .
 
             Notes
-              Local tools are explicit, read-only, and context-injection only.
+              AI History and repo files auto-route on prompts that clearly call for them.
+              The disclosure line above the assistant reply names every routed source.
+              /history-mode and /repo-mode toggle auto-routing; manual slash commands always work.
               Web tools run only when invoked; search results are leads, not proof.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
               /cmd runs read-only commands immediately; selected git network commands queue for /approve.
               Destructive, privileged, package-manager, and unknown commands are refused.
-              Use /history explicitly when you want private project memory.
             """
         ).strip()
     )
@@ -2160,7 +2593,13 @@ def handle_command(
         except Exception as exc:
             print(f"history lookup failed: {exc}")
             return "handled", session, None
-        add_context(session, arg, context)
+        add_context(
+            session,
+            arg,
+            context,
+            source="manual-history",
+            provenance={"command": "/history", "query": arg, "chars": len(context)},
+        )
         print(f"history context added: {arg}")
         return "handled", session, None
 
@@ -2224,6 +2663,22 @@ def handle_command(
         command_audit(config, arg)
         return "handled", session, None
 
+    if command in {"history-mode", "historymode"}:
+        command_routing_mode(session, "history_mode", "history-mode", arg)
+        return "handled", session, None
+
+    if command in {"repo-mode", "repomode"}:
+        command_routing_mode(session, "repo_mode", "repo-mode", arg)
+        return "handled", session, None
+
+    if command == "evidence":
+        command_evidence(session)
+        return "handled", session, None
+
+    if command == "forget":
+        command_forget(session, arg)
+        return "handled", session, None
+
     if command == "context":
         print_context(session)
         return "handled", session, None
@@ -2256,6 +2711,9 @@ def prompt_label(session: dict[str, Any]) -> str:
 
 
 def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> None:
+    disclosure = auto_route_turn(config, session, prompt)
+    if disclosure:
+        print(disclosure)
     session.setdefault("messages", []).append({"role": "user", "content": prompt})
     print()
     print("assistant:")
@@ -2363,6 +2821,8 @@ def main(argv: list[str] | None = None) -> int:
     session.setdefault("context_blocks", [])
     session.setdefault("proposals", [])
     session.setdefault("commands", [])
+    session.setdefault("history_mode", DEFAULT_HISTORY_MODE)
+    session.setdefault("repo_mode", DEFAULT_REPO_MODE)
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")

@@ -38,6 +38,21 @@ def make_config(workspace: pathlib.Path, session_root: pathlib.Path):
 
 
 class NodechatSafetyTests(unittest.TestCase):
+    def test_save_session_does_not_raise_when_path_is_unwritable(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.session_path
+            try:
+                nodechat.session_path = lambda config, session: workspace
+                with contextlib.redirect_stderr(io.StringIO()) as buf:
+                    path = nodechat.save_session(config, session)
+            finally:
+                nodechat.session_path = original
+            self.assertEqual(path, workspace)
+            self.assertIn("could not save nodechat session", buf.getvalue())
+
     def test_workspace_confinement_blocks_outside_paths(self):
         with tempfile.TemporaryDirectory() as workspace_raw, tempfile.TemporaryDirectory() as outside_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -304,6 +319,256 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertIn("git", output.lower())
             self.assertTrue(executable)
             self.assertNotEqual(executable, "git")
+
+
+class NodechatAutoRoutingTests(unittest.TestCase):
+    def test_history_pattern_matches_prior_decision_phrasing(self):
+        for prompt in (
+            "what did we decide about gpu2?",
+            "remind me where we left off",
+            "previously we capped gpu0 at 300W",
+            "history of the rdimm dispute",
+            "did we ever fix the bmc fan thresholds?",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(nodechat.detect_history_query(prompt), prompt.strip())
+
+    def test_history_pattern_misses_idle_or_general_prompts(self):
+        for prompt in (
+            "hello there",
+            "explain transformers in two lines",
+            "what is the current state of the build?",
+            "",
+            "   ",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(nodechat.detect_history_query(prompt))
+
+    def test_repo_routing_resolves_named_files_and_runbooks_and_paths(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            (workspace / "docs" / "SESSION_LOG.md").write_text("log", encoding="utf-8")
+            (workspace / "CLAUDE.md").write_text("claude", encoding="utf-8")
+            (workspace / "docs" / "runbooks").mkdir()
+            (workspace / "docs" / "runbooks" / "nodechat-scope.md").write_text(
+                "scope", encoding="utf-8"
+            )
+            (workspace / "scripts").mkdir()
+            (workspace / "scripts" / "tool.py").write_text("print('x')", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            cases = {
+                "open CURRENT_STATE for the gpu3 cable status": ["docs/CURRENT_STATE.md"],
+                "what is in CLAUDE.md right now?": ["CLAUDE.md"],
+                "walk me through nodechat-scope": ["docs/runbooks/nodechat-scope.md"],
+                "look at scripts/tool.py": ["scripts/tool.py"],
+            }
+            for prompt, expected_rels in cases.items():
+                with self.subTest(prompt=prompt):
+                    paths = nodechat.detect_repo_targets(config, session, prompt)
+                    rels = [nodechat.display_path(config, session, p) for p in paths]
+                    self.assertEqual(rels, expected_rels)
+
+    def test_repo_vague_topic_phrases_do_not_route(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            (workspace / "scripts").mkdir()
+            (workspace / "scripts" / "build_operator_brief.py").write_text(
+                "x", encoding="utf-8"
+            )
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            for prompt in (
+                "what is the current state of the build?",
+                "how does build_operator_brief.py work?",
+                "tell me about the project",
+                "this codebase looks interesting",
+                "hello there",
+            ):
+                with self.subTest(prompt=prompt):
+                    paths = nodechat.detect_repo_targets(config, session, prompt)
+                    self.assertEqual(paths, [])
+
+    def test_repo_routing_caps_at_two_files(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("a", encoding="utf-8")
+            (workspace / "docs" / "SESSION_LOG.md").write_text("b", encoding="utf-8")
+            (workspace / "CLAUDE.md").write_text("c", encoding="utf-8")
+            (workspace / "SCRATCH.md").write_text("d", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            paths = nodechat.detect_repo_targets(
+                config,
+                session,
+                "compare CURRENT_STATE and SESSION_LOG and CLAUDE.md and SCRATCH.md",
+            )
+            self.assertEqual(len(paths), nodechat.REPO_AUTO_LIMIT)
+
+    def test_repo_routing_refuses_secret_pathlike_targets(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "scripts").mkdir()
+            (workspace / "scripts" / "credentials.json").write_text("{}", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            paths = nodechat.detect_repo_targets(
+                config, session, "open scripts/credentials.json"
+            )
+            self.assertEqual(paths, [])
+
+    def test_auto_route_skips_when_modes_off(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["history_mode"] = "off"
+            session["repo_mode"] = "off"
+            disclosure = nodechat.auto_route_turn(
+                config,
+                session,
+                "what did we decide about CURRENT_STATE?",
+            )
+            self.assertIsNone(disclosure)
+            self.assertEqual(session.get("context_blocks"), [])
+
+    def test_auto_route_history_records_audit_skip_on_endpoint_error(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.fetch_history_context
+            try:
+                nodechat.fetch_history_context = lambda config, query, force=True: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                )
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "what did we decide about gpu2?"
+                )
+            finally:
+                nodechat.fetch_history_context = original
+            self.assertIsNotNone(disclosure)
+            self.assertIn("history(error", disclosure or "")
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(
+                any(r["event_type"] == "auto_route_history" and r.get("status") == "error" for r in rows)
+            )
+            # On error, no context block should be added.
+            self.assertEqual(
+                [b for b in session.get("context_blocks", []) if b.get("source") == "auto-history"],
+                [],
+            )
+
+    def test_auto_route_emits_disclosure_and_evidence_blocks_for_repo(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            disclosure = nodechat.auto_route_turn(
+                config, session, "look at CURRENT_STATE for the gpu3 cable"
+            )
+            self.assertIsNotNone(disclosure)
+            self.assertIn("repo(read", disclosure or "")
+            blocks = session.get("context_blocks", [])
+            self.assertEqual(len(blocks), 1)
+            self.assertEqual(blocks[0].get("source"), "auto-repo")
+            prov = blocks[0].get("provenance") or {}
+            self.assertEqual(prov.get("rel"), "docs/CURRENT_STATE.md")
+            self.assertGreater(int(prov.get("chars", 0)), 0)
+
+    def test_auto_route_does_not_block_when_audit_path_is_unwritable(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.audit_log_path
+            try:
+                nodechat.audit_log_path = lambda config: workspace
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "look at CURRENT_STATE for the gpu3 cable"
+                )
+            finally:
+                nodechat.audit_log_path = original
+            self.assertIsNotNone(disclosure)
+            self.assertIn("repo(read", disclosure or "")
+            self.assertEqual(session["context_blocks"][0].get("source"), "auto-repo")
+
+    def test_routing_mode_set_get_and_invalid(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            # default "auto"
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_routing_mode(session, "history_mode", "history-mode", "")
+            self.assertIn("history-mode: auto", buf.getvalue())
+            # set "off"
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_routing_mode(session, "history_mode", "history-mode", "off")
+            self.assertEqual(session["history_mode"], "off")
+            # invalid
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_routing_mode(session, "history_mode", "history-mode", "loud")
+            self.assertIn("invalid mode", buf.getvalue())
+            self.assertEqual(session["history_mode"], "off")
+
+    def test_evidence_lists_source_and_provenance_and_handles_legacy(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            # Auto-routed block via add_context.
+            nodechat.add_context(
+                session, "auto:/history q", "HISTORY_CONTEXT body",
+                source="auto-history", provenance={"query": "q", "chars": 19},
+            )
+            # Legacy block (no source / no provenance).
+            session["context_blocks"].append(
+                {"created_at": "2026-05-15T00:00:00+00:00", "query": "old", "content": "legacy body"}
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_evidence(session)
+            text = buf.getvalue()
+            self.assertIn("history_mode=auto", text)
+            self.assertIn("[auto-history]", text)
+            self.assertIn("query=q", text)
+            self.assertIn("[manual-legacy]", text)
+
+    def test_forget_drops_block_by_index_and_all(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            for i in range(3):
+                nodechat.add_context(
+                    session, f"q{i}", f"body{i}",
+                    source="manual-read", provenance={"path": f"p{i}"},
+                )
+            self.assertEqual(len(session["context_blocks"]), 3)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_forget(session, "2")
+            self.assertEqual(len(session["context_blocks"]), 2)
+            self.assertEqual([b["query"] for b in session["context_blocks"]], ["q0", "q2"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_forget(session, "all")
+            self.assertEqual(session["context_blocks"], [])
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ Status: early implementation of the Nodehome local agentic terminal environment.
 
 `scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint (today: vLLM on the homelab node), keeps sessions, exposes slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
 
-Today, every context source (AI History, repo files, web, commands) is gathered through an explicit slash command. Auto-routing across those sources with disclosed provenance is on the near-term roadmap; see [`nodechat-scope.md`](nodechat-scope.md). Slash commands stay as manual overrides and as the visibility surface even after auto-routing lands.
+Auto-routing is on for AI History and repo files. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. Vague topic phrases and bare filenames do not auto-route — `/read` is one keystroke for those. Web fetch/search and command output remain explicit-only for now (auto-routing roadmap in [`nodechat-scope.md`](nodechat-scope.md)). Every auto-routed turn prints a one-line disclosure above the assistant reply and writes an `auto_route_*` audit event. Slash commands remain the manual override and the visibility surface.
 
 Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
@@ -72,6 +72,10 @@ Inside `nodechat`:
 /endpoint [url]
 /system [text]
 /history <query>
+/history-mode [auto|manual|off]
+/repo-mode [auto|manual|off]
+/evidence
+/forget [n|latest|all]
 /pwd
 /tree [path]
 /read <path>
@@ -94,7 +98,7 @@ Inside `nodechat`:
 
 ## AI History Integration
 
-AI History lookup is currently explicit. Auto-routing on prompts that clearly call for prior decisions or prior incidents is on the roadmap (see [`nodechat-scope.md`](nodechat-scope.md)); for now, use `/history` to inject a query result into the session.
+AI History is auto-routed on prior-decision phrasing (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident/run`, etc.). Routing prints a disclosure line and writes an `auto_route_history` audit event. Use `/history <query>` to force a lookup with an arbitrary phrasing, `/history-mode manual` to require explicit invocation, or `/history-mode off` to disable history routing entirely. Failures (endpoint unreachable, token missing) are disclosed in the routing line and never block the chat turn.
 
 ```text
 /history what did we decide about GPU2 and the pigtail rule
@@ -173,7 +177,9 @@ scripts/windows/nodechat-tunnel.cmd
 
 ## Local Context Tools
 
-These tools add context blocks to the current session. The model sees only the injected output, not the whole filesystem.
+Repo file context auto-routes on concrete artifacts. When the prompt names `CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem (`nodechat-scope`, `ipmi-recovery`, `home-media-server`, …), or a path token (`docs/...`, `scripts/...`, `sweeps/...`, `tests/...`, `memory/...`), Nodechat reads the file with the same caps and safety checks as `/read` and adds a disclosed context block. At most two files auto-route per turn. Vague topic phrases ("current state of the build", "this codebase") and bare filenames do not route. Use `/repo-mode off` to disable repo routing.
+
+Manual context tools (also stay available as the visibility surface):
 
 ```text
 /pwd
@@ -181,15 +187,18 @@ These tools add context blocks to the current session. The model sees only the i
 /read docs\CURRENT_STATE.md
 /search-files gpu2 docs
 /git-status
+/evidence
+/forget latest
 ```
 
 Rules:
 
-- `/read` is text-only and size-capped.
+- `/read` is text-only and size-capped; auto-repo routing uses the same path.
 - `/tree` is depth/result capped.
 - `/search-files` searches text files only and returns bounded filename/line matches.
 - `/git-status` runs only the fixed read-only `git status --short --branch` command.
-- Secret-ish paths and generated/private stores are refused rather than injected.
+- Secret-ish paths and generated/private stores are refused rather than injected, both for manual `/read` and for auto-repo routing.
+- `/evidence` lists the active context blocks with their `source` and `provenance` fields. `/forget [n|latest|all]` drops one or all of them.
 
 ## Web Context Tools
 
@@ -309,19 +318,23 @@ Capability is governed by risk tier, not by explicit-only-everything. See [`node
 
 ```text
 chat with local vLLM (streaming, sessioned, slash-command UX)
-/history <query>           AI History KB injection
-/read <path>               text-only, size-capped
+/history <query>           AI History KB injection (also auto-routed on prior-decision phrasing)
+/read <path>               text-only, size-capped (also auto-routed on concrete repo artifacts)
 /tree [path]               depth/result capped
 /search-files <q> [path]   text files only
 /git-status                fixed `git status --short --branch`
 /pwd
-/web-search <query>        DuckDuckGo HTML, leads only
-/web-fetch <url>           bounded text fetch
+/web-search <query>        DuckDuckGo HTML, leads only (manual-only today)
+/web-fetch <url>           bounded text fetch (manual-only today)
 /web-open <url>            same as fetch but opens in session view
 /cmd <read-only command>   allowlisted: git read subcommands, rg, dir/ls, type/cat, pwd, --version
+/history-mode [auto|manual|off]
+/repo-mode [auto|manual|off]
+/evidence                  list context blocks with source + provenance
+/forget [n|latest|all]     drop a context block
 ```
 
-Today every Observe-tier source is invoked explicitly. The roadmap is auto-routing with disclosed provenance.
+Auto-routing covers AI History (prior-decision phrasing) and repo files (concrete artifacts only) with disclosed provenance and audit. Web fetch/search and `/cmd` are manual-only today; auto-routing for web prompts and a tier-gated live-node operator are the next lanes (see scope doc).
 
 ### Prepare lane (Done)
 
