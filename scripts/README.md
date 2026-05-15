@@ -150,7 +150,7 @@ Runbook: [docs/runbooks/ai-history-knowledge-base.md](../docs/runbooks/ai-histor
 
 ## Nodechat Terminal Client
 
-`nodechat.py` is the repo-owned terminal chat client for the local OpenAI-compatible vLLM endpoint.
+`nodechat.py` is the local agentic terminal environment for Nodehome — early implementation, full agentic scope. Authoritative scope: [docs/runbooks/nodechat-scope.md](../docs/runbooks/nodechat-scope.md). Operational usage: [docs/runbooks/nodechat-terminal.md](../docs/runbooks/nodechat-terminal.md).
 
 Run on the homelab node:
 
@@ -176,9 +176,9 @@ For private-history support from Windows, open the SSH tunnel first:
 scripts\windows\nodechat-tunnel.cmd
 ```
 
-It supports streaming responses, saved sessions, slash commands, explicit AI History lookup through `/history <query>`, read-only local context commands (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), explicit web context commands (`/web-search`, `/web-fetch`, `/web-open`), no-write patch proposals through `/propose-edit <path> :: <instruction>` plus `/diff`, approval-gated proposal application through `/apply --confirm`, and allowlisted read-only command capture through `/cmd <command>`. It does not run arbitrary shell commands.
+Today's capabilities: streaming chat against the local vLLM endpoint, saved sessions, AI History lookup (`/history`), read-only local context (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), web context (`/web-search`, `/web-fetch`, `/web-open`), single-file patch proposals + approval-gated apply with backups (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`), read-only command capture (`/cmd`), and a narrow Git approval queue (`/approvals`, `/approve`, `/reject`) for `git fetch` variants, `git pull --ff-only`, and `git push`. Persistent JSONL audit at `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
 
-Runbook: [docs/runbooks/nodechat-terminal.md](../docs/runbooks/nodechat-terminal.md)
+Auto-routing across conversation, AI History, repo, live node state, and internet — with disclosed provenance — is the next implementation lane (see scope doc).
 
 Open WebUI integration assets:
 

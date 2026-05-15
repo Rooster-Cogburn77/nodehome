@@ -1,20 +1,14 @@
 # Nodechat Terminal Client
 
-Status: validated terminal chat client with explicit read-only local context tools and explicit web fetch/search tools.
+Status: early implementation of the Nodehome local agentic terminal environment. Authoritative scope and product philosophy live in [`nodechat-scope.md`](nodechat-scope.md); this doc covers operational usage, slash commands, env vars, and current safety posture.
 
-`scripts/nodechat.py` is a small stdlib-only terminal client for talking to the Nodehome local model stack through an OpenAI-compatible endpoint such as vLLM. It is meant to mirror the useful feel of Codex/Claude Code: terminal-first, sessioned, slash-command driven, and project-context aware.
+`scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint (today: vLLM on the homelab node), keeps sessions, exposes slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
 
-It is not an unrestricted coding agent. It can now inject explicitly requested read-only local context and explicitly requested web context into the chat. It still does not run arbitrary shell commands, browse automatically, expose unrestricted filesystem access, or persist fetched web content unless the user explicitly saves it outside Nodechat.
+Today, every context source (AI History, repo files, web, commands) is gathered through an explicit slash command. Auto-routing across those sources with disclosed provenance is on the near-term roadmap; see [`nodechat-scope.md`](nodechat-scope.md). Slash commands stay as manual overrides and as the visibility surface even after auto-routing lands.
 
-It can also generate patch proposals with `/propose-edit`, but those proposals are stored only in the Nodechat session until the user explicitly runs `/apply ... --confirm`.
+Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
-Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/apply` validates the proposal first, writes a backup under the Nodechat session directory, and only supports bounded single-file text edits.
-
-Nodechat can also run a small allowlist of read-only shell-style commands through `/cmd`. Every attempt is recorded as a structured `COMMAND_OUTPUT` block with timestamp, working directory, command class, exit code/refusal, and output. Significant tool actions are also appended to a persistent JSONL audit log under the Nodechat session root.
-
-All local file/command paths are confined to the configured Nodechat workspace. The Windows launcher sets that workspace to `C:\Users\bmoor\Local_AI`.
-
-The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
+A small `NODECHAT_RUNTIME` system message is injected on every request so the model answers identity questions from the actual configured model and endpoint instead of inventing one.
 
 ## Default Backend
 
@@ -100,7 +94,7 @@ Inside `nodechat`:
 
 ## AI History Integration
 
-AI History lookup is explicit. It does not run automatically.
+AI History lookup is currently explicit. Auto-routing on prompts that clearly call for prior decisions or prior incidents is on the roadmap (see [`nodechat-scope.md`](nodechat-scope.md)); for now, use `/history` to inject a query result into the session.
 
 ```text
 /history what did we decide about GPU2 and the pigtail rule
@@ -199,7 +193,7 @@ Rules:
 
 ## Web Context Tools
 
-Web access is explicit and transient:
+Web fetch and search are currently invoked explicitly. Auto-routing for prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing) is on the roadmap. Fetched text stays transient unless the user saves it.
 
 ```text
 /web-search qwen2.5 awq vllm
@@ -307,132 +301,75 @@ Current coverage:
 - `/cmd` read-only subprocess execution records a resolved executable path.
 - Persistent audit records refused commands, queued approvals, executed approvals, blocked approvals, and apply check/confirm events.
 
-## Tool Roadmap
+## Capability Lanes
 
-Decision captured 2026-05-15: Nodechat should grow toward a Codex/Claude Code style terminal experience, but in explicit phases. The model should never pretend it has file, shell, or internet access unless the corresponding command/tool exists and was used.
+Capability is governed by risk tier, not by explicit-only-everything. See [`nodechat-scope.md`](nodechat-scope.md) for the tier definitions (Observe / Analyze / Prepare / Mutate / Dangerous) and the auto-routing roadmap. This section tracks what is implemented per capability lane.
 
-### Phase 0 - Done
-
-Current capabilities:
+### Observe lane (Done)
 
 ```text
-chat with local vLLM
-persist sessions
-slash-command UX
-explicit AI History injection
-Windows launchers
-SSH tunnel path for private history
-```
-
-### Phase 1 - Explicit Read-Only Local Context
-
-Implemented commands:
-
-```text
-/read <path>
-/tree [path]
-/search-files <query> [path]
-/git-status
+chat with local vLLM (streaming, sessioned, slash-command UX)
+/history <query>           AI History KB injection
+/read <path>               text-only, size-capped
+/tree [path]               depth/result capped
+/search-files <q> [path]   text files only
+/git-status                fixed `git status --short --branch`
 /pwd
+/web-search <query>        DuckDuckGo HTML, leads only
+/web-fetch <url>           bounded text fetch
+/web-open <url>            same as fetch but opens in session view
+/cmd <read-only command>   allowlisted: git read subcommands, rg, dir/ls, type/cat, pwd, --version
 ```
 
-Rules:
+Today every Observe-tier source is invoked explicitly. The roadmap is auto-routing with disclosed provenance.
 
-- Only read when the user explicitly asks.
-- Print what was read or searched before injecting it.
-- Cap file size and result count.
-- Prefer repo/workspace paths; warn before reading secrets, env files, exports, or private data stores.
-- Do not edit files in this phase.
-- Block common private/generated paths such as `.nodehome`, `.ssh`, `.git`, `node-private`, `chat-exports`, `node_modules`, and likely key/token files.
-
-### Phase 2 - Explicit Web Tools
-
-Implemented commands:
+### Prepare lane (Done)
 
 ```text
-/web-search <query>
-/web-open <url>
-/web-fetch <url>
+/propose-edit <path> :: <instruction>   single-file unified-diff proposal, stored in session
+/diff [all]                             print latest or all stored proposals
+/apply --check                          validate stored proposal against current file, no write
 ```
 
-Rules:
+`/propose-edit` strips outer Markdown code fences before storing. `/apply --check` refuses ambiguous repeated hunks rather than fuzzy-applying the first match.
 
-- No automatic browsing.
-- Web access only through explicit slash command or explicit user approval.
-- Preserve source URLs in the injected context.
-- Treat search snippets as leads, not proof.
-- Keep fetched text transient unless the user explicitly saves it.
-- Do not use web tools for private/local facts that should come from AI History or repo files.
-
-### Phase 3 - Proposed Edits Only
-
-Implemented commands:
+### Mutate lane (Partial)
 
 ```text
-/propose-edit <path>
-/diff
+/apply [n|latest] --confirm    write backup, then apply stored proposal
+/cmd git fetch                 queues for /approve
+/cmd git fetch origin          queues
+/cmd git fetch --all           queues
+/cmd git fetch --prune         queues
+/cmd git fetch --prune origin  queues
+/cmd git pull --ff-only        queues; clean-tree preflight on /approve
+/cmd git push                  queues; clean-tree preflight on /approve
+/approvals                     list pending/queued approvals
+/approve <id|latest>           run the queued command once, record approval_id
+/reject <id|latest>            mark the queued command rejected
 ```
 
-Rules:
+Backups land under the Nodechat session backup directory outside the repo. Resolved executable provenance is recorded on every subprocess-backed command. Non-allowlisted Git variants (`git push --force`, `git push origin main`, `git fetch origin main`, etc.) do not queue.
 
-- Generate patch/diff proposals only.
-- No write to disk.
-- User manually reviews/applies or approves moving to Phase 4 behavior.
-- `/propose-edit` strips outer Markdown code fences from model output before storing the proposal.
+Gaps in this lane: `/undo-apply <id|latest>` (backups exist, undo path does not yet), broader command classes beyond the current Git approval set, and live-node operator mutations (`docker restart`, `systemctl restart`) gated by tier.
 
-### Phase 4 - Approval-Gated Writes
+### Dangerous lane (Hard-blocked today)
 
-Implemented command:
+Refused with a structured `COMMAND_OUTPUT` row, never queued:
 
 ```text
-/apply
+package-manager commands (apt, pip, npm, ...)
+privileged commands (sudo, su, ...)
+destructive commands (rm, del, mv over existing, ...)
+arbitrary network commands (curl, wget outside web tools, ssh, scp, ...)
+write Git commands (git add, git commit, git reset --hard, git push --force, ...)
+unknown commands
+path arguments outside the Nodechat workspace
+hidden-traversal flags (rg --hidden, rg --no-ignore, ...)
 ```
 
-Rules:
+The future direction for this lane is multi-step approval (explicit confirmation phrase + audit) for individually justified actions, not unconditional refusal. Hard-block stays the default until that approval model exists.
 
-- Show exact files affected.
-- Require explicit confirmation before writing.
-- Keep backups or diffs.
-- Never write secrets to repo.
-- Supports stored proposal diffs only; no freeform `/write <path>` exists.
-- Refuses blocked private/generated paths and non-text file types.
-- Validates the unified diff against the current file before writing.
-- Refuses ambiguous repeated hunks instead of fuzzy-applying the first match.
-- Writes backups outside the repo under the Nodechat session backup directory.
+## Safety Model
 
-### Phase 5 - Approval-Gated Shell
-
-Partially implemented command:
-
-```text
-/cmd <command>
-/approve <id|latest>
-/approvals
-/reject <id|latest>
-/audit [limit]
-```
-
-Rules:
-
-- No unrestricted shell by default.
-- Classify commands as read-only, write, network, privileged, or destructive.
-- Phase 5A runs read-only allowlisted commands immediately.
-- Selected Git network/update commands queue for explicit `/approve`.
-- `git pull --ff-only` and `git push` require a clean working tree before execution.
-- Package-manager, privileged, destructive, arbitrary network, and unknown commands are refused, not queued.
-- Never auto-run destructive commands.
-- Keep command output in the session log as structured `COMMAND_OUTPUT`.
-- Record resolved executable provenance for subprocess-backed commands.
-- Append significant tool actions to the persistent JSONL audit log.
-
-## Safety Boundary
-
-Nodechat currently has explicit file/context tools, explicit web fetch/search tools, approval-gated patch application, read-only command capture, and a narrow command approval queue. It still has no arbitrary shell. Future tool support should continue in this order:
-
-1. Read-only local context commands. Done.
-2. Explicit web search/fetch commands. Done.
-3. Proposed edit/diff commands with no writes. Done.
-4. Gated write/edit commands with explicit approval. Partially done via `/apply`; no freeform `/write`.
-5. Approval-gated shell, never unrestricted by default. Narrow `/approve` is done for selected Git network/update commands only.
-
-The point is to preserve a reliable terminal chat surface while adding agent behavior deliberately.
+Risk tier governs what runs without prompting, what queues for approval, and what is hard-blocked today; the [scope doc](nodechat-scope.md#risk-model) is authoritative. Provenance + audit + tier-correct approval is the control system. Capability with evidence is the goal; refusal is the fallback when the safety model has not yet caught up.
