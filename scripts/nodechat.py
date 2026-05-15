@@ -41,6 +41,7 @@ MAX_SEARCH_RESULTS = 40
 MAX_SEARCH_FILE_BYTES = 220000
 MAX_PROPOSE_FILE_CHARS = 30000
 MAX_PROPOSAL_TOKENS = 2400
+MAX_CMD_OUTPUT_CHARS = 20000
 HUNK_RE = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@")
 
 BLOCKED_PATH_PARTS = {
@@ -121,7 +122,8 @@ with provenance, not as general world knowledge. Do not claim to have searched
 private history unless a HISTORY_CONTEXT block is present in this conversation.
 
 You only have access to context explicitly injected by slash commands such as
-/history, /read, /tree, /search-files, /git-status, /web-fetch, and /web-search.
+/history, /read, /tree, /search-files, /git-status, /web-fetch, /web-search,
+and /cmd.
 Do not claim broad filesystem, shell, or internet access. If the needed context
 was not injected, say what slash command would retrieve it.
 Patch proposals created by /propose-edit are proposals only. Do not claim they
@@ -144,6 +146,7 @@ class Config:
     history_url: str
     history_token: str
     history_limit: int
+    cmd_timeout: int
 
 
 def utc_now() -> str:
@@ -430,7 +433,7 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
             f"workspace: {session.get('cwd') or config.workspace}",
-            "tool_access: explicit read-only local context and explicit web fetch/search only",
+            "tool_access: explicit read-only local context, explicit web fetch/search, and allowlisted read-only /cmd only",
             "no_access: no arbitrary shell, no file writes, no automatic browsing",
         ]
     )
@@ -1238,6 +1241,260 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
     print(f"backup: {backup}")
 
 
+def split_command_line(command: str) -> list[str]:
+    try:
+        parts = shlex.split(command, posix=False)
+    except ValueError:
+        return []
+    cleaned = []
+    for part in parts:
+        value = part.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if value:
+            cleaned.append(value)
+    return cleaned
+
+
+def command_path_blocked(config: Config, session: dict[str, Any], parts: list[str]) -> str | None:
+    base = workspace_path(config, session)
+    for part in parts[1:]:
+        if part.startswith("-"):
+            continue
+        if any(ch in part for ch in {"*", "?", "[", "]"}):
+            continue
+        candidate = pathlib.Path(part)
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved.exists():
+            reason = blocked_path_reason(resolved)
+            if reason:
+                return reason
+    return None
+
+
+def classify_command(config: Config, session: dict[str, Any], command: str) -> tuple[str, str, list[str]]:
+    parts = split_command_line(command)
+    if not parts:
+        return "unknown", "could not parse command", []
+
+    exe = parts[0].lower()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    blocked_path = command_path_blocked(config, session, parts)
+    if blocked_path:
+        return "refused", blocked_path, parts
+
+    destructive = {"del", "erase", "format", "rd", "rmdir", "rm", "remove-item", "diskpart"}
+    network = {"curl", "wget", "ssh", "scp", "git-fetch", "git-pull", "git-push", "git-clone"}
+    privileged = {"runas", "sudo", "systemctl", "service", "sc"}
+    write = {"copy", "cp", "mkdir", "move", "mv", "new-item", "set-content", "tee"}
+
+    if exe in destructive:
+        return "destructive", "destructive command refused in Phase 5A", parts
+    if exe in privileged:
+        return "privileged", "privileged command refused in Phase 5A", parts
+    if exe in write:
+        return "write", "write command refused in Phase 5A", parts
+
+    if exe == "git":
+        if sub in {"fetch", "pull", "push", "clone"}:
+            return "network", "git network command refused in Phase 5A", parts
+        if sub in {"add", "am", "apply", "checkout", "clean", "commit", "merge", "rebase", "reset", "restore", "switch"}:
+            return "write", "git write/destructive command refused in Phase 5A", parts
+        if any(arg.lower().startswith("--output") or arg.lower() == "--ext-diff" for arg in parts[2:]):
+            return "write", "git output/external-diff flag refused in Phase 5A", parts
+        if sub in {"", "branch", "diff", "log", "ls-files", "remote", "rev-parse", "show", "status", "tag"}:
+            return "read-only", "allowed git read-only command", parts
+        return "unknown", f"git subcommand not allowlisted: {sub}", parts
+
+    if exe == "rg":
+        if any(arg.lower().startswith("--pre") for arg in parts[1:]):
+            return "refused", "rg --pre can execute external preprocessors", parts
+        if any(arg.lower() in {"--hidden", "--no-ignore", "--no-ignore-vcs", "-u", "-uu", "-uuu"} for arg in parts[1:]):
+            return "refused", "rg hidden/no-ignore traversal refused in Phase 5A", parts
+        return "read-only", "allowed ripgrep read-only command", parts
+
+    if exe in {"dir", "ls", "pwd", "type", "cat"}:
+        return "read-only", "allowed internal read-only command", parts
+
+    if exe in {"python", "python3"} and parts[1:] in (["--version"], ["-V"]):
+        return "read-only", "allowed version command", parts
+    if exe == "py" and parts[1:] in (["-3", "--version"], ["-3", "-V"], ["--version"], ["-V"]):
+        return "read-only", "allowed version command", parts
+    if exe in {"git", "node", "npm", "pnpm", "rg", "sqlite3"} and parts[1:] in (["--version"], ["-v"], ["-V"]):
+        return "read-only", "allowed version command", parts
+
+    if exe in {"npm", "pnpm", "pip", "pip3"}:
+        return "network", "package-manager command refused in Phase 5A", parts
+    if exe in network:
+        return "network", "network command refused in Phase 5A", parts
+
+    return "unknown", "command is not in the Phase 5A read-only allowlist", parts
+
+
+def internal_dir(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
+    raw = parts[1] if len(parts) > 1 else "."
+    path = resolve_workspace_path(config, session, raw)
+    reason = blocked_path_reason(path)
+    if reason:
+        return 1, f"refused: {reason}"
+    if not path.exists():
+        return 1, f"path does not exist: {path}"
+    if path.is_file():
+        return 0, str(path)
+    rows = []
+    for child in sorted(path.iterdir(), key=lambda item: (item.is_file(), item.name.lower()))[:MAX_TREE_ENTRIES]:
+        if blocked_path_reason(child):
+            continue
+        suffix = "/" if child.is_dir() else ""
+        rows.append(f"{child.name}{suffix}")
+    return 0, "\n".join(rows)
+
+
+def internal_type(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
+    if len(parts) < 2:
+        return 1, "usage: type <path>"
+    path = resolve_workspace_path(config, session, parts[1])
+    reason = blocked_path_reason(path)
+    if reason:
+        return 1, f"refused: {reason}"
+    if not path.exists() or not path.is_file():
+        return 1, f"not a file: {path}"
+    if not is_text_candidate(path):
+        return 1, f"not an allowed text file type: {path.suffix or '[none]'}"
+    text, truncated = read_text_path(path, MAX_READ_BYTES)
+    if truncated:
+        text += "\n...[truncated]"
+    return 0, text
+
+
+def run_readonly_command(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
+    exe = parts[0].lower()
+    if exe in {"dir", "ls"}:
+        return internal_dir(config, session, parts)
+    if exe == "pwd":
+        return 0, str(workspace_path(config, session))
+    if exe in {"type", "cat"}:
+        return internal_type(config, session, parts)
+
+    argv = parts
+    if exe == "git" and len(parts) > 1 and parts[1].lower() in {"diff", "log", "show"}:
+        argv = ["git", "--no-pager", *parts[1:]]
+        if parts[1].lower() == "diff" and "--no-ext-diff" not in parts:
+            argv = ["git", "--no-pager", "diff", "--no-ext-diff", *parts[2:]]
+
+    result = subprocess.run(
+        argv,
+        cwd=str(workspace_path(config, session)),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=config.cmd_timeout,
+        check=False,
+    )
+    return result.returncode, result.stdout.strip()
+
+
+def command_output_block(
+    *,
+    command: str,
+    cwd: pathlib.Path,
+    class_name: str,
+    exit_code: int | str,
+    output: str,
+    reason: str = "",
+) -> str:
+    text = output.strip()
+    truncated = False
+    if len(text) > MAX_CMD_OUTPUT_CHARS:
+        text = text[:MAX_CMD_OUTPUT_CHARS] + "\n...[truncated for nodechat command output cap]"
+        truncated = True
+    lines = [
+        "COMMAND_OUTPUT",
+        f"timestamp: {utc_now()}",
+        f"cwd: {cwd}",
+        f"class: {class_name}",
+        f"command: {command}",
+        f"exit_code: {exit_code}",
+        f"truncated: {str(truncated).lower()}",
+    ]
+    if reason:
+        lines.append(f"reason: {reason}")
+    lines.extend(["", text or "(no output)"])
+    return "\n".join(lines).strip()
+
+
+def record_command(
+    session: dict[str, Any],
+    command: str,
+    class_name: str,
+    exit_code: int | str,
+    output: str,
+    reason: str = "",
+) -> None:
+    session.setdefault("commands", []).append(
+        {
+            "created_at": utc_now(),
+            "command": command,
+            "class": class_name,
+            "exit_code": exit_code,
+            "reason": reason,
+            "output": output[:MAX_CMD_OUTPUT_CHARS],
+        }
+    )
+
+
+def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
+    command = arg.strip()
+    if not command:
+        print("usage: /cmd <read-only command>")
+        return
+    class_name, reason, parts = classify_command(config, session, command)
+    cwd = workspace_path(config, session)
+    if class_name != "read-only":
+        output = f"COMMAND_REFUSED\nclass: {class_name}\nreason: {reason}\ncommand: {command}"
+        block = command_output_block(
+            command=command,
+            cwd=cwd,
+            class_name=class_name,
+            exit_code="refused",
+            output=output,
+            reason=reason,
+        )
+        record_command(session, command, class_name, "refused", output, reason)
+        add_context(session, f"/cmd {command}", block)
+        print(block)
+        print()
+        print("refused command context added")
+        return
+    try:
+        exit_code, output = run_readonly_command(config, session, parts)
+    except subprocess.TimeoutExpired:
+        exit_code, output = 124, f"command timed out after {config.cmd_timeout}s"
+    except FileNotFoundError as exc:
+        exit_code, output = 127, str(exc)
+    except Exception as exc:
+        exit_code, output = 1, str(exc)
+
+    block = command_output_block(
+        command=command,
+        cwd=cwd,
+        class_name=class_name,
+        exit_code=exit_code,
+        output=output,
+        reason=reason,
+    )
+    record_command(session, command, class_name, exit_code, output, reason)
+    add_context(session, f"/cmd {command}", block)
+    print(block)
+    print()
+    print("command output context added")
+
+
 def command_diff(session: dict[str, Any], arg: str) -> None:
     proposals = session.get("proposals", [])
     if not proposals:
@@ -1283,6 +1540,7 @@ def print_help() -> None:
               /diff [all]           show latest or all stored patch proposals
               /apply [n|latest] [--check|--confirm]
                                     validate or apply a stored proposal with backup
+              /cmd <command>        run allowlisted read-only command and inject output
               /context              show active injected context blocks
               /clear-context        remove injected context blocks
               /status               check vLLM models and AI History health
@@ -1293,6 +1551,7 @@ def print_help() -> None:
               Web tools run only when invoked; search results are leads, not proof.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
+              /cmd Phase 5A allows read-only commands only; writes/network/destructive are refused.
               Use /history explicitly when you want private project memory.
             """
         ).strip()
@@ -1477,6 +1736,10 @@ def handle_command(
         command_apply(config, session, arg)
         return "handled", session, None
 
+    if command == "cmd":
+        command_cmd(config, session, arg)
+        return "handled", session, None
+
     if command == "context":
         print_context(session)
         return "handled", session, None
@@ -1568,6 +1831,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="optional AI History bearer token",
     )
     parser.add_argument("--history-limit", type=int, default=int(os.environ.get("NODECHAT_HISTORY_LIMIT", "8")))
+    parser.add_argument("--cmd-timeout", type=int, default=int(os.environ.get("NODECHAT_CMD_TIMEOUT", "20")))
     return parser.parse_args(argv)
 
 
@@ -1586,6 +1850,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         history_url=str(args.history_url).rstrip("/"),
         history_token=str(args.history_token or ""),
         history_limit=int(args.history_limit),
+        cmd_timeout=int(args.cmd_timeout),
     )
 
 
@@ -1613,6 +1878,7 @@ def main(argv: list[str] | None = None) -> int:
     session.setdefault("messages", [])
     session.setdefault("context_blocks", [])
     session.setdefault("proposals", [])
+    session.setdefault("commands", [])
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")

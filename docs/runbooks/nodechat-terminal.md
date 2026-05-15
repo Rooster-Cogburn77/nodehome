@@ -10,6 +10,8 @@ It can also generate patch proposals with `/propose-edit`, but those proposals a
 
 Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/apply` validates the proposal first, writes a backup under the Nodechat session directory, and only supports bounded single-file text edits.
 
+Nodechat can also run a small allowlist of read-only shell-style commands through `/cmd`. Every attempt is recorded as a structured `COMMAND_OUTPUT` block with timestamp, working directory, command class, exit code/refusal, and output.
+
 The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
 
 ## Default Backend
@@ -85,6 +87,7 @@ Inside `nodechat`:
 /propose-edit <path> :: <instruction>
 /diff [all]
 /apply [n|latest] [--check|--confirm]
+/cmd <command>
 /context
 /clear-context
 /status
@@ -223,6 +226,41 @@ Rules:
 - `/apply --confirm` applies the latest proposal after validation and writes a backup under `~/.nodehome/nodechat/backups/`.
 - `/apply <n> --confirm` applies a specific proposal by its session index.
 
+## Read-Only Command Tools
+
+Phase 5A implements read-only command output capture only:
+
+```text
+/cmd git status --short --branch
+/cmd git diff --stat
+/cmd rg Nodechat docs
+/cmd dir scripts
+/cmd type docs\runbooks\nodechat-terminal.md
+```
+
+Output is injected as:
+
+```text
+COMMAND_OUTPUT
+timestamp: 2026-05-15T12:00:00+00:00
+cwd: C:\Users\bmoor\Local_AI
+class: read-only
+command: git status --short --branch
+exit_code: 0
+truncated: false
+
+## main...origin/main
+```
+
+Rules:
+
+- Only allowlisted read-only commands run immediately.
+- Refused commands are still logged as `COMMAND_OUTPUT` with `exit_code: refused`.
+- Allowed examples: read-only `git` subcommands, `rg` without risky traversal/preprocessor flags, `dir`, `ls`, `type`, `cat`, `pwd`, and version checks.
+- Refused examples: `git pull`, `git push`, `git add`, `git commit`, package-manager commands, network commands, destructive deletes, privileged service commands, and unknown commands.
+- `rg --pre`, `rg --hidden`, `rg --no-ignore`, and `git --output` / `git --ext-diff` style paths are refused in this phase.
+- This is not arbitrary shell. Commands are parsed and run without shell metacharacter expansion.
+
 ## Tool Roadmap
 
 Decision captured 2026-05-15: Nodechat should grow toward a Codex/Claude Code style terminal experience, but in explicit phases. The model should never pretend it has file, shell, or internet access unless the corresponding command/tool exists and was used.
@@ -317,20 +355,20 @@ Rules:
 
 ### Phase 5 - Approval-Gated Shell
 
-Planned commands:
+Partially implemented command:
 
 ```text
 /cmd <command>
-/approve
 ```
 
 Rules:
 
 - No unrestricted shell by default.
 - Classify commands as read-only, write, network, privileged, or destructive.
-- Require explicit approval for write/network/privileged/destructive commands.
+- Phase 5A runs read-only allowlisted commands only.
+- Write/network/privileged/destructive commands are refused, not queued.
 - Never auto-run destructive commands.
-- Keep command output in the session log.
+- Keep command output in the session log as structured `COMMAND_OUTPUT`.
 
 ## Safety Boundary
 
@@ -340,6 +378,6 @@ Nodechat currently has explicit read-only file/context tools and explicit web fe
 2. Explicit web search/fetch commands. Done.
 3. Proposed edit/diff commands with no writes. Done.
 4. Gated write/edit commands with explicit approval. Partially done via `/apply`; no freeform `/write`.
-5. Approval-gated shell, never unrestricted by default.
+5. Approval-gated shell, never unrestricted by default. Phase 5A read-only `/cmd` done; `/approve` deferred.
 
 The point is to preserve a reliable terminal chat surface while adding agent behavior deliberately.
