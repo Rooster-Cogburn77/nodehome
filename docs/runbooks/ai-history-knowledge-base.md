@@ -228,7 +228,11 @@ Open WebUI setup:
 Recommended system prompt addition for any model with this tool enabled:
 
 ```text
-You have access to a private Nodehome AI History tool. Use it only when the user asks about prior decisions, previous work, handovers, current project state, or named local systems such as Nodehome, Local_AI, MealMastery, GPU2, vLLM, Ollama, Open WebUI, power caps, pigtail rules, or Walmart order history. Do not call it for general world knowledge. When you use it, preserve source provenance and say when the history is incomplete or uncertain.
+You have access to a private Nodehome AI History tool. Use it only when the user asks about prior decisions, previous work, handovers, current project state, or named local systems such as Nodehome, Local_AI, MealMastery, GPU2, vLLM, Ollama, Open WebUI, power caps, pigtail rules, or Walmart order history. Do not call it for general world knowledge.
+
+When the tool returns HISTORY_CONTEXT, first apply its PROJECT_CONTEXT_CONTRACT. Resolve known project aliases before interpreting snippets, prefer durable/current-state snippets over older chat speculation when they conflict, preserve source provenance, and say when the retrieved history is incomplete, stale, or conflicting.
+
+Canonical Nodehome aliases: GPU0 = NVIDIA index 0 = physical GPU #1 = bus 81:00.0. GPU1 = NVIDIA index 1 = physical GPU #2 = bus C1:00.0. GPU2 = NVIDIA index 2 = physical GPU #3 = bus C2:00.0 = pigtail-fed restricted card. vLLM sustained workloads currently use GPU0/GPU1 only. Ollama is restricted to CUDA_VISIBLE_DEVICES=0,1 while the pigtail rule is active. The 300 W power cap applies to GPU0/GPU1 only. The temporary pigtail rule retires only after the proper SF-1600F14HT PCIe cable is installed.
 ```
 
 Operational model:

@@ -1,9 +1,9 @@
 """
 title: Nodehome AI History
 author: Nodehome
-description: Query the private Claude/Codex/Claude Code history knowledge base for prior project context and decisions.
+description: Query the private Claude/Codex/Claude Code history knowledge base for prior project context and decisions, including Nodehome GPU naming conventions.
 required_open_webui_version: 0.9.0
-version: 0.1.0
+version: 0.1.1
 license: MIT
 """
 
@@ -51,6 +51,9 @@ class Tools:
         Use this only when the user asks about prior decisions, previous work, current local project
         state, handovers, Nodehome/Local_AI/MealMastery history, GPU/vLLM/Open WebUI setup, or other
         named local systems. Do not use this for general world knowledge.
+
+        Before interpreting snippets, apply the returned PROJECT_CONTEXT_CONTRACT. It contains
+        canonical project aliases, evidence rules, and known Nodehome naming conventions.
         """
 
         if __event_emitter__:
@@ -128,6 +131,23 @@ class Tools:
             return {}
         return {"Authorization": f"Bearer {self.valves.token}"}
 
+    def _project_context_contract(self) -> list[str]:
+        return [
+            "PROJECT_CONTEXT_CONTRACT",
+            "- Treat retrieved snippets as private local project evidence, not as general world knowledge.",
+            "- Prefer durable docs/current-state snippets over older chat speculation when they conflict.",
+            "- Preserve source provenance and say when retrieved history is incomplete, stale, or conflicting.",
+            "- Resolve known Nodehome aliases before answering; do not treat alias differences as uncertainty.",
+            "Canonical Nodehome aliases:",
+            "- GPU0 = NVIDIA index 0 = physical GPU #1 = bus 81:00.0.",
+            "- GPU1 = NVIDIA index 1 = physical GPU #2 = bus C1:00.0.",
+            "- GPU2 = NVIDIA index 2 = physical GPU #3 = bus C2:00.0 = pigtail-fed restricted card.",
+            "- vLLM sustained workloads currently use GPU0/GPU1 only.",
+            "- Ollama is restricted to CUDA_VISIBLE_DEVICES=0,1 while the pigtail rule is active.",
+            "- The 300 W power cap applies to GPU0/GPU1 only; GPU2 is not targeted for sustained load.",
+            "- The temporary pigtail rule retires only after the proper SF-1600F14HT PCIe cable is installed.",
+        ]
+
     def _format_context(self, data: dict[str, Any]) -> str:
         status = data.get("status", "UNKNOWN")
         if status == "NO_HISTORY_CONTEXT":
@@ -144,6 +164,7 @@ class Tools:
             "HISTORY_CONTEXT",
             "Use these snippets only as private project/reference memory.",
             "Preserve uncertainty if the snippets do not fully answer the user.",
+            *self._project_context_contract(),
             f"query: {data.get('query', '')}",
             f"router: {data.get('reason', '')}",
             f"fts_query: {data.get('fts_query', '')}",
