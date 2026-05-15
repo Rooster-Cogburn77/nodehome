@@ -17,8 +17,19 @@
 - **Undo lane implemented.** New `/undo-apply [n|latest] [--check]` restores an applied proposal from its apply-time backup. It verifies the current file still matches the exact applied content before writing, refuses if the file changed after apply, writes an undo safety backup of the current applied file, marks the proposal with `undone_at` + `undo_backup_path`, injects a `manual-undo-apply` context block, and emits `undo_apply_checked`, `undo_apply_confirmed`, or `undo_apply_refused` audit events.
 - **Apply backup reliability fixed.** `/apply --confirm` now stores `backup_sha256` and `applied_sha256` on the proposal, and writes backup files with `newline=""` so Windows CRLF content is not double-translated into `CRCRLF`. `/undo-apply` uses `applied_sha256` when available and falls back to reconstructing applied content from the backup + patch for older sessions.
 - Validation: `pythoncore-3.14-64\python.exe -m py_compile scripts\nodechat.py scripts\ai_history_kb.py` clean; `pythoncore-3.14-64\python.exe -m unittest tests\test_nodechat_safety.py` -> **31/31 passing** (13 prior + 12 new auto-routing + 2 reliability regressions + 4 undo/apply-backup tests). Pure-function smoke checks against the live workspace confirmed CURRENT_STATE / CLAUDE.md / nodechat-scope / docs/runbooks/* / scripts/nodechat.py routing all hit and the two-file cap holds. Live disclosure smoke confirmed `[auto-routed: repo(read docs/runbooks/nodechat-scope.md)]` printing before model dispatch.
-**Commits:** `938f3cd` (scope correction). Auto-routing implementation pending commit.
-**Next:** Commit and push the undo lane. Next implementation lanes per `nodechat-scope.md`: web auto-routing + `/web-mode`; live-node operator commands gated by tier with `/live-mode`; grouped evidence view.
+**Commits (all on `origin/main`):** `938f3cd` Document full Nodechat agentic scope; `e0c83da` Add nodechat history and repo auto-routing; `2a71947` Add nodechat apply undo.
+**End-of-session status:** Working tree clean. 31/31 safety tests passing. Three Nodechat capability lanes shipped this session (scope correction, AI History + repo auto-routing, `/undo-apply`). No regressions in the existing apply/approve/cmd/audit/workspace-confinement surface.
+**Next implementation lanes per `nodechat-scope.md`** (in roadmap order):
+1. Web auto-routing + `/web-mode auto|manual|off` — heuristics for prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing). Reuses the existing `/web-search` and `/web-fetch` infrastructure under the same disclosure + audit shape as history/repo routing.
+2. Live-node operator + `/live-mode auto|manual|off` — Observe-tier health checks (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Mutating service actions (restart, reload) stay in the Mutate tier behind `/approve`.
+3. Grouped evidence view — `/evidence` today is a flat list; group by source with per-source totals and links so it becomes the default visibility surface.
+4. Auto-routing recall pass — once the three lanes above land, widen the day-one heuristics with confusion-matrix evidence rather than guesses.
+
+**Out-of-Nodechat carryovers still open today:**
+- GPU 3 cable arrival window 2026-05-23 → 2026-06-10 (`lizzieb753` UK eBay order).
+- 12TB drives arriving May 16-20 — SMART-verify before format (sv2deals serial `5PJHV96C`, PayMore packaging photo before opening).
+- BMC/IPMI Phase 1 (password rotation + cert hygiene) — next free security task.
+- Open WebUI re-pin `:main` → `:v0.9.5`.
 
 ## 2026-05-15 (Session 22)
 **Focus:** `whichllm` review for Nodehome model-scouting workflow.

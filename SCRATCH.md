@@ -8,6 +8,24 @@ Focus: Re-frame Nodechat scope as full agentic terminal environment, land auto-r
 - **Undo lane implemented.** `/undo-apply [n|latest] [--check]` restores an applied proposal from its apply-time backup after verifying the current file still matches the exact applied content. It refuses post-apply file drift, writes an undo safety backup, records `undone_at`/`undo_backup_path`, injects `manual-undo-apply` context, and audits check/confirm/refusal paths.
 - **Tests:** 31/31 passing (13 prior + 12 new auto-routing + 2 reliability regressions + 4 undo/apply-backup tests). Includes the user-mandated "vague repo topic does not route" guardrail.
 
+## End-of-session status
+- **Three commits on `origin/main` this session.** `938f3cd` (scope), `e0c83da` (auto-routing), `2a71947` (undo). Working tree clean.
+- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix.
+- **No regressions** in the existing apply/approve/cmd/audit/workspace-confinement surface.
+
+## Plan (next session)
+**Nodechat — remaining roadmap per `docs/runbooks/nodechat-scope.md`:**
+1. Web auto-routing + `/web-mode auto|manual|off`. Heuristics for prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing). Reuse the existing `/web-search` and `/web-fetch` infrastructure under the same disclosure + audit shape as history/repo routing.
+2. Live-node operator + `/live-mode auto|manual|off`. Observe-tier health checks (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Mutating service actions stay in the Mutate tier behind `/approve`.
+3. Grouped evidence view. `/evidence` today is flat; group by source with per-source totals and links.
+4. Auto-routing recall pass. Once the three lanes above land, widen heuristics with confusion-matrix evidence.
+
+**Out-of-Nodechat work still open today:**
+- GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
+- 12TB drives arriving May 16-20 — SMART-verify before format. sv2deals serial `5PJHV96C`; PayMore packaging photo before opening.
+- BMC/IPMI Phase 1 (password rotation + cert hygiene) — next free security task; factory password is in repo git history.
+- Open WebUI re-pin `:main` → `:v0.9.5`.
+
 ## Pre-session work (carry-forward from Session 21 evening, still relevant)
 
 Focus carryover: Storage procurement recovery after Walmart canceled Drive #1; replacement 12TB Easystore secured through eBay within the same market window; `whichllm` evaluated as a model-scouting tool.
