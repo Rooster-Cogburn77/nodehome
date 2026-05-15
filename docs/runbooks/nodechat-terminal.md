@@ -225,7 +225,7 @@ Rules:
 - The command reads one bounded text file and asks the model for a unified diff.
 - The proposal is stored in the current session only.
 - `/diff` prints the latest proposal; `/diff all` prints every proposal stored in that session.
-- Applying a proposal is still manual/outside Nodechat until the later approval-gated write phase exists.
+- Applying a proposal is available through `/apply --confirm`; no freeform write command exists.
 - `/apply --check` validates the latest proposal without writing.
 - `/apply --confirm` applies the latest proposal after validation and writes a backup under `~/.nodehome/nodechat/backups/`.
 - `/apply <n> --confirm` applies a specific proposal by its session index.
