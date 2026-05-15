@@ -266,7 +266,7 @@ Rules:
 - Only allowlisted read-only commands run immediately.
 - Selected Git network/update commands queue for `/approve`: `git fetch`, `git fetch origin`, `git fetch --all`, `git fetch --prune`, `git fetch --prune origin`, `git pull --ff-only`, and `git push`.
 - `/approve <id>` reclassifies the queued command before execution and records the resulting command output with `approval_id: ...`.
-- `git pull --ff-only` requires a clean working tree before execution.
+- `git pull --ff-only` and `git push` require a clean working tree before execution. If the tree is dirty, the approval is marked `blocked` and the Git command is not run.
 - Refused commands are still logged as `COMMAND_OUTPUT` with `exit_code: refused`.
 - Allowed examples: read-only `git` subcommands, `rg` without risky traversal/preprocessor flags, `dir`, `ls`, `type`, `cat`, `pwd`, and version checks.
 - Refused examples: `git add`, `git commit`, package-manager commands, arbitrary network commands, destructive deletes, privileged service commands, and unknown commands.
@@ -290,6 +290,8 @@ Current coverage:
 - `/cmd` classifier refuses outside paths, risky `rg` flags, and network commands.
 - `/cmd` queues selected Git network/update commands instead of executing them.
 - `/approve` executes a queued command once and records `approval_id`.
+- `/approve` blocks dirty-tree `git pull --ff-only` / `git push` before execution.
+- Non-approved Git variants such as `git push --force`, `git push origin main`, and `git fetch origin main` do not queue.
 - `/apply` refuses ambiguous repeated hunks.
 - `/apply` still works when repeated hunk context has an exact preferred location.
 - `/cmd` read-only subprocess execution records a resolved executable path.
@@ -404,6 +406,7 @@ Rules:
 - Classify commands as read-only, write, network, privileged, or destructive.
 - Phase 5A runs read-only allowlisted commands immediately.
 - Selected Git network/update commands queue for explicit `/approve`.
+- `git pull --ff-only` and `git push` require a clean working tree before execution.
 - Package-manager, privileged, destructive, arbitrary network, and unknown commands are refused, not queued.
 - Never auto-run destructive commands.
 - Keep command output in the session log as structured `COMMAND_OUTPUT`.

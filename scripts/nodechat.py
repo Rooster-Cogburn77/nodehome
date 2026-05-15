@@ -1500,17 +1500,17 @@ def run_approved_command(
     session: dict[str, Any],
     parts: list[str],
     approval_reason: str,
-) -> tuple[int, str, str]:
+) -> tuple[int | str, str, str, bool]:
     exe = parts[0].lower() if parts else ""
     sub = parts[1].lower() if len(parts) > 1 else ""
-    if exe == "git" and sub == "pull":
+    if exe == "git" and sub in {"pull", "push"}:
         clean, reason = git_worktree_clean(config, session)
         if not clean:
-            return 1, reason, shutil.which("git") or ""
+            return "blocked", reason, shutil.which("git") or "", False
 
     resolved_exe = shutil.which(parts[0])
     if not resolved_exe:
-        return 127, f"executable not found: {parts[0]}", ""
+        return 127, f"executable not found: {parts[0]}", "", True
     argv = [resolved_exe, *parts[1:]]
     result = subprocess.run(
         argv,
@@ -1521,7 +1521,7 @@ def run_approved_command(
         timeout=config.cmd_timeout,
         check=False,
     )
-    return result.returncode, result.stdout.strip(), resolved_exe
+    return result.returncode, result.stdout.strip(), resolved_exe, True
 
 
 def internal_dir(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
@@ -1762,13 +1762,13 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
         return
 
     try:
-        exit_code, output, executable = run_approved_command(config, session, parts, approval_reason)
+        exit_code, output, executable, command_ran = run_approved_command(config, session, parts, approval_reason)
     except subprocess.TimeoutExpired:
-        exit_code, output, executable = 124, f"command timed out after {config.cmd_timeout}s", ""
+        exit_code, output, executable, command_ran = 124, f"command timed out after {config.cmd_timeout}s", "", True
     except Exception as exc:
-        exit_code, output, executable = 1, str(exc), ""
+        exit_code, output, executable, command_ran = 1, str(exc), "", True
 
-    row["status"] = "executed"
+    row["status"] = "executed" if command_ran else "blocked"
     row["executed_at"] = utc_now()
     row["exit_code"] = exit_code
     row["executable"] = executable
@@ -1798,7 +1798,10 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
     add_context(session, f"/approve {row.get('id', '')}", block)
     print(block)
     print()
-    print(f"approved command executed: {row.get('id')}")
+    if command_ran:
+        print(f"approved command executed: {row.get('id')}")
+    else:
+        print(f"approved command blocked: {row.get('id')}")
 
 
 def command_diff(session: dict[str, Any], arg: str) -> None:

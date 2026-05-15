@@ -3,6 +3,7 @@ import importlib.util
 import io
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -127,6 +128,7 @@ class NodechatSafetyTests(unittest.TestCase):
                     0,
                     "fetch ok",
                     "C:\\Program Files\\Git\\cmd\\git.exe",
+                    True,
                 )
                 buf = io.StringIO()
                 with contextlib.redirect_stdout(buf):
@@ -144,6 +146,55 @@ class NodechatSafetyTests(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 nodechat.command_approve(config, session, "a1")
             self.assertIn("already executed", buf.getvalue())
+
+    def test_approve_blocks_dirty_git_push_without_execution(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            (workspace / "dirty.txt").write_text("dirty", encoding="utf-8")
+            subprocess_result = subprocess.run(
+                [shutil.which("git") or "git", "init"],
+                cwd=str(workspace),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+            if subprocess_result.returncode != 0:
+                self.skipTest("git init failed")
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_cmd(config, session, "git push")
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_approve(config, session, "a1")
+
+            text = buf.getvalue()
+            self.assertIn("exit_code: blocked", text)
+            self.assertIn("working tree is not clean", text)
+            self.assertEqual(session["approvals"][0]["status"], "blocked")
+
+    def test_non_approvable_git_network_variants_do_not_queue(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            commands = [
+                "git fetch origin main",
+                "git fetch --prune --tags",
+                "git pull",
+                "git pull --ff-only --rebase",
+                "git push origin main",
+                "git push --force",
+            ]
+            for command in commands:
+                with self.subTest(command=command):
+                    buf = io.StringIO()
+                    with contextlib.redirect_stdout(buf):
+                        nodechat.command_cmd(config, session, command)
+                    self.assertIn("COMMAND_REFUSED", buf.getvalue())
+            self.assertEqual(session.get("approvals"), [])
 
     def test_apply_refuses_ambiguous_repeated_hunks(self):
         original = "alpha\nbeta\nalpha\nbeta\n"
