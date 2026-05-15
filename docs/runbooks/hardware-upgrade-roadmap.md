@@ -12,7 +12,7 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 1. **GPU 3 proper cable remains the mandatory safety unlock.** No sustained 3-GPU/TP=3 load until the pigtail rule is retired.
 2. **BMC/IPMI Phase 1 is the highest-priority security task because it is free.** Rotate the factory ADMIN password and clean up cert hygiene before the dedicated IPMI port is ever patched into LAN.
 3. **RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at a sane price.** DDR4 ECC RDIMM has higher run-away-price risk than UPS or basic network gear.
-4. **Network segmentation is important, but it should be phased.** First identify router/switch capability and rotate BMC credentials; only then buy managed switch/firewall gear for a management VLAN.
+4. **Network segmentation is important, and the cable-company router should be replaced.** First rotate BMC credentials/cert, then put the ISP box into bridge/modem mode if possible and move routing/VLAN control to owned gear.
 5. **The current local UPS is acceptable for now as a graceful-shutdown/light-load buffer, not as peak-load ride-through.** Do not plan to run sustained multi-GPU inference through an outage on the BX1500M.
 
 ---
@@ -75,23 +75,24 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 
 ## Tier 3 — IPMI hardening enabler ($150-400)
 
-### Managed switch + (optional) small firewall for management VLAN
+### Router replacement + managed switch/AP for management VLAN
 
-**Current state:** BMC reachable only via in-band USB-NIC at `169.254.3.1/24`. Dedicated IPMI ethernet port is unpatched. `docs/runbooks/ipmi-hardening.md` captures the proactive scope; Phase 1 (password rotation + cert) needs no hardware, Phases 2-3 (management VLAN + static IP + cable patch) need this gear.
+**Current state:** BMC reachable only via in-band USB-NIC at `169.254.3.1/24`. Dedicated IPMI ethernet port is unpatched. The current router is the standard cable-company router and is not a trustworthy long-term segmentation foundation. `docs/runbooks/ipmi-hardening.md` captures the proactive scope; Phase 1 (password rotation + cert) needs no hardware, Phases 2-3 (management VLAN + static IP + cable patch) need owned routing/switching gear.
 
-**Current decision:** Network segmentation matters, but do not turn it into a vague all-at-once project. Execute Phase 1 first with no new hardware: rotate BMC ADMIN password, store it outside git, and clean up cert hygiene. Hardware spend comes after router/switch capability is known.
+**Current decision:** Network segmentation matters, but do not turn it into a vague all-at-once project. Execute Phase 1 first with no new hardware: rotate BMC ADMIN password, store it outside git, and clean up cert hygiene. Then replace the router/gateway layer instead of trying to build VLAN policy on the ISP router.
 
 **Trigger:** Any of:
 - Decision to execute IPMI hardening Phase 2/3
 - Dedicated IPMI port is about to be patched into the rack network
 - More services become reachable from devices beyond the trusted workstation
-- Current router is confirmed to support VLANs, making the managed-switch path cheap and clean
+- ISP router can be placed into bridge/modem mode, or a separate approved modem path is chosen
+- Home Wi-Fi needs to move off the ISP router
 
-**Recommendation:** TP-Link TL-SG108E v6 (8-port smart-managed gigabit, 802.1Q VLANs) ~$35-50. Optional small firewall: Protectli Vault 2 (Intel-N100 / 4-port 2.5GbE running OPNsense) ~$200-300 if home router can't do VLAN trunking.
+**Recommendation:** Preferred practical stack is Ubiquiti Cloud Gateway Ultra (~$129) + UniFi Switch Lite 8 PoE (~$109) + U7 Lite AP (~$99), with the ISP device in bridge/modem mode if possible. Estimated stack cost is ~$337 before tax/cables. Step up to Cloud Gateway Max only if the internet plan or internal-network plan needs >1Gbps / materially more 2.5GbE headroom. A cheaper TP-Link Omada path (ER605/ER707-M2 + Omada switch/AP) remains viable, but UniFi is the cleaner long-term control plane for this rack.
 
-**Why this tier:** Real security upgrade for the BMC, but only valuable when executed. Hold until ready to do Phases 2-3.
+**Why this tier:** Real security upgrade for the BMC and a general home-network quality upgrade, but only valuable when executed as a gateway + VLAN/firewall + AP plan. Do not patch the dedicated BMC NIC into the general LAN first and clean it up later.
 
-**Cost:** $35-50 minimum (switch only); $200-300 full firewall stack.
+**Cost:** ~$337 before tax/cables for the recommended UniFi gateway + switch + AP stack; ~$466+ if stepping up to Cloud Gateway Max.
 
 ---
 
