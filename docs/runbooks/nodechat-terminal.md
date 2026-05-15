@@ -1,10 +1,10 @@
 # Nodechat Terminal Client
 
-Status: initial local terminal chat client, no autonomous shell tools.
+Status: validated terminal chat client; tool roadmap accepted but not implemented.
 
 `scripts/nodechat.py` is a small stdlib-only terminal client for talking to the Nodehome local model stack through an OpenAI-compatible endpoint such as vLLM. It is meant to mirror the useful feel of Codex/Claude Code: terminal-first, sessioned, slash-command driven, and project-context aware.
 
-It is not yet a coding agent. It does not execute shell commands, read files, edit files, or run tools inside the chat. That boundary is intentional until the approval and sandbox model is designed.
+It is not yet a coding agent. It does not execute shell commands, read files, edit files, browse the web, or run tools inside the chat. That boundary is intentional until the approval and sandbox model is designed.
 
 The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
 
@@ -152,13 +152,118 @@ scripts/windows/nodechat.cmd
 scripts/windows/nodechat-tunnel.cmd
 ```
 
+## Tool Roadmap
+
+Decision captured 2026-05-15: Nodechat should grow toward a Codex/Claude Code style terminal experience, but in explicit phases. The model should never pretend it has file, shell, or internet access unless the corresponding command/tool exists and was used.
+
+### Phase 0 - Done
+
+Current capabilities:
+
+```text
+chat with local vLLM
+persist sessions
+slash-command UX
+explicit AI History injection
+Windows launchers
+SSH tunnel path for private history
+```
+
+### Phase 1 - Explicit Read-Only Local Context
+
+Planned commands:
+
+```text
+/read <path>
+/tree [path]
+/search-files <query> [path]
+/git-status
+/pwd
+```
+
+Rules:
+
+- Only read when the user explicitly asks.
+- Print what was read or searched before injecting it.
+- Cap file size and result count.
+- Prefer repo/workspace paths; warn before reading secrets, env files, exports, or private data stores.
+- Do not edit files in this phase.
+
+### Phase 2 - Explicit Web Tools
+
+Planned commands:
+
+```text
+/web-search <query>
+/web-open <url>
+/web-fetch <url>
+```
+
+Rules:
+
+- No automatic browsing.
+- Web access only through explicit slash command or explicit user approval.
+- Preserve source URLs in the injected context.
+- Treat search snippets as leads, not proof.
+- Keep fetched text transient unless the user explicitly saves it.
+- Do not use web tools for private/local facts that should come from AI History or repo files.
+
+### Phase 3 - Proposed Edits Only
+
+Planned commands:
+
+```text
+/propose-edit <path>
+/diff
+```
+
+Rules:
+
+- Generate patch/diff proposals only.
+- No write to disk.
+- User manually reviews/applies or approves moving to Phase 4 behavior.
+
+### Phase 4 - Approval-Gated Writes
+
+Planned commands:
+
+```text
+/apply
+/write <path>
+```
+
+Rules:
+
+- Show exact files affected.
+- Require explicit confirmation before writing.
+- Keep backups or diffs.
+- Never write secrets to repo.
+
+### Phase 5 - Approval-Gated Shell
+
+Planned commands:
+
+```text
+/cmd <command>
+/approve
+```
+
+Rules:
+
+- No unrestricted shell by default.
+- Classify commands as read-only, write, network, privileged, or destructive.
+- Require explicit approval for write/network/privileged/destructive commands.
+- Never auto-run destructive commands.
+- Keep command output in the session log.
+
 ## Safety Boundary
 
-Nodechat v0 has no shell tools. Future tool support should be added in this order:
+Nodechat currently has no file, web, shell, or edit tools. Future tool support should be added in this order:
 
 1. Read-only local status commands.
-2. Read-only repo inspection commands.
-3. Gated write/edit commands with explicit approval.
-4. Never unrestricted shell by default.
+2. Explicit web search/fetch commands.
+3. Read-only repo inspection commands.
+4. Gated write/edit commands with explicit approval.
+5. Never unrestricted shell by default.
 
 The point is to get a reliable terminal chat surface first, then add agent behavior deliberately.
