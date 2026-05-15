@@ -176,7 +176,7 @@ For private-history support from Windows, open the SSH tunnel first:
 scripts\windows\nodechat-tunnel.cmd
 ```
 
-It supports streaming responses, saved sessions, slash commands, explicit AI History lookup through `/history <query>`, read-only local context commands (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), explicit web context commands (`/web-search`, `/web-fetch`, `/web-open`), and no-write patch proposals through `/propose-edit <path> :: <instruction>` plus `/diff`. It does not edit files or run arbitrary shell commands.
+It supports streaming responses, saved sessions, slash commands, explicit AI History lookup through `/history <query>`, read-only local context commands (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), explicit web context commands (`/web-search`, `/web-fetch`, `/web-open`), no-write patch proposals through `/propose-edit <path> :: <instruction>` plus `/diff`, and approval-gated proposal application through `/apply --confirm`. It does not run arbitrary shell commands.
 
 Runbook: [docs/runbooks/nodechat-terminal.md](../docs/runbooks/nodechat-terminal.md)
 

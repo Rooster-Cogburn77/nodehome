@@ -8,6 +8,8 @@ It is not a write-capable coding agent. It can now inject explicitly requested r
 
 It can also generate patch proposals with `/propose-edit`, but those proposals are stored only in the Nodechat session. Nodechat does not apply them to disk.
 
+Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/apply` validates the proposal first, writes a backup under the Nodechat session directory, and only supports bounded single-file text edits.
+
 The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
 
 ## Default Backend
@@ -82,6 +84,7 @@ Inside `nodechat`:
 /web-open <url>
 /propose-edit <path> :: <instruction>
 /diff [all]
+/apply [n|latest] [--check|--confirm]
 /context
 /clear-context
 /status
@@ -216,6 +219,9 @@ Rules:
 - The proposal is stored in the current session only.
 - `/diff` prints the latest proposal; `/diff all` prints every proposal stored in that session.
 - Applying a proposal is still manual/outside Nodechat until the later approval-gated write phase exists.
+- `/apply --check` validates the latest proposal without writing.
+- `/apply --confirm` applies the latest proposal after validation and writes a backup under `~/.nodehome/nodechat/backups/`.
+- `/apply <n> --confirm` applies a specific proposal by its session index.
 
 ## Tool Roadmap
 
@@ -292,11 +298,10 @@ Rules:
 
 ### Phase 4 - Approval-Gated Writes
 
-Planned commands:
+Implemented command:
 
 ```text
 /apply
-/write <path>
 ```
 
 Rules:
@@ -305,6 +310,10 @@ Rules:
 - Require explicit confirmation before writing.
 - Keep backups or diffs.
 - Never write secrets to repo.
+- Supports stored proposal diffs only; no freeform `/write <path>` exists.
+- Refuses blocked private/generated paths and non-text file types.
+- Validates the unified diff against the current file before writing.
+- Writes backups outside the repo under the Nodechat session backup directory.
 
 ### Phase 5 - Approval-Gated Shell
 
@@ -330,7 +339,7 @@ Nodechat currently has explicit read-only file/context tools and explicit web fe
 1. Read-only local context commands. Done.
 2. Explicit web search/fetch commands. Done.
 3. Proposed edit/diff commands with no writes. Done.
-4. Gated write/edit commands with explicit approval.
+4. Gated write/edit commands with explicit approval. Partially done via `/apply`; no freeform `/write`.
 5. Approval-gated shell, never unrestricted by default.
 
 The point is to preserve a reliable terminal chat surface while adding agent behavior deliberately.

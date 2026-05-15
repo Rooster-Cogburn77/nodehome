@@ -24,6 +24,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import PurePosixPath
 from typing import Any
 
 
@@ -40,6 +41,7 @@ MAX_SEARCH_RESULTS = 40
 MAX_SEARCH_FILE_BYTES = 220000
 MAX_PROPOSE_FILE_CHARS = 30000
 MAX_PROPOSAL_TOKENS = 2400
+HUNK_RE = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@")
 
 BLOCKED_PATH_PARTS = {
     ".git",
@@ -164,6 +166,12 @@ def safe_filename(value: str) -> str:
 
 def ensure_session_dir(config: Config) -> pathlib.Path:
     path = config.session_root / "sessions"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def ensure_backup_dir(config: Config, session: dict[str, Any]) -> pathlib.Path:
+    path = config.session_root / "backups" / safe_filename(str(session.get("id", "session")))
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -991,14 +999,243 @@ def command_propose_edit(config: Config, session: dict[str, Any], arg: str) -> N
 
 def strip_markdown_fences(text: str) -> str:
     value = text.strip()
-    if not value.startswith("```"):
-        return value
     lines = value.splitlines()
     if lines and lines[0].startswith("```"):
         lines = lines[1:]
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
+    lines = [line for line in lines if line.strip() != "```"]
     return "\n".join(lines).strip()
+
+
+def select_proposal(session: dict[str, Any], selector: str) -> tuple[int, dict[str, Any] | None]:
+    proposals = session.get("proposals", [])
+    if not proposals:
+        return -1, None
+    value = selector.strip().lower()
+    if not value or value == "latest":
+        return len(proposals) - 1, proposals[-1]
+    try:
+        index = int(value) - 1
+    except ValueError:
+        return -1, None
+    if index < 0 or index >= len(proposals):
+        return -1, None
+    return index, proposals[index]
+
+
+def normalize_diff_path(value: str) -> str:
+    path = value.strip().split("\t", 1)[0].strip()
+    if path in {"", "/dev/null"}:
+        return ""
+    if path.startswith(("a/", "b/")):
+        path = path[2:]
+    return path.replace("\\", "/")
+
+
+def diff_declared_new_path(patch: str) -> str:
+    for line in patch.splitlines():
+        if line.startswith("+++ "):
+            return normalize_diff_path(line[4:])
+    return ""
+
+
+def declared_path_matches(config: Config, session: dict[str, Any], path: pathlib.Path, declared: str) -> bool:
+    if not declared:
+        return True
+    expected = display_path(config, session, path)
+    declared_l = declared.lower()
+    expected_l = expected.lower()
+    if declared_l == expected_l:
+        return True
+    if path.as_posix().lower().endswith(declared_l):
+        return True
+    return PurePosixPath(declared).name.lower() == path.name.lower() and declared_l.endswith(expected_l)
+
+
+def same_patch_line(actual: str, expected: str) -> bool:
+    return actual == expected or actual.rstrip("\r\n") == expected.rstrip("\r\n")
+
+
+def parse_unified_hunks(patch: str) -> list[tuple[int, list[str]]]:
+    patch_lines = patch.splitlines(keepends=True)
+    hunks: list[tuple[int, list[str]]] = []
+    idx = 0
+    while idx < len(patch_lines):
+        line = patch_lines[idx].rstrip("\r\n")
+        match = HUNK_RE.match(line)
+        if not match:
+            idx += 1
+            continue
+        old_start = int(match.group("old_start"))
+        idx += 1
+        hunk_lines: list[str] = []
+        while idx < len(patch_lines):
+            hunk_raw = patch_lines[idx]
+            hunk_line = hunk_raw.rstrip("\r\n")
+            if HUNK_RE.match(hunk_line) or hunk_line.startswith(("diff --git ", "--- ", "+++ ")):
+                break
+            if hunk_line.startswith("\\ No newline"):
+                idx += 1
+                continue
+            if hunk_line.strip().startswith("```") or hunk_line.strip() == "":
+                break
+            if not hunk_raw or hunk_raw[0] not in {" ", "-", "+"}:
+                raise RuntimeError(f"unsupported patch line in hunk: {hunk_line[:80]}")
+            hunk_lines.append(hunk_raw)
+            idx += 1
+        hunks.append((old_start, hunk_lines))
+    if not hunks:
+        raise RuntimeError("no unified-diff hunks found")
+    return hunks
+
+
+def split_hunk_lines(hunk_lines: list[str]) -> tuple[list[str], list[str]]:
+    old_block: list[str] = []
+    new_block: list[str] = []
+    for hunk_raw in hunk_lines:
+        prefix = hunk_raw[0]
+        content = hunk_raw[1:]
+        if prefix == " ":
+            old_block.append(content)
+            new_block.append(content)
+        elif prefix == "-":
+            old_block.append(content)
+        elif prefix == "+":
+            new_block.append(content)
+    return old_block, new_block
+
+
+def block_matches(lines: list[str], start: int, block: list[str]) -> bool:
+    if start < 0 or start + len(block) > len(lines):
+        return False
+    for offset, expected in enumerate(block):
+        if not same_patch_line(lines[start + offset], expected):
+            return False
+    return True
+
+
+def find_hunk_start(lines: list[str], old_block: list[str], preferred: int, minimum: int) -> int:
+    if not old_block:
+        return max(minimum, min(preferred, len(lines)))
+    if preferred >= minimum and block_matches(lines, preferred, old_block):
+        return preferred
+    for start in range(minimum, len(lines) - len(old_block) + 1):
+        if block_matches(lines, start, old_block):
+            return start
+    return -1
+
+
+def apply_unified_diff_text(original: str, patch: str) -> str:
+    original_lines = original.splitlines(keepends=True)
+    output: list[str] = []
+    pos = 0
+    for old_start, hunk_lines in parse_unified_hunks(patch):
+        old_block, new_block = split_hunk_lines(hunk_lines)
+        preferred = old_start - 1
+        start = find_hunk_start(original_lines, old_block, preferred, pos)
+        if start < 0:
+            raise RuntimeError(f"hunk context not found near original line {old_start}")
+        output.extend(original_lines[pos:start])
+        output.extend(new_block)
+        pos = start + len(old_block)
+    output.extend(original_lines[pos:])
+    return "".join(output)
+
+
+def parse_apply_args(arg: str) -> tuple[str, str]:
+    parts = arg.split()
+    selector = "latest"
+    mode = "preview"
+    for part in parts:
+        lowered = part.lower()
+        if lowered in {"--confirm", "confirm"}:
+            mode = "confirm"
+        elif lowered in {"--check", "check"}:
+            mode = "check"
+        elif not lowered.startswith("--"):
+            selector = part
+    return selector, mode
+
+
+def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
+    selector, mode = parse_apply_args(arg)
+    index, proposal = select_proposal(session, selector)
+    if proposal is None:
+        print("No matching proposal. Use /diff to inspect stored proposals.")
+        return
+
+    path = pathlib.Path(str(proposal.get("path") or "")).resolve()
+    reason = blocked_path_reason(path)
+    if reason:
+        print(f"apply refused: {reason}")
+        return
+    if not path.exists() or not path.is_file():
+        print(f"apply refused: target file is missing or not a file: {path}")
+        return
+    if not is_text_candidate(path):
+        print(f"apply refused: extension is not in text allow-list: {path.suffix or '[none]'}")
+        return
+
+    patch = strip_markdown_fences(str(proposal.get("proposal") or ""))
+    declared = diff_declared_new_path(patch)
+    if not declared_path_matches(config, session, path, declared):
+        print(f"apply refused: proposal targets {declared!r}, expected {display_path(config, session, path)!r}")
+        return
+
+    try:
+        original, truncated = read_text_path(path)
+    except Exception as exc:
+        print(f"apply failed: {exc}")
+        return
+    if truncated:
+        print(f"apply refused: file exceeds read cap: {path}")
+        return
+    try:
+        updated = apply_unified_diff_text(original, patch)
+    except Exception as exc:
+        print(f"apply check failed: {exc}")
+        return
+
+    if updated == original:
+        print("apply check OK: patch makes no changes")
+        return
+
+    if mode == "preview":
+        print(f"proposal {index + 1} targets: {path}")
+        print("apply check OK; no files changed")
+        print(f"To write this change, run: /apply {index + 1} --confirm")
+        return
+
+    if mode == "check":
+        print(f"apply check OK: proposal {index + 1} can be applied to {path}")
+        return
+
+    backup_dir = ensure_backup_dir(config, session)
+    backup = backup_dir / f"{path.name}.{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.bak"
+    backup.write_text(original, encoding="utf-8")
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(updated)
+    proposal["applied_at"] = utc_now()
+    proposal["backup_path"] = str(backup)
+    add_context(
+        session,
+        f"/apply {index + 1}",
+        context_block(
+            "applied_edit",
+            str(path),
+            "\n".join(
+                [
+                    f"path: {path}",
+                    f"backup: {backup}",
+                    f"proposal_index: {index + 1}",
+                    "status: applied",
+                ]
+            ),
+        ),
+    )
+    print(f"applied proposal {index + 1}: {path}")
+    print(f"backup: {backup}")
 
 
 def command_diff(session: dict[str, Any], arg: str) -> None:
@@ -1044,6 +1281,8 @@ def print_help() -> None:
               /propose-edit <path> :: <instruction>
                                     generate and store a patch proposal only
               /diff [all]           show latest or all stored patch proposals
+              /apply [n|latest] [--check|--confirm]
+                                    validate or apply a stored proposal with backup
               /context              show active injected context blocks
               /clear-context        remove injected context blocks
               /status               check vLLM models and AI History health
@@ -1053,6 +1292,7 @@ def print_help() -> None:
               Local tools are explicit, read-only, and context-injection only.
               Web tools run only when invoked; search results are leads, not proof.
               /propose-edit never writes files; it only prints/stores a proposal.
+              /apply writes only with --confirm after diff validation.
               Use /history explicitly when you want private project memory.
             """
         ).strip()
@@ -1231,6 +1471,10 @@ def handle_command(
 
     if command == "diff":
         command_diff(session, arg)
+        return "handled", session, None
+
+    if command == "apply":
+        command_apply(config, session, arg)
         return "handled", session, None
 
     if command == "context":
