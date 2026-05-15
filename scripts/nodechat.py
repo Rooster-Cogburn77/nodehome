@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import html
 import json
 import os
@@ -181,6 +182,16 @@ def ensure_backup_dir(config: Config, session: dict[str, Any]) -> pathlib.Path:
     return path
 
 
+def ensure_audit_dir(config: Config) -> pathlib.Path:
+    path = config.session_root / "audit"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def audit_log_path(config: Config) -> pathlib.Path:
+    return ensure_audit_dir(config) / "nodechat-audit.jsonl"
+
+
 def make_session(config: Config) -> dict[str, Any]:
     sid = session_id()
     return {
@@ -206,6 +217,42 @@ def save_session(config: Config, session: dict[str, Any]) -> pathlib.Path:
     path = session_path(config, session)
     path.write_text(json.dumps(session, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def output_digest(output: str) -> dict[str, Any]:
+    text = str(output or "")
+    return {
+        "output_chars": len(text),
+        "output_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
+    }
+
+
+def audit_event(config: Config, session: dict[str, Any], event_type: str, **fields: Any) -> None:
+    row = {
+        "created_at": utc_now(),
+        "event_type": event_type,
+        "session_id": session.get("id", ""),
+        "cwd": str(workspace_path(config, session)),
+        **fields,
+    }
+    path = audit_log_path(config)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def read_recent_audit(config: Config, limit: int = 20) -> list[dict[str, Any]]:
+    path = audit_log_path(config)
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows[-max(1, limit):]
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -1254,6 +1301,14 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
         return
 
     if mode == "check":
+        audit_event(
+            config,
+            session,
+            "apply_checked",
+            proposal_index=index + 1,
+            path=str(path),
+            status="ok",
+        )
         print(f"apply check OK: proposal {index + 1} can be applied to {path}")
         return
 
@@ -1279,6 +1334,17 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
                 ]
             ),
         ),
+    )
+    audit_event(
+        config,
+        session,
+        "apply_confirmed",
+        proposal_index=index + 1,
+        path=str(path),
+        backup_path=str(backup),
+        original_chars=len(original),
+        updated_chars=len(updated),
+        status="applied",
     )
     print(f"applied proposal {index + 1}: {path}")
     print(f"backup: {backup}")
@@ -1664,6 +1730,17 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
         approval_reason = approvable_command_reason(class_name, parts)
         if approval_reason:
             row = queue_approval(session, command, class_name, approval_display_reason(reason), approval_reason)
+            audit_event(
+                config,
+                session,
+                "approval_queued",
+                approval_id=row.get("id", ""),
+                command=command,
+                class_name=class_name,
+                reason=row.get("reason", ""),
+                approval_scope=approval_reason,
+                status="pending",
+            )
             block = approval_required_block(row, cwd)
             add_context(session, f"/cmd {command}", block)
             print(block)
@@ -1681,6 +1758,17 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
             executable="not-run",
         )
         record_command(session, command, class_name, "refused", output, reason, "not-run")
+        audit_event(
+            config,
+            session,
+            "command_refused",
+            command=command,
+            class_name=class_name,
+            exit_code="refused",
+            executable="not-run",
+            reason=reason,
+            **output_digest(output),
+        )
         add_context(session, f"/cmd {command}", block)
         print(block)
         print()
@@ -1705,6 +1793,17 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
         executable=executable,
     )
     record_command(session, command, class_name, exit_code, output, reason, executable)
+    audit_event(
+        config,
+        session,
+        "command_executed",
+        command=command,
+        class_name=class_name,
+        exit_code=exit_code,
+        executable=executable,
+        reason=reason,
+        **output_digest(output),
+    )
     add_context(session, f"/cmd {command}", block)
     print(block)
     print()
@@ -1732,7 +1831,39 @@ def command_approvals(session: dict[str, Any]) -> None:
             print(f"   exit_code: {row.get('exit_code')}")
 
 
-def command_reject(session: dict[str, Any], arg: str) -> None:
+def command_audit(config: Config, arg: str) -> None:
+    raw = (arg or "").strip()
+    limit = 20
+    if raw:
+        try:
+            limit = max(1, min(200, int(raw)))
+        except ValueError:
+            print("usage: /audit [limit]")
+            return
+    rows = read_recent_audit(config, limit)
+    if not rows:
+        print(f"No audit events found at {audit_log_path(config)}")
+        return
+    print(f"audit: {audit_log_path(config)}")
+    for row in rows:
+        pieces = [
+            str(row.get("created_at", "")),
+            str(row.get("event_type", "")),
+        ]
+        if row.get("session_id"):
+            pieces.append(f"session={row.get('session_id')}")
+        if row.get("approval_id"):
+            pieces.append(f"approval={row.get('approval_id')}")
+        if row.get("exit_code") is not None:
+            pieces.append(f"exit={row.get('exit_code')}")
+        if row.get("command"):
+            pieces.append(f"command={row.get('command')}")
+        if row.get("path"):
+            pieces.append(f"path={row.get('path')}")
+        print(" | ".join(pieces))
+
+
+def command_reject(config: Config, session: dict[str, Any], arg: str) -> None:
     index, row = select_approval(session, arg)
     if row is None:
         print("No matching approval request.")
@@ -1742,6 +1873,15 @@ def command_reject(session: dict[str, Any], arg: str) -> None:
         return
     row["status"] = "rejected"
     row["rejected_at"] = utc_now()
+    audit_event(
+        config,
+        session,
+        "approval_rejected",
+        approval_id=row.get("id", ""),
+        command=row.get("command", ""),
+        class_name=row.get("class", ""),
+        status="rejected",
+    )
     print(f"rejected approval {row.get('id')}: {row.get('command')}")
 
 
@@ -1774,6 +1914,7 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
     row["executable"] = executable
     row["output"] = output[:MAX_CMD_OUTPUT_CHARS]
     row["approval_reason"] = approval_reason
+    event_type = "approval_executed" if command_ran else "approval_blocked"
 
     block = command_output_block(
         command=command,
@@ -1794,6 +1935,19 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
         approval_reason,
         executable,
         str(row.get("id", "")),
+    )
+    audit_event(
+        config,
+        session,
+        event_type,
+        approval_id=row.get("id", ""),
+        command=command,
+        class_name=class_name,
+        exit_code=exit_code,
+        executable=executable,
+        approval_scope=approval_reason,
+        status=row.get("status", ""),
+        **output_digest(output),
     )
     add_context(session, f"/approve {row.get('id', '')}", block)
     print(block)
@@ -1853,6 +2007,7 @@ def print_help() -> None:
               /approvals            list queued command approval requests
               /approve <id|latest>  execute a queued approved-scope command
               /reject <id|latest>   reject a queued command approval request
+              /audit [limit]        show recent persistent audit events
               /context              show active injected context blocks
               /clear-context        remove injected context blocks
               /status               check vLLM models and AI History health
@@ -2062,7 +2217,11 @@ def handle_command(
         return "handled", session, None
 
     if command == "reject":
-        command_reject(session, arg)
+        command_reject(config, session, arg)
+        return "handled", session, None
+
+    if command == "audit":
+        command_audit(config, arg)
         return "handled", session, None
 
     if command == "context":

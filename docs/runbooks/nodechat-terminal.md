@@ -10,7 +10,7 @@ It can also generate patch proposals with `/propose-edit`, but those proposals a
 
 Nodechat can apply a stored proposal only through `/apply ... --confirm`. `/apply` validates the proposal first, writes a backup under the Nodechat session directory, and only supports bounded single-file text edits.
 
-Nodechat can also run a small allowlist of read-only shell-style commands through `/cmd`. Every attempt is recorded as a structured `COMMAND_OUTPUT` block with timestamp, working directory, command class, exit code/refusal, and output.
+Nodechat can also run a small allowlist of read-only shell-style commands through `/cmd`. Every attempt is recorded as a structured `COMMAND_OUTPUT` block with timestamp, working directory, command class, exit code/refusal, and output. Significant tool actions are also appended to a persistent JSONL audit log under the Nodechat session root.
 
 All local file/command paths are confined to the configured Nodechat workspace. The Windows launcher sets that workspace to `C:\Users\bmoor\Local_AI`.
 
@@ -244,6 +244,7 @@ Phase 5A implements read-only command output capture plus a narrow approval queu
 /approvals
 /approve a1
 /reject a1
+/audit 20
 ```
 
 Output is injected as:
@@ -275,6 +276,13 @@ Rules:
 - External executables are resolved through `PATH` and recorded in the output block as `executable: ...`.
 - Path arguments outside the Nodechat workspace are refused.
 
+Persistent audit:
+
+- Audit file: `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl` by default.
+- `/audit [limit]` prints recent audit events.
+- Logged events include queued approvals, rejected approvals, approved command execution/blocking, refused commands, read-only command execution, `/apply --check`, and `/apply --confirm`.
+- Audit rows store command/proposal metadata, session id, workspace, status, executable, backup path where relevant, and output digest/size. They intentionally do not duplicate full command output.
+
 ## Safety Tests
 
 The Nodechat safety boundary has focused stdlib unit tests:
@@ -295,6 +303,7 @@ Current coverage:
 - `/apply` refuses ambiguous repeated hunks.
 - `/apply` still works when repeated hunk context has an exact preferred location.
 - `/cmd` read-only subprocess execution records a resolved executable path.
+- Persistent audit records refused commands, queued approvals, executed approvals, blocked approvals, and apply check/confirm events.
 
 ## Tool Roadmap
 
@@ -398,6 +407,7 @@ Partially implemented command:
 /approve <id|latest>
 /approvals
 /reject <id|latest>
+/audit [limit]
 ```
 
 Rules:
@@ -411,6 +421,7 @@ Rules:
 - Never auto-run destructive commands.
 - Keep command output in the session log as structured `COMMAND_OUTPUT`.
 - Record resolved executable provenance for subprocess-backed commands.
+- Append significant tool actions to the persistent JSONL audit log.
 
 ## Safety Boundary
 

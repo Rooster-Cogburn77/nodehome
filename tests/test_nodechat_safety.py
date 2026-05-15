@@ -114,6 +114,26 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertIn("COMMAND_REFUSED", buf.getvalue())
             self.assertEqual(session.get("approvals"), [])
 
+    def test_audit_records_refused_and_queued_commands(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_cmd(config, session, "del tmp.txt")
+                nodechat.command_cmd(config, session, "git fetch")
+
+            rows = nodechat.read_recent_audit(config, 10)
+            event_types = [row["event_type"] for row in rows]
+            self.assertIn("command_refused", event_types)
+            self.assertIn("approval_queued", event_types)
+            refused = next(row for row in rows if row["event_type"] == "command_refused")
+            self.assertEqual(refused["exit_code"], "refused")
+            self.assertIn("output_sha256", refused)
+            queued = next(row for row in rows if row["event_type"] == "approval_queued")
+            self.assertEqual(queued["approval_id"], "a1")
+
     def test_approve_executes_queued_command_once(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -146,6 +166,8 @@ class NodechatSafetyTests(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 nodechat.command_approve(config, session, "a1")
             self.assertIn("already executed", buf.getvalue())
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(row["event_type"] == "approval_executed" for row in rows))
 
     def test_approve_blocks_dirty_git_push_without_execution(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
@@ -174,6 +196,8 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertIn("exit_code: blocked", text)
             self.assertIn("working tree is not clean", text)
             self.assertEqual(session["approvals"][0]["status"], "blocked")
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(row["event_type"] == "approval_blocked" for row in rows))
 
     def test_non_approvable_git_network_variants_do_not_queue(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
@@ -195,6 +219,44 @@ class NodechatSafetyTests(unittest.TestCase):
                         nodechat.command_cmd(config, session, command)
                     self.assertIn("COMMAND_REFUSED", buf.getvalue())
             self.assertEqual(session.get("approvals"), [])
+
+    def test_apply_check_and_confirm_write_audit_events(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            target = workspace / "file.txt"
+            target.write_text("alpha\nbeta\n", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["proposals"] = [
+                {
+                    "created_at": "2026-05-15T00:00:00+00:00",
+                    "path": str(target),
+                    "instruction": "update beta",
+                    "proposal": "\n".join(
+                        [
+                            "--- file.txt",
+                            "+++ file.txt",
+                            "@@ -1,2 +1,2 @@",
+                            " alpha",
+                            "-beta",
+                            "+beta-updated",
+                            "",
+                        ]
+                    ),
+                }
+            ]
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_apply(config, session, "1 --check")
+                nodechat.command_apply(config, session, "1 --confirm")
+
+            self.assertEqual(target.read_text(encoding="utf-8").strip(), "alpha\nbeta-updated")
+            rows = nodechat.read_recent_audit(config, 10)
+            event_types = [row["event_type"] for row in rows]
+            self.assertIn("apply_checked", event_types)
+            self.assertIn("apply_confirmed", event_types)
+            confirmed = next(row for row in rows if row["event_type"] == "apply_confirmed")
+            self.assertTrue(pathlib.Path(confirmed["backup_path"]).exists())
 
     def test_apply_refuses_ambiguous_repeated_hunks(self):
         original = "alpha\nbeta\nalpha\nbeta\n"
