@@ -87,6 +87,7 @@ Inside `nodechat`:
 /propose-edit <path> :: <instruction>
 /diff [all]
 /apply [n|latest] [--check|--confirm]
+/undo-apply [n|latest] [--check]
 /cmd <command>
 /context
 /clear-context
@@ -232,6 +233,9 @@ Rules:
 - `/apply --check` validates the latest proposal without writing.
 - `/apply --confirm` applies the latest proposal after validation and writes a backup under `~/.nodehome/nodechat/backups/`.
 - `/apply <n> --confirm` applies a specific proposal by its session index.
+- `/undo-apply [n|latest]` restores an applied proposal from its apply-time backup.
+- `/undo-apply --check` validates that the file still matches the applied proposal without writing.
+- Undo refuses if the target file changed after apply, preventing clobber of newer work.
 
 ## Command Tools
 
@@ -285,7 +289,7 @@ Persistent audit:
 
 - Audit file: `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl` by default.
 - `/audit [limit]` prints recent audit events.
-- Logged events include queued approvals, rejected approvals, approved command execution/blocking, refused commands, read-only command execution, `/apply --check`, and `/apply --confirm`.
+- Logged events include queued approvals, rejected approvals, approved command execution/blocking, refused commands, read-only command execution, `/apply --check`, `/apply --confirm`, `/undo-apply --check`, and `/undo-apply`.
 - Audit rows store command/proposal metadata, session id, workspace, status, executable, backup path where relevant, and output digest/size. They intentionally do not duplicate full command output.
 
 ## Safety Tests
@@ -342,6 +346,7 @@ Auto-routing covers AI History (prior-decision phrasing) and repo files (concret
 /propose-edit <path> :: <instruction>   single-file unified-diff proposal, stored in session
 /diff [all]                             print latest or all stored proposals
 /apply --check                          validate stored proposal against current file, no write
+/undo-apply --check                     validate undo against current file, no write
 ```
 
 `/propose-edit` strips outer Markdown code fences before storing. `/apply --check` refuses ambiguous repeated hunks rather than fuzzy-applying the first match.
@@ -350,6 +355,7 @@ Auto-routing covers AI History (prior-decision phrasing) and repo files (concret
 
 ```text
 /apply [n|latest] --confirm    write backup, then apply stored proposal
+/undo-apply [n|latest]        restore apply-time backup after safety check
 /cmd git fetch                 queues for /approve
 /cmd git fetch origin          queues
 /cmd git fetch --all           queues
@@ -364,7 +370,7 @@ Auto-routing covers AI History (prior-decision phrasing) and repo files (concret
 
 Backups land under the Nodechat session backup directory outside the repo. Resolved executable provenance is recorded on every subprocess-backed command. Non-allowlisted Git variants (`git push --force`, `git push origin main`, `git fetch origin main`, etc.) do not queue.
 
-Gaps in this lane: `/undo-apply <id|latest>` (backups exist, undo path does not yet), broader command classes beyond the current Git approval set, and live-node operator mutations (`docker restart`, `systemctl restart`) gated by tier.
+Gaps in this lane: broader command classes beyond the current Git approval set, and live-node operator mutations (`docker restart`, `systemctl restart`) gated by tier.
 
 ### Dangerous lane (Hard-blocked today)
 

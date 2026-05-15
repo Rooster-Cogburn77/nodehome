@@ -176,9 +176,9 @@ For private-history support from Windows, open the SSH tunnel first:
 scripts\windows\nodechat-tunnel.cmd
 ```
 
-Today's capabilities: streaming chat against the local vLLM endpoint, saved sessions, AI History lookup (`/history`), read-only local context (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), web context (`/web-search`, `/web-fetch`, `/web-open`), single-file patch proposals + approval-gated apply with backups (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`), read-only command capture (`/cmd`), and a narrow Git approval queue (`/approvals`, `/approve`, `/reject`) for `git fetch` variants, `git pull --ff-only`, and `git push`. Persistent JSONL audit at `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
+Today's capabilities: streaming chat against the local vLLM endpoint, saved sessions, AI History lookup (`/history`), read-only local context (`/read`, `/tree`, `/search-files`, `/git-status`, `/pwd`), web context (`/web-search`, `/web-fetch`, `/web-open`), single-file patch proposals + approval-gated apply/undo with backups (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`, `/undo-apply`), read-only command capture (`/cmd`), and a narrow Git approval queue (`/approvals`, `/approve`, `/reject`) for `git fetch` variants, `git pull --ff-only`, and `git push`. Persistent JSONL audit at `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
 
-Auto-routing across conversation, AI History, repo, live node state, and internet — with disclosed provenance — is the next implementation lane (see scope doc).
+Next implementation lanes are web auto-routing, live-node operator commands, and grouped evidence view (see scope doc).
 
 Open WebUI integration assets:
 

@@ -290,6 +290,10 @@ def output_digest(output: str) -> dict[str, Any]:
     }
 
 
+def text_sha256(text: str) -> str:
+    return hashlib.sha256(str(text or "").encode("utf-8", errors="replace")).hexdigest()
+
+
 def audit_event(config: Config, session: dict[str, Any], event_type: str, **fields: Any) -> None:
     row = {
         "created_at": utc_now(),
@@ -1544,6 +1548,53 @@ def parse_apply_args(arg: str) -> tuple[str, str]:
     return selector, mode
 
 
+def parse_undo_apply_args(arg: str) -> tuple[str, str]:
+    parts = arg.split()
+    selector = "latest"
+    mode = "confirm"
+    for part in parts:
+        lowered = part.lower()
+        if lowered in {"--check", "check"}:
+            mode = "check"
+        elif lowered in {"--confirm", "confirm"}:
+            mode = "confirm"
+        elif not lowered.startswith("--"):
+            selector = part
+    return selector, mode
+
+
+def select_applied_proposal(session: dict[str, Any], selector: str) -> tuple[int, dict[str, Any] | None]:
+    proposals = session.get("proposals", [])
+    if not proposals:
+        return -1, None
+    value = (selector or "latest").strip().lower()
+    if not value or value == "latest":
+        for idx in range(len(proposals) - 1, -1, -1):
+            proposal = proposals[idx]
+            if proposal.get("applied_at") and proposal.get("backup_path") and not proposal.get("undone_at"):
+                return idx, proposal
+        return -1, None
+    try:
+        index = int(value) - 1
+    except ValueError:
+        return -1, None
+    if index < 0 or index >= len(proposals):
+        return -1, None
+    return index, proposals[index]
+
+
+def path_under(base: pathlib.Path, target: pathlib.Path) -> bool:
+    try:
+        return os.path.commonpath(
+            [
+                os.path.normcase(os.path.abspath(str(base.resolve()))),
+                os.path.normcase(os.path.abspath(str(target.resolve()))),
+            ]
+        ) == os.path.normcase(os.path.abspath(str(base.resolve())))
+    except ValueError:
+        return False
+
+
 def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
     selector, mode = parse_apply_args(arg)
     index, proposal = select_proposal(session, selector)
@@ -1607,11 +1658,14 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
 
     backup_dir = ensure_backup_dir(config, session)
     backup = backup_dir / f"{path.name}.{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.bak"
-    backup.write_text(original, encoding="utf-8")
+    with backup.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(original)
     with path.open("w", encoding="utf-8", newline="") as handle:
         handle.write(updated)
     proposal["applied_at"] = utc_now()
     proposal["backup_path"] = str(backup)
+    proposal["backup_sha256"] = text_sha256(original)
+    proposal["applied_sha256"] = text_sha256(updated)
     add_context(
         session,
         f"/apply {index + 1}",
@@ -1642,12 +1696,158 @@ def command_apply(config: Config, session: dict[str, Any], arg: str) -> None:
         proposal_index=index + 1,
         path=str(path),
         backup_path=str(backup),
+        backup_sha256=proposal["backup_sha256"],
+        applied_sha256=proposal["applied_sha256"],
         original_chars=len(original),
         updated_chars=len(updated),
         status="applied",
     )
     print(f"applied proposal {index + 1}: {path}")
     print(f"backup: {backup}")
+
+
+def command_undo_apply(config: Config, session: dict[str, Any], arg: str) -> None:
+    selector, mode = parse_undo_apply_args(arg)
+    index, proposal = select_applied_proposal(session, selector)
+    if proposal is None:
+        print("No applied proposal available to undo.")
+        return
+    if not proposal.get("applied_at") or not proposal.get("backup_path"):
+        print(f"undo refused: proposal {index + 1} has not been applied")
+        return
+    if proposal.get("undone_at"):
+        print(f"undo refused: proposal {index + 1} was already undone at {proposal.get('undone_at')}")
+        return
+
+    path = pathlib.Path(str(proposal.get("path") or "")).resolve()
+    reason = path_safety_reason(config, session, path)
+    if reason:
+        print(f"undo refused: {reason}")
+        return
+    if not path.exists() or not path.is_file():
+        print(f"undo refused: target file is missing or not a file: {path}")
+        return
+    if not is_text_candidate(path):
+        print(f"undo refused: extension is not in text allow-list: {path.suffix or '[none]'}")
+        return
+
+    backup = pathlib.Path(str(proposal.get("backup_path") or "")).resolve()
+    backup_root = (config.session_root / "backups").resolve()
+    if not path_under(backup_root, backup):
+        print(f"undo refused: backup path is outside nodechat backups: {backup}")
+        return
+    if not backup.exists() or not backup.is_file():
+        print(f"undo refused: backup file is missing: {backup}")
+        return
+
+    patch = strip_markdown_fences(str(proposal.get("proposal") or ""))
+    declared = diff_declared_new_path(patch)
+    if not declared_path_matches(config, session, path, declared):
+        print(f"undo refused: proposal targets {declared!r}, expected {display_path(config, session, path)!r}")
+        return
+
+    try:
+        current, current_truncated = read_text_path(path)
+        original, original_truncated = read_text_path(backup)
+    except Exception as exc:
+        print(f"undo failed: {exc}")
+        return
+    if current_truncated:
+        print(f"undo refused: current file exceeds read cap: {path}")
+        return
+    if original_truncated:
+        print(f"undo refused: backup file exceeds read cap: {backup}")
+        return
+    original = original.replace("\r\r\n", "\r\n")
+
+    applied_sha256 = str(proposal.get("applied_sha256") or "")
+    if applied_sha256:
+        current_matches = text_sha256(current) == applied_sha256
+    else:
+        try:
+            expected_current = apply_unified_diff_text(original, patch)
+        except Exception as exc:
+            print(f"undo check failed: could not reconstruct applied content: {exc}")
+            return
+        current_matches = current == expected_current
+
+    if not current_matches:
+        audit_event(
+            config,
+            session,
+            "undo_apply_refused",
+            proposal_index=index + 1,
+            path=str(path),
+            backup_path=str(backup),
+            expected_sha256=applied_sha256,
+            current_sha256=text_sha256(current),
+            status="current_mismatch",
+        )
+        print("undo refused: target file no longer matches the applied proposal")
+        print("No files changed. Inspect the file or restore the backup manually if needed.")
+        return
+
+    if mode == "check":
+        audit_event(
+            config,
+            session,
+            "undo_apply_checked",
+            proposal_index=index + 1,
+            path=str(path),
+            backup_path=str(backup),
+            status="ok",
+        )
+        print(f"undo check OK: proposal {index + 1} can be restored from {backup}")
+        return
+
+    backup_dir = ensure_backup_dir(config, session)
+    undo_backup = backup_dir / f"{path.name}.{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.undo-current.bak"
+    with undo_backup.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(current)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(original)
+
+    proposal["undone_at"] = utc_now()
+    proposal["undo_backup_path"] = str(undo_backup)
+    add_context(
+        session,
+        f"/undo-apply {index + 1}",
+        context_block(
+            "undone_edit",
+            str(path),
+            "\n".join(
+                [
+                    f"path: {path}",
+                    f"restored_from: {backup}",
+                    f"undo_backup: {undo_backup}",
+                    f"proposal_index: {index + 1}",
+                    "status: undone",
+                ]
+            ),
+        ),
+        source="manual-undo-apply",
+        provenance={
+            "command": "/undo-apply",
+            "path": str(path),
+            "restored_from": str(backup),
+            "undo_backup_path": str(undo_backup),
+            "proposal_index": index + 1,
+        },
+    )
+    audit_event(
+        config,
+        session,
+        "undo_apply_confirmed",
+        proposal_index=index + 1,
+        path=str(path),
+        backup_path=str(backup),
+        undo_backup_path=str(undo_backup),
+        restored_chars=len(original),
+        status="undone",
+    )
+    print(f"undid proposal {index + 1}: {path}")
+    print(f"restored from: {backup}")
+    print(f"undo safety backup: {undo_backup}")
 
 
 def split_command_line(command: str) -> list[str]:
@@ -2429,6 +2629,8 @@ def print_help() -> None:
               /diff [all]           show latest or all stored patch proposals
               /apply [n|latest] [--check|--confirm]
                                     validate or apply a stored proposal with backup
+              /undo-apply [n|latest] [--check]
+                                    restore an applied proposal from its backup
               /cmd <command>        run allowlisted read-only command and inject output
               /approvals            list queued command approval requests
               /approve <id|latest>  execute a queued approved-scope command
@@ -2452,6 +2654,7 @@ def print_help() -> None:
               Web tools run only when invoked; search results are leads, not proof.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
+              /undo-apply restores only if the file still matches the applied proposal.
               /cmd runs read-only commands immediately; selected git network commands queue for /approve.
               Destructive, privileged, package-manager, and unknown commands are refused.
             """
@@ -2641,6 +2844,10 @@ def handle_command(
 
     if command == "apply":
         command_apply(config, session, arg)
+        return "handled", session, None
+
+    if command in {"undo-apply", "undoapply"}:
+        command_undo_apply(config, session, arg)
         return "handled", session, None
 
     if command == "cmd":

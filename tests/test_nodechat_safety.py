@@ -273,6 +273,131 @@ class NodechatSafetyTests(unittest.TestCase):
             confirmed = next(row for row in rows if row["event_type"] == "apply_confirmed")
             self.assertTrue(pathlib.Path(confirmed["backup_path"]).exists())
 
+    def test_undo_apply_check_does_not_write(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            target = workspace / "file.txt"
+            target.write_text("alpha\nbeta\n", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["proposals"] = [
+                {
+                    "created_at": "2026-05-15T00:00:00+00:00",
+                    "path": str(target),
+                    "instruction": "update beta",
+                    "proposal": "\n".join(
+                        [
+                            "--- file.txt",
+                            "+++ file.txt",
+                            "@@ -1,2 +1,2 @@",
+                            " alpha",
+                            "-beta",
+                            "+beta-updated",
+                            "",
+                        ]
+                    ),
+                }
+            ]
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_apply(config, session, "1 --confirm")
+                nodechat.command_undo_apply(config, session, "latest --check")
+            self.assertEqual(target.read_text(encoding="utf-8"), "alpha\nbeta-updated")
+            self.assertFalse(session["proposals"][0].get("undone_at"))
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(row["event_type"] == "undo_apply_checked" for row in rows))
+
+    def test_undo_apply_restores_backup_and_records_audit(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            target = workspace / "file.txt"
+            target.write_text("alpha\nbeta\n", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["proposals"] = [
+                {
+                    "created_at": "2026-05-15T00:00:00+00:00",
+                    "path": str(target),
+                    "instruction": "update beta",
+                    "proposal": "\n".join(
+                        [
+                            "--- file.txt",
+                            "+++ file.txt",
+                            "@@ -1,2 +1,2 @@",
+                            " alpha",
+                            "-beta",
+                            "+beta-updated",
+                            "",
+                        ]
+                    ),
+                }
+            ]
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_apply(config, session, "1 --confirm")
+                nodechat.command_undo_apply(config, session, "latest")
+            self.assertEqual(target.read_text(encoding="utf-8"), "alpha\nbeta\n")
+            proposal = session["proposals"][0]
+            self.assertTrue(proposal.get("undone_at"))
+            self.assertTrue(pathlib.Path(proposal["undo_backup_path"]).exists())
+            rows = nodechat.read_recent_audit(config, 20)
+            self.assertTrue(any(row["event_type"] == "undo_apply_confirmed" for row in rows))
+
+    def test_undo_apply_refuses_after_post_apply_file_change(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            target = workspace / "file.txt"
+            target.write_text("alpha\nbeta\n", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["proposals"] = [
+                {
+                    "created_at": "2026-05-15T00:00:00+00:00",
+                    "path": str(target),
+                    "instruction": "update beta",
+                    "proposal": "\n".join(
+                        [
+                            "--- file.txt",
+                            "+++ file.txt",
+                            "@@ -1,2 +1,2 @@",
+                            " alpha",
+                            "-beta",
+                            "+beta-updated",
+                            "",
+                        ]
+                    ),
+                }
+            ]
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_apply(config, session, "1 --confirm")
+            target.write_text("alpha\nchanged-again\n", encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_undo_apply(config, session, "latest")
+            self.assertIn("no longer matches", buf.getvalue())
+            self.assertEqual(target.read_text(encoding="utf-8"), "alpha\nchanged-again\n")
+            self.assertFalse(session["proposals"][0].get("undone_at"))
+            rows = nodechat.read_recent_audit(config, 20)
+            self.assertTrue(any(row["event_type"] == "undo_apply_refused" for row in rows))
+
+    def test_undo_apply_refuses_unapplied_numeric_proposal_directly(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            target = workspace / "file.txt"
+            target.write_text("alpha\nbeta\n", encoding="utf-8")
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["proposals"] = [
+                {
+                    "created_at": "2026-05-15T00:00:00+00:00",
+                    "path": str(target),
+                    "instruction": "update beta",
+                    "proposal": "--- file.txt\n+++ file.txt\n",
+                }
+            ]
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_undo_apply(config, session, "1")
+            self.assertIn("has not been applied", buf.getvalue())
+
     def test_apply_refuses_ambiguous_repeated_hunks(self):
         original = "alpha\nbeta\nalpha\nbeta\n"
         patch = "\n".join(

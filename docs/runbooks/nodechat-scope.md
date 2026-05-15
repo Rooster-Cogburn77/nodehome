@@ -69,7 +69,7 @@ Nodechat today is an early, partial implementation of the intended scope. What i
 - AI History KB lookup over an SSH tunnel, validated end-to-end (`/history`).
 - Read-only local context tools (`/pwd`, `/tree`, `/read`, `/search-files`, `/git-status`).
 - Web context tools (`/web-search`, `/web-fetch`, `/web-open`).
-- Patch proposal + validate + backup + apply (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`).
+- Patch proposal + validate + backup + apply + undo (`/propose-edit`, `/diff`, `/apply --check`, `/apply --confirm`, `/undo-apply [n|latest] [--check]`).
 - Read-only command capture and a narrow Git approval queue (`/cmd`, `/approvals`, `/approve`, `/reject`) covering `git fetch`, `git fetch origin`, `git fetch --all`, `git fetch --prune`, `git fetch --prune origin`, `git pull --ff-only`, and `git push`. Clean-tree preflight on `git pull --ff-only` and `git push`.
 - **Auto-routing for AI History and repo files**, conservative day-one heuristics (Observe tier). History routes on prior-decision phrasing (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident/run`, etc.); repo routes on concrete artifacts only (named files like `CURRENT_STATE`/`SESSION_LOG`/`CLAUDE.md`/`SCRATCH.md`/`ATTITUDE.md`, known runbook stems, and path-like tokens such as `docs/...`/`scripts/...`/`sweeps/...`/`tests/...`). Vague topic phrases and bare filenames do not auto-route; users invoke `/read` for those. Repo auto-routing reads at most two files per turn, applies the same workspace confinement and secret-path refusals as `/read`, and never blocks the chat turn on routing failure.
 - **Disclosure line printed before every assistant reply** that auto-routed anything, e.g. `[auto-routed: history(2403 chars, "what did we decide about gpu2") | repo(read docs/CURRENT_STATE.md)]`. Skips and errors are disclosed inline (`history(error: …)`).
@@ -78,12 +78,11 @@ Nodechat today is an early, partial implementation of the intended scope. What i
 - **Audit covers routing too.** `auto_route_history` and `auto_route_repo` events log status (`ok|error`), query/path, chars, and reason on skip.
 - Workspace confinement, secret-path refusal, ambiguous-hunk refusal, resolved executable provenance.
 - Persistent JSONL audit log under `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
-- Safety test suite in `tests/test_nodechat_safety.py` (27 tests passing).
+- Safety test suite in `tests/test_nodechat_safety.py` (31 tests passing).
 - Windows launchers `scripts/windows/nodechat.cmd` and `scripts/windows/nodechat-tunnel.cmd`.
 
 What is **not** in place yet (gap between current state and intended scope):
 
-- `/undo-apply` for previously applied patches (backups exist, undo path does not).
 - Web auto-routing for prompts that clearly call for fresh public data; `/web-mode` will land with it.
 - Live-node operator commands (vLLM/Ollama/Open WebUI/Docker/GPU/storage/UPS health) gated by tier; `/live-mode` will land with it.
 - Better evidence view: today `/evidence` is a flat list; future versions should group by source and show grouped totals.
@@ -96,11 +95,10 @@ These are the next implementation lanes, not future-maybes.
 
 In rough order. Each lane should land with audit + tier-correct approval; capability without provenance is a regression.
 
-1. **Undo.** `/undo-apply <id|latest>` using the existing apply-time backup metadata; new audit event on undo.
-2. **Web auto-routing.** Prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing) auto-route through the existing web tools with disclosure. Add `/web-mode auto|manual|off`.
-3. **Live node operator.** Known-safe health checks for the Nodehome stack (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Add `/live-mode auto|manual|off`. Mutating service actions stay in the Mutate tier behind `/approve`.
-4. **Better evidence view.** Group injected context by source; show grouped totals and per-source links; surface evidence as the default visibility surface.
-5. **Auto-routing recall pass.** Once the four lanes above land, widen the day-one heuristics with confusion-matrix evidence rather than guesses.
+1. **Web auto-routing.** Prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing) auto-route through the existing web tools with disclosure. Add `/web-mode auto|manual|off`.
+2. **Live node operator.** Known-safe health checks for the Nodehome stack (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Add `/live-mode auto|manual|off`. Mutating service actions stay in the Mutate tier behind `/approve`.
+3. **Better evidence view.** Group injected context by source; show grouped totals and per-source links; surface evidence as the default visibility surface.
+4. **Auto-routing recall pass.** Once the four lanes above land, widen the day-one heuristics with confusion-matrix evidence rather than guesses.
 
 ## What Nodechat Is Not
 
