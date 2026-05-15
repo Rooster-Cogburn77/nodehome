@@ -82,12 +82,14 @@ Nodechat today is an early, partial implementation of the intended scope. What i
 - Workspace confinement, secret-path refusal, ambiguous-hunk refusal, resolved executable provenance.
 - Persistent JSONL audit log under `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`; `/audit [limit]` view.
 - Safety test suite in `tests/test_nodechat_safety.py` (45 tests passing).
-- **Auto-routing recall pass — Phase A (measurement infrastructure) shipped.** Labeled corpus of 100 realistic prompts in `tests/routing_corpus.py` covering history positives (incl. Phase B aspirational), repo positives (named files / runbook stems / path tokens / multi-file), web positives (URL fetch + fresh-public search), live positives (one per check), neutral/general prompts, and adversarial guardrails. Harness emits per-router precision/recall + FP/FN lists and runs as both a CLI (`py -3 tests/routing_corpus.py`) and a regression test class. Phase A baseline (2026-05-15): repo precision/recall = 1.00; history 0.81 / 0.81; web 0.82 / 0.93; live 0.78 / 0.68. Floors pinned at baseline so the suite is a regression ratchet; six guardrails recorded as `PHASE_B_GUARDRAIL_TARGETS` with an inverse ratchet that prompts removal when fixed.
+- **Auto-routing recall pass — Phase A (measurement infrastructure) shipped.** Labeled corpus of 100 realistic prompts in `tests/routing_corpus.py` covering history positives (incl. Phase B widening targets), repo positives (named files / runbook stems / path tokens / multi-file), web positives (URL fetch + fresh-public search), live positives (one per check), neutral/general prompts, and adversarial guardrails. Harness emits per-router precision/recall + FP/FN lists and runs as both a CLI (`py -3 tests/routing_corpus.py`) and a regression test class.
+- **Auto-routing recall pass — Phase B history landed.** History patterns split into TIGHT (already project-bound by phrasing) and BROAD ("remind me", "previously", "history of", "have we ever", "has X ever", "what was our reasoning") with the BROAD set requiring co-occurrence with `HISTORY_PROJECT_CONTEXT_RE` (we / our / nodehome / gpu / vllm / cable / rack / etc.). Three new broad patterns added for the FN cases. History router went from precision 0.81 / recall 0.81 to **1.00 / 1.00**; three history guardrails (general-knowledge "history of the mongol empire" / "previously the romans..." / personal-reminder "remind me to call mom") now refuse correctly and were removed from `PHASE_B_GUARDRAIL_TARGETS`.
+- Phase A + Phase B (history) baseline: repo 1.00/1.00; history 1.00/1.00; web 0.82 / 0.93; live 0.78 / 0.68. Three guardrails remain in `PHASE_B_GUARDRAIL_TARGETS` (web + live, scheduled for the next two Phase B commits).
 - Windows launchers `scripts/windows/nodechat.cmd` and `scripts/windows/nodechat-tunnel.cmd`.
 
 What is **not** in place yet (gap between current state and intended scope):
 
-- Auto-routing recall pass — Phase B (heuristic widening based on Phase A's FP/FN rows). Phase B targets: precision ≥ 0.95 and recall ≥ 0.95 on every router; zero guardrail failures.
+- Auto-routing recall pass — Phase B web + live (heuristic widening based on Phase A's FP/FN rows). Phase B targets: precision ≥ 0.95 and recall ≥ 0.95 on every router; zero guardrail failures.
 - Model routing across local + remote.
 - Broader command classes beyond the current Git approval set.
 
@@ -97,7 +99,7 @@ These are the next implementation lanes, not future-maybes.
 
 In rough order. Each lane should land with audit + tier-correct approval; capability without provenance is a regression.
 
-1. **Auto-routing recall pass — Phase B (heuristic widening, router-by-router).** Read `tests/routing_corpus.py` FP/FN lists and the six entries in `PHASE_B_GUARDRAIL_TARGETS`, then propose targeted pattern additions/tightening per router. Re-measure after each router; ratchet floors upward toward the 0.95 / 0.95 target. Add new corpus prompts when widening exposes a category we don't yet test.
+1. **Auto-routing recall pass — Phase B web + live (heuristic widening).** History done (1.00 / 1.00). Web next: tighten `WEB_LOCAL_ONLY_RE` so prompts like "is open webui currently running in a container" / "current nvidia gpu power draw across all three cards" / "the latest model we trained" don't trip the search heuristic. Live after that: add "box" to `LIVE_OBJECT_RE`, narrow the over-broad health fallback that fires alongside specific checks, and prevent live from firing when web-explicit signals like "online" are present. Re-measure per router; ratchet floors upward toward 0.95 / 0.95.
 2. **Broader operator approvals.** Extend the approval queue from selected Git operations into individually justified live-node mutations (`docker restart`, `systemctl restart`, config changes) only after the evidence and rollback surfaces are strong enough.
 3. **Model routing.** Add explicit local/remote model selection only after the current single-model terminal loop remains stable.
 

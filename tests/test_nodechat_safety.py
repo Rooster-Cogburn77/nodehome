@@ -955,13 +955,13 @@ class RoutingCorpusTests(unittest.TestCase):
     # against the corpus in tests/routing_corpus.py). Rounded down to 0.01 so
     # tiny float noise doesn't cause flaky failures. Phase B will raise these.
     PRECISION_FLOORS = {
-        "history": 0.81,
+        "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
         "web":     0.82,
         "live":    0.78,
     }
     RECALL_FLOORS = {
-        "history": 0.81,
+        "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
         "web":     0.93,
         "live":    0.68,
@@ -977,9 +977,10 @@ class RoutingCorpusTests(unittest.TestCase):
         ("g006", "live"),    # local-status: extra 'health' added beside vllm
         ("g007", "live"),    # 'box' is not in LIVE_OBJECT_RE; no docker fallback
         ("g008", "web"),     # "the latest model we trained" routes web on 'model'+'latest'
-        ("g009", "history"), # "history of the mongol empire" hits history pattern
-        ("g010", "history"), # "remind me to call mom tomorrow" hits 'remind me'
-        ("g011", "history"), # "previously the romans..." hits 'previously'
+        # Phase B (history) landed -- removed:
+        #   g009 history "history of the mongol empire"
+        #   g010 history "remind me to call mom tomorrow"
+        #   g011 history "previously the romans..."
     }
 
     @classmethod

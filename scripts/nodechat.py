@@ -126,20 +126,61 @@ WEB_AUTO_URL_LIMIT = 2
 WEB_AUTO_TIMEOUT = 12
 LIVE_AUTO_LIMIT = 3
 
-HISTORY_AUTO_PATTERNS = (
+# History routing patterns are split into two groups:
+#   TIGHT patterns are already project-bound by their phrasing ("we", "session",
+#     "prior decision", etc.) and route on a match alone.
+#   BROAD patterns ("remind me", "previously", "history of", "have we ever",
+#     "has X ever", "what was our reasoning") match enough natural English to
+#     trip on personal reminders or general-knowledge questions; they route
+#     only when the prompt also contains a project-context token.
+# HISTORY_AUTO_PATTERNS keeps the union for any caller that imports it.
+HISTORY_TIGHT_PATTERNS = (
     re.compile(r"\bwhat did we\b", re.I),
-    re.compile(r"\bremind me\b", re.I),
     re.compile(r"\bwhen did we\b", re.I),
     re.compile(r"\bhow did we\b", re.I),
     re.compile(r"\bwhy did we\b", re.I),
     re.compile(r"\bwhere did we\b", re.I),
     re.compile(r"\bdid we (?:ever|already|decide)\b", re.I),
     re.compile(r"\bwho decided\b", re.I),
-    re.compile(r"\bpreviously\b", re.I),
     re.compile(r"\bprior (?:decision|run|incident|session)\b", re.I),
     re.compile(r"\bearlier (?:session|today|this week|decision)\b", re.I),
     re.compile(r"\blast (?:session|time|week|month) we\b", re.I),
+)
+HISTORY_BROAD_PATTERNS = (
+    re.compile(r"\bremind me\b", re.I),
+    re.compile(r"\bpreviously\b", re.I),
     re.compile(r"\bhistory of\b", re.I),
+    re.compile(r"\bhave we (?:ever|already|done|tried|tested|run|configured|fixed|bought|ordered|installed|capped|set|written|added|moved)\b", re.I),
+    re.compile(r"\bhas (?:our|the|this|that|a|an) [\w][\w\s]{0,40}? ever\b", re.I),
+    re.compile(r"\bwhat was (?:our|the) (?:reasoning|reason|plan|approach|thinking|decision|conclusion|rationale|call)\b", re.I),
+)
+HISTORY_AUTO_PATTERNS = HISTORY_TIGHT_PATTERNS + HISTORY_BROAD_PATTERNS
+
+HISTORY_PROJECT_CONTEXT_RE = re.compile(
+    r"""\b(
+        # first-person plural (project-team voice)
+        we|our|us|ours
+        # node + topology
+        |node|nodehome|homelab|sovereign|stack|build|builds|cluster|rack|chassis
+        # GPUs / silicon
+        |gpu|gpu\d|nvidia|cuda|3090|3090s|epyc|h12ssl|supermicro|tdp|tp=\d
+        # memory / storage / power
+        |ram|rdimm|lrdimm|samsung|hpe|ddr4|ecc|psu|leadex|sf-1600f14ht
+        |cable|cables|pigtail|nvme|ssd|hdd|drive|drives|easystore|paymore
+        |ups|smt2200|apc
+        # OOB management
+        |bmc|ipmi
+        # software stack
+        |ollama|vllm|qwen|mistral|gemma|llama|docker|webui|open[\s-]?webui
+        |claude|codex|nodechat|sweep|sweeps|operator|brief|healthcheck
+        # specific sellers / parts we've named
+        |scw|kuaka02|lizzieb753|sv2deals|yellowchoo|silverstone|noctua|tedgetal
+        # power / thermal / benchmarks
+        |cap|capped|thermal|thermals|fan|temp|temps|benchmark|benchmarked
+        # decision-state words
+        |decide|decision|incident|outage|escalation|dispute
+    )\b""",
+    re.I | re.VERBOSE,
 )
 
 REPO_NAMED_FILE_PATTERNS = (
@@ -699,12 +740,25 @@ def add_context(
 
 
 def detect_history_query(prompt: str) -> str | None:
-    """Return the prompt to use as a history query if any auto pattern matches."""
+    """Return the prompt to use as a history query if any auto pattern matches.
+
+    Tight patterns route on a match alone (their phrasing already binds them
+    to the project, e.g. "what did we ..."). Broad patterns ("remind me",
+    "previously", "history of", "have we ever ...", "has X ever ...",
+    "what was our reasoning ...") additionally require the prompt to contain
+    a HISTORY_PROJECT_CONTEXT_RE token; that filters out personal reminders
+    and general-knowledge questions that share the same lead phrase.
+    """
     if not prompt or not prompt.strip():
         return None
-    for pattern in HISTORY_AUTO_PATTERNS:
-        if pattern.search(prompt):
-            return prompt.strip()
+    text = prompt
+    for pattern in HISTORY_TIGHT_PATTERNS:
+        if pattern.search(text):
+            return text.strip()
+    if HISTORY_PROJECT_CONTEXT_RE.search(text):
+        for pattern in HISTORY_BROAD_PATTERNS:
+            if pattern.search(text):
+                return text.strip()
     return None
 
 
