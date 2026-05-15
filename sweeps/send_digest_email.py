@@ -402,22 +402,55 @@ def parse_recipients(value: str) -> list[str]:
     return recipients
 
 
-def send_email(
-    api_key: str,
+def resolve_visible_to_email(from_email: str, explicit_visible_to: str) -> str:
+    visible_to_email = explicit_visible_to.strip()
+    if visible_to_email:
+        return visible_to_email
+    if from_email.lower().endswith("@gmail.com"):
+        raise RuntimeError(
+            "DIGEST_VISIBLE_TO_EMAIL is required when DIGEST_FROM_EMAIL is a personal Gmail address"
+        )
+    return from_email
+
+
+def build_email_payload(
     from_email: str,
     from_name: str,
+    visible_to_email: str,
     recipients: list[str],
     subject: str,
     text_body: str,
     html_body: str,
 ) -> dict:
-    payload = {
+    return {
         "from": f"{from_name} <{from_email}>",
-        "to": recipients,
+        "to": [visible_to_email],
+        "bcc": recipients,
         "subject": subject,
         "text": text_body,
         "html": html_body,
     }
+
+
+def send_email(
+    api_key: str,
+    from_email: str,
+    from_name: str,
+    visible_to_email: str,
+    recipients: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+) -> dict:
+    payload = build_email_payload(
+        from_email,
+        from_name,
+        visible_to_email,
+        recipients,
+        subject,
+        text_body,
+        html_body,
+    )
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         RESEND_API_URL,
@@ -466,14 +499,37 @@ def main() -> int:
     recipients = parse_recipients(getenv_required("DIGEST_TO_EMAILS"))
     from_email = getenv_required("DIGEST_FROM_EMAIL")
     from_name = getenv_required("DIGEST_FROM_NAME")
+    visible_to_email = resolve_visible_to_email(
+        from_email,
+        os.getenv("DIGEST_VISIBLE_TO_EMAIL", ""),
+    )
     api_key = getenv_required("RESEND_API_KEY")
     subject = args.subject or f"Daily Sweep - {path.stem}"
 
     if args.dry_run:
-        print(json.dumps({"subject": subject, "to": recipients, "input": str(path)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "subject": subject,
+                    "to": [visible_to_email],
+                    "bcc": recipients,
+                    "input": str(path),
+                },
+                indent=2,
+            )
+        )
         return 0
 
-    response = send_email(api_key, from_email, from_name, recipients, subject, text_body, html_body)
+    response = send_email(
+        api_key,
+        from_email,
+        from_name,
+        visible_to_email,
+        recipients,
+        subject,
+        text_body,
+        html_body,
+    )
     print(json.dumps(response, indent=2))
     return 0
 

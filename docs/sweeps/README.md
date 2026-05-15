@@ -38,6 +38,10 @@ Already-set shell or Task Scheduler environment variables win over both files, a
 Copy `sweeps/email_env.example` to `.env` or `sweeps/.env` and fill in real values locally.
 Do not commit real `.env` files.
 
+Digest emails send `DIGEST_TO_EMAILS` as BCC recipients. Set
+`DIGEST_VISIBLE_TO_EMAIL` to the single visible list/sender address; if omitted,
+it falls back to `DIGEST_FROM_EMAIL`.
+
 ## Example
 
 ```powershell
