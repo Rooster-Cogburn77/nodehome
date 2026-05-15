@@ -27,9 +27,11 @@ Focus: Storage procurement recovery after Walmart canceled Drive #1; replacement
 
 ## Future hardware spend roadmap
 - Captured in `docs/runbooks/hardware-upgrade-roadmap.md` — prioritized future hardware spends with concrete triggers.
-- Top of the queue (Tier 1, when next budget available): UPS upgrade (used SMT2200, ~$200-350) + GPU 3 cable backup (~$50-100). ~$250-450 spend covers both.
-- Tier 2 (defensive against market trajectory): more RAM (4× 32GB DDR4-2400 ECC RDIMM, ~$320-600). Speculative without workload trigger but DDR4 EOL is climbing.
-- Tier 3 (IPMI hardening enabler): managed switch + optional firewall (~$35-300). Only when ready to execute IPMI Phase 2/3.
+- Current priority decision (2026-05-15): GPU 3 proper cable remains the safety unlock; BMC/IPMI Phase 1 (password rotation + cert hygiene) is the next free security task; RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at sane price; network segmentation should be phased after router/switch capability is known.
+- UPS posture revised: current local UPS is acceptable for blips and graceful shutdown at idle/light load. It is not sized for peak multi-GPU ride-through, and the stack should not plan to run sustained inference through an outage on the BX1500M.
+- RAM posture revised: more RAM (4x 32GB DDR4-2400 ECC RDIMM, target Samsung M393A4K40CB1-CRC4Q) is not an emergency capacity gap today, but DDR4 ECC RDIMM has the highest run-away-price risk in the remaining upgrade list.
+- Network segmentation posture: important before dedicated IPMI LAN patch or broader service exposure, but execute as phases: Phase 1 credentials/cert first, then managed switch/firewall only after router capability is known.
+- UPS upgrade remains a real reliability upgrade (used SMT2200, ~$200-350), but it no longer outranks a sane matching RAM opportunity.
 - Tier 4 (deferred until specific trigger fires): storage expansion, NVMe expansion via Hyper M.2 card, 10GbE networking, PiKVM v4, internal CA.
 
 ## Open follow-ons

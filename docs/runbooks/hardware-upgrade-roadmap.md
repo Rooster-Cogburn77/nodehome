@@ -1,9 +1,19 @@
 # Hardware Upgrade Roadmap
 
 **Status:** Living document. Captures prioritized future hardware spends with concrete triggers, not a fixed plan.
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-05-15
 
 The build is operationally complete as of Session 19. This roadmap covers what to spend on next, when triggers fire, and what to defer. Ordered by value-per-dollar in the current build state, not by absolute cost.
+
+## Current Decision - 2026-05-15
+
+Priority order changed after reviewing RAM price trajectory, local UPS reality, and network segmentation risk:
+
+1. **GPU 3 proper cable remains the mandatory safety unlock.** No sustained 3-GPU/TP=3 load until the pigtail rule is retired.
+2. **BMC/IPMI Phase 1 is the highest-priority security task because it is free.** Rotate the factory ADMIN password and clean up cert hygiene before the dedicated IPMI port is ever patched into LAN.
+3. **RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at a sane price.** DDR4 ECC RDIMM has higher run-away-price risk than UPS or basic network gear.
+4. **Network segmentation is important, but it should be phased.** First identify router/switch capability and rotate BMC credentials; only then buy managed switch/firewall gear for a management VLAN.
+5. **The current local UPS is acceptable for now as a graceful-shutdown/light-load buffer, not as peak-load ride-through.** Do not plan to run sustained multi-GPU inference through an outage on the BX1500M.
 
 ---
 
@@ -12,6 +22,8 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 ### UPS upgrade (replace the BX1500M)
 
 **Current state:** APC Back-UPS Pro 1500VA (BX1500M), rated 900W output. System peaks at ~1255W under heavy 3-GPU inference. Inadequate for through-outage operation at load; only safe for graceful-shutdown buffer at idle/light load.
+
+**Current decision:** Keep the local UPS for now as protection against blips and as a graceful-shutdown/light-load buffer. Do not size current operations around riding through an outage at peak inference load. If utility power drops while the node is above the UPS output rating, the UPS does not make the GPUs "load drop" automatically; it will likely alarm/overload and may cut output unless the host or operator stops workloads fast enough.
 
 **Trigger:** Any of:
 - Production MealMastery workload demands ride-through capability for power events
@@ -42,21 +54,22 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 
 ## Tier 2 — Defensive against market trajectory ($300-500)
 
-### Additional RAM (4× 32GB DDR4-2400 ECC RDIMM)
+### Additional RAM (4x 32GB DDR4-2400 ECC RDIMM)
 
 **Current state:** 128 GB in 4 of 8 DIMM slots. EPYC 7302P / H12SSL-i supports 256 GB with all 8 slots populated. 8-channel population doubles peak DRAM bandwidth.
 
 **Trigger:** Any of:
+- Clean matching Samsung M393A4K40CB1-CRC4Q set appears at a sane price
+- DDR4 ECC RDIMM market climbs further
 - Fine-tuning workload lands (DeepSpeed ZeRO offload is memory-hungry)
 - Dense stacked-services workload pushes RAM utilization >70% (currently ~10-15%)
-- Large CPU-offload model experimentation (200B+ class)
-- DDR4 ECC RDIMM market climbs further (the inflation-defensive case strengthens)
+- Large CPU-offload / KV-cache-offload model experimentation becomes a real goal
 
-**Recommendation:** 4× Samsung M393A4K40CB1-CRC4Q (DDR4-2400 32GB 2Rx4 ECC RDIMM) to match the existing kit. ~$80-150/stick on eBay used server-pull. Total $320-600.
+**Recommendation:** 4x Samsung M393A4K40CB1-CRC4Q (DDR4-2400 32GB 2Rx4 ECC RDIMM) to match the existing kit. Prefer exact match; verify against H12SSL-i memory support and seller photos/part numbers before purchase.
 
-**Why this tier:** Speculative without a current workload pulling for it, BUT DDR4 ECC RDIMM is EOL category climbing. The defensive case is real, just not urgent.
+**Why this tier:** Not an emergency capacity gap today, but DDR4 ECC RDIMM is the highest run-away-price risk in the remaining upgrade list. 256 GB also improves future CPU offload, long-context, multi-agent, and service-stacking headroom.
 
-**Cost:** $320-600 depending on sourcing and timing.
+**Cost:** ~$320-600 depending on sourcing and timing. Fast-move range: ~$300-450 for a clean matching 4x32GB set.
 
 ---
 
@@ -66,7 +79,13 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 
 **Current state:** BMC reachable only via in-band USB-NIC at `169.254.3.1/24`. Dedicated IPMI ethernet port is unpatched. `docs/runbooks/ipmi-hardening.md` captures the proactive scope; Phase 1 (password rotation + cert) needs no hardware, Phases 2-3 (management VLAN + static IP + cable patch) need this gear.
 
-**Trigger:** Decision to execute IPMI hardening Phase 2/3 — currently deferred.
+**Current decision:** Network segmentation matters, but do not turn it into a vague all-at-once project. Execute Phase 1 first with no new hardware: rotate BMC ADMIN password, store it outside git, and clean up cert hygiene. Hardware spend comes after router/switch capability is known.
+
+**Trigger:** Any of:
+- Decision to execute IPMI hardening Phase 2/3
+- Dedicated IPMI port is about to be patched into the rack network
+- More services become reachable from devices beyond the trusted workstation
+- Current router is confirmed to support VLANs, making the managed-switch path cheap and clean
 
 **Recommendation:** TP-Link TL-SG108E v6 (8-port smart-managed gigabit, 802.1Q VLANs) ~$35-50. Optional small firewall: Protectli Vault 2 (Intel-N100 / 4-port 2.5GbE running OPNsense) ~$200-300 if home router can't do VLAN trunking.
 
