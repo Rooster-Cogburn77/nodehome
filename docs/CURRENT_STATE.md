@@ -1,6 +1,6 @@
 # Current State
 
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-05-15
 
 ## Active Work
 - Hardware bring-up is now well past POST. `Supermicro H12SSL-i` BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`, BMC firmware `01.05.02`, IPMI Working, all four `Samsung M393A4K40CB1-CRC4Q` RDIMMs trained at `Total Memory: 128 GB`.
@@ -60,6 +60,7 @@
 - `Qwen3.6-Max-Preview` is now logged as a hosted proprietary coding model to watch for future routing/escalation, not a local-node target.
 - `Kimi K2.6` is now logged as a serious future model-eval candidate, but it is not practical on the current 3x3090 node and is not part of the day-one local stack.
 - `llm-openrouter 0.6` is now logged as future routing/fallback tooling to watch, not part of the day-one local stack.
+- `whichllm` (`Andyyyy64/whichllm`) is now logged as a future model-scouting / model-watch helper. Use it for planning or JSON recommendations only until reviewed in this environment; do not use `whichllm run` or auto-pipe recommendations into Ollama on `homelab` while GPU2 is still excluded by the temporary pigtail rule.
 - Sakana's `Conductor` paper is now logged as a real future orchestration signal for Nodehome: relevant to a later "manager of models" workflow layer, but not to the immediate hardware build.
 - Cloudflare's new agent provisioning flow is now logged as a real future "agent-operated infrastructure" signal for Nodehome: relevant to a later orchestration/product layer, but not to the immediate hardware build.
 - SubQ is now logged as a hosted long-context architecture watch item. Early access was requested on 2026-05-05; status is pending review/waitlist.

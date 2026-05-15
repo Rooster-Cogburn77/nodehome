@@ -1,6 +1,15 @@
 # Sovereign Node - Session Log
 <!-- Current month only. Archive previous months under docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-05-15 (Session 22)
+**Focus:** `whichllm` review for Nodehome model-scouting workflow.
+**What was done:**
+- Reviewed `Andyyyy64/whichllm` as a local-model recommendation CLI. It auto-detects or simulates hardware, ranks candidate models from HuggingFace/model benchmark data, supports task profiles, JSON output, hardware planning, ready-to-run snippets, and a `run` mode that can download/start a model.
+- Decision: treat it as a **candidate scout / model-watch input**, not a replacement for the validated Nodehome speed table and not a production runtime controller. Its recommendations can help decide what to benchmark next, but the node's source of truth remains measured Ollama/vLLM behavior on the actual 3x3090 topology.
+- Safety guardrail: do **not** use `whichllm run`, `whichllm --json | xargs ollama run`, or any equivalent auto-run path on `homelab` while GPU2 is still under the temporary pigtail rule. Planning/simulation/JSON-only use is acceptable; runtime use would need explicit GPU visibility controls and a reviewed command path.
+**Commits:** This documentation update.
+**Next:** Optional future follow-up is a read-only model-watch pass that records `whichllm` recommendations for `RTX 3090` / coding / 70B planning and compares them against the current validated local benchmark table before any install or pull.
+
 ## 2026-05-14 (Session 21)
 **Focus:** Storage procurement recovery after Walmart canceled the first 12TB drive.
 **What was done:**
