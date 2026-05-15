@@ -4,7 +4,7 @@ Status: early implementation of the Nodehome local agentic terminal environment.
 
 `scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint (today: vLLM on the homelab node), keeps sessions, exposes slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
 
-Auto-routing is on for AI History and repo files. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. Vague topic phrases and bare filenames do not auto-route — `/read` is one keystroke for those. Web fetch/search and command output remain explicit-only for now (auto-routing roadmap in [`nodechat-scope.md`](nodechat-scope.md)). Every auto-routed turn prints a one-line disclosure above the assistant reply and writes an `auto_route_*` audit event. Slash commands remain the manual override and the visibility surface.
+Auto-routing is on for AI History, repo files, and fresh public web context. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. When the prompt includes a URL, Nodechat auto-fetches it; when the prompt clearly needs fresh public data (`latest`, releases, versions, CVEs, current pricing/availability, etc.) and names a public object, Nodechat auto-routes a bounded DuckDuckGo HTML search. Vague local-status phrases, vague repo topic phrases, and bare filenames do not auto-route. Every auto-routed turn prints a one-line disclosure above the assistant reply and writes an `auto_route_*` audit event. Slash commands remain the manual override and the visibility surface.
 
 Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
@@ -74,6 +74,7 @@ Inside `nodechat`:
 /history <query>
 /history-mode [auto|manual|off]
 /repo-mode [auto|manual|off]
+/web-mode [auto|manual|off]
 /evidence
 /forget [n|latest|all]
 /pwd
@@ -203,7 +204,7 @@ Rules:
 
 ## Web Context Tools
 
-Web fetch and search are currently invoked explicitly. Auto-routing for prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing) is on the roadmap. Fetched text stays transient unless the user saves it.
+Web fetch and search are auto-routed for direct URLs and prompts that clearly need fresh public data, and can also be invoked explicitly. Auto-routed web uses the same bounded fetch/search code as manual commands, a shorter timeout, disclosure, provenance, and `auto_route_web` audit events. Fetched text stays transient unless the user saves it.
 
 ```text
 /web-search qwen2.5 awq vllm
@@ -212,6 +213,8 @@ Web fetch and search are currently invoked explicitly. Auto-routing for prompts 
 ```
 
 `/web-search` uses DuckDuckGo HTML results and stores titles/URLs as leads. Use `/web-fetch` or `/web-open` on a result before treating the source text as evidence.
+
+Use `/web-mode manual` to require explicit `/web-search` or `/web-fetch`. Use `/web-mode off` to disable web routing for the session. Manual web commands still work when mode is `manual`; `off` only affects auto-routing.
 
 ## Proposed Edit Tools
 
@@ -328,17 +331,18 @@ chat with local vLLM (streaming, sessioned, slash-command UX)
 /search-files <q> [path]   text files only
 /git-status                fixed `git status --short --branch`
 /pwd
-/web-search <query>        DuckDuckGo HTML, leads only (manual-only today)
-/web-fetch <url>           bounded text fetch (manual-only today)
+/web-search <query>        DuckDuckGo HTML, leads only
+/web-fetch <url>           bounded text fetch
 /web-open <url>            same as fetch but opens in session view
 /cmd <read-only command>   allowlisted: git read subcommands, rg, dir/ls, type/cat, pwd, --version
 /history-mode [auto|manual|off]
 /repo-mode [auto|manual|off]
+/web-mode [auto|manual|off]
 /evidence                  list context blocks with source + provenance
 /forget [n|latest|all]     drop a context block
 ```
 
-Auto-routing covers AI History (prior-decision phrasing) and repo files (concrete artifacts only) with disclosed provenance and audit. Web fetch/search and `/cmd` are manual-only today; auto-routing for web prompts and a tier-gated live-node operator are the next lanes (see scope doc).
+Auto-routing covers AI History (prior-decision phrasing), repo files (concrete artifacts only), and fresh public web context (direct URLs and current/release/CVE/pricing-style prompts) with disclosed provenance and audit. `/cmd` is manual-only today; a tier-gated live-node operator is the next lane (see scope doc).
 
 ### Prepare lane (Done)
 

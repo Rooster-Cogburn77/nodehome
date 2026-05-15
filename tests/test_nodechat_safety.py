@@ -631,6 +631,100 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("repo(read", disclosure or "")
             self.assertEqual(session["context_blocks"][0].get("source"), "auto-repo")
 
+    def test_web_routing_detects_urls_and_fresh_public_queries(self):
+        url_targets = nodechat.detect_web_targets("check this https://example.com/release.")
+        self.assertEqual(url_targets["urls"], ["https://example.com/release"])
+        self.assertIsNone(url_targets["query"])
+
+        search_targets = nodechat.detect_web_targets("what is the latest vLLM release?")
+        self.assertEqual(search_targets["query"], "what is the latest vLLM release?")
+        self.assertEqual(search_targets["urls"], [])
+
+        local_status = nodechat.detect_web_targets("what is the current vLLM status on our node?")
+        self.assertIsNone(local_status)
+
+    def test_auto_route_web_skips_when_web_mode_off(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["web_mode"] = "off"
+            original = nodechat.web_search_context
+            try:
+                nodechat.web_search_context = lambda query, timeout: (_ for _ in ()).throw(
+                    AssertionError("web search should not run")
+                )
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "what is the latest vLLM release?"
+                )
+            finally:
+                nodechat.web_search_context = original
+            self.assertIsNone(disclosure)
+            self.assertEqual(session.get("context_blocks"), [])
+
+    def test_auto_route_web_search_adds_disclosure_provenance_and_audit(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.web_search_context
+            try:
+                nodechat.web_search_context = lambda query, timeout: (
+                    "query: latest vLLM release\n- vLLM release\n  https://example.com",
+                    1,
+                )
+                disclosure = nodechat.auto_route_turn(
+                    config, session, "what is the latest vLLM release?"
+                )
+            finally:
+                nodechat.web_search_context = original
+
+            self.assertIsNotNone(disclosure)
+            self.assertIn("web(search 1 results", disclosure or "")
+            blocks = session.get("context_blocks", [])
+            self.assertEqual(len(blocks), 1)
+            self.assertEqual(blocks[0].get("source"), "auto-web-search")
+            prov = blocks[0].get("provenance") or {}
+            self.assertEqual(prov.get("results"), 1)
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(
+                any(
+                    r["event_type"] == "auto_route_web"
+                    and r.get("status") == "ok"
+                    and r.get("action") == "search"
+                    for r in rows
+                )
+            )
+
+    def test_auto_route_web_fetch_error_is_disclosed_and_audited(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.web_fetch_context
+            try:
+                nodechat.web_fetch_context = lambda url, timeout: (_ for _ in ()).throw(
+                    RuntimeError("network down")
+                )
+                disclosure = nodechat.auto_route_turn(config, session, "check https://example.com")
+            finally:
+                nodechat.web_fetch_context = original
+            self.assertIsNotNone(disclosure)
+            self.assertIn("web(fetch error", disclosure or "")
+            self.assertEqual(
+                [b for b in session.get("context_blocks", []) if b.get("source") == "auto-web-fetch"],
+                [],
+            )
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(
+                any(
+                    r["event_type"] == "auto_route_web"
+                    and r.get("status") == "error"
+                    and r.get("action") == "fetch"
+                    for r in rows
+                )
+            )
+
     def test_routing_mode_set_get_and_invalid(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -652,6 +746,10 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                 nodechat.command_routing_mode(session, "history_mode", "history-mode", "loud")
             self.assertIn("invalid mode", buf.getvalue())
             self.assertEqual(session["history_mode"], "off")
+            # web mode uses the same mode controller.
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_routing_mode(session, "web_mode", "web-mode", "manual")
+            self.assertEqual(session["web_mode"], "manual")
 
     def test_evidence_lists_source_and_provenance_and_handles_legacy(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
@@ -672,6 +770,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                 nodechat.command_evidence(session)
             text = buf.getvalue()
             self.assertIn("history_mode=auto", text)
+            self.assertIn("web_mode=auto", text)
             self.assertIn("[auto-history]", text)
             self.assertIn("query=q", text)
             self.assertIn("[manual-legacy]", text)

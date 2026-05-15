@@ -118,8 +118,11 @@ TEXT_EXTENSIONS = {
 
 DEFAULT_HISTORY_MODE = "auto"
 DEFAULT_REPO_MODE = "auto"
+DEFAULT_WEB_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
 REPO_AUTO_LIMIT = 2
+WEB_AUTO_URL_LIMIT = 2
+WEB_AUTO_TIMEOUT = 12
 
 HISTORY_AUTO_PATTERNS = (
     re.compile(r"\bwhat did we\b", re.I),
@@ -166,6 +169,28 @@ REPO_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_/\\])(?:docs|scripts|sweeps|site|tests|memory)[\\/][A-Za-z0-9_./\\\-]+"
 )
 
+WEB_URL_RE = re.compile(r"https?://[^\s<>\]\"')]+", re.I)
+WEB_EXPLICIT_RE = re.compile(
+    r"\b(search|look up|look for|browse|web|internet|online|google|verify online|check online)\b",
+    re.I,
+)
+WEB_FRESH_RE = re.compile(
+    r"\b(latest|current|currently|recent|newest|today|now|upstream|release|released|"
+    r"version|changelog|pricing|price|cost|buy|listing|market|stock|available|"
+    r"availability|cve|vulnerability|advisory|exploit)\b",
+    re.I,
+)
+WEB_PUBLIC_OBJECT_RE = re.compile(
+    r"\b(vllm|ollama|open webui|qwen|llama|nvidia|cuda|driver|firmware|github|"
+    r"amazon|ebay|walmart|best buy|router|switch|ups|apc|ram|ssd|hdd|hard drive|"
+    r"model|release|pricing|price|cve|vulnerability)\b",
+    re.I,
+)
+WEB_LOCAL_ONLY_RE = re.compile(
+    r"\b(our|my|local|nodehome|homelab|rack|gpu2|pigtail|current state|status)\b",
+    re.I,
+)
+
 DEFAULT_SYSTEM_PROMPT = """\
 You are Nodechat, the local agentic terminal environment for the Nodehome homelab.
 
@@ -175,20 +200,20 @@ system message. If asked what model you are, answer from that runtime message.
 Do not claim to be custom-built or model-less.
 
 Some context is auto-routed into the conversation when the user prompt clearly
-calls for it (private AI History, repo files). Other context is injected only
-when the user runs a slash command such as /history, /read, /tree,
-/search-files, /git-status, /web-fetch, /web-search, /cmd, or approved command
-output from /approve. Treat HISTORY_CONTEXT and NODECHAT_TOOL_CONTEXT blocks
-as local project memory or local file evidence with provenance, not as general
-world knowledge. Do not claim to have searched private history or read a file
-unless the corresponding context block is present in this conversation.
+calls for it (private AI History, repo files, fresh public web context). Other
+context is injected only when the user runs a slash command such as /history,
+/read, /tree, /search-files, /git-status, /web-fetch, /web-search, /cmd, or
+approved command output from /approve. Treat HISTORY_CONTEXT and
+NODECHAT_TOOL_CONTEXT blocks as evidence with provenance, not as general world
+knowledge. Do not claim to have searched private history, read a file, or
+searched/fetched the web unless the corresponding context block is present in
+this conversation.
 
 Patch proposals created by /propose-edit are proposals only. Do not claim they
 were applied unless the user explicitly applies them.
 
-You do not have arbitrary shell, browse-the-internet, or freeform file-write
-access. Mutations require explicit user approval via /approve or
-/apply --confirm.
+You do not have arbitrary shell or freeform file-write access. Mutations
+require explicit user approval via /approve or /apply --confirm.
 """
 
 
@@ -265,6 +290,7 @@ def make_session(config: Config) -> dict[str, Any]:
         "approvals": [],
         "history_mode": DEFAULT_HISTORY_MODE,
         "repo_mode": DEFAULT_REPO_MODE,
+        "web_mode": DEFAULT_WEB_MODE,
     }
 
 
@@ -557,6 +583,7 @@ def fetch_history_context(config: Config, query: str, force: bool = True) -> str
 def runtime_context(config: Config, session: dict[str, Any]) -> str:
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
     repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
+    web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
     return "\n".join(
         [
             "NODECHAT_RUNTIME",
@@ -564,10 +591,11 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
             f"workspace: {session.get('cwd') or config.workspace}",
-            "tool_access: auto-routed AI History and repo files when prompt indicates, explicit read-only local context, explicit web fetch/search, read-only /cmd, and selected /approve command output",
-            "no_access: no arbitrary shell, no freeform file writes (only /apply --confirm), no automatic browsing",
+            "tool_access: auto-routed AI History, repo files, and web context when prompt indicates; explicit read-only local context; explicit web fetch/search; read-only /cmd; and selected /approve command output",
+            "no_access: no arbitrary shell, no freeform file writes (only /apply --confirm)",
             f"history_mode: {history_mode}",
             f"repo_mode: {repo_mode}",
+            f"web_mode: {web_mode}",
         ]
     )
 
@@ -704,6 +732,42 @@ def detect_repo_targets(
     return out
 
 
+def detect_web_targets(prompt: str) -> dict[str, Any] | None:
+    """Return auto-web targets for prompts needing fresh public context.
+
+    Direct URLs route to fetch. Non-URL prompts route to search only when they
+    carry both a fresh/current-data signal and a public-object signal, or when
+    the user explicitly asks to search/browse/check online for a public object.
+    Local-only status phrasing is intentionally skipped unless the prompt also
+    has an explicit web/search signal.
+    """
+    if not prompt or not prompt.strip():
+        return None
+    text = prompt.strip()
+    urls = []
+    for match in WEB_URL_RE.finditer(text):
+        url = match.group(0).rstrip(".,;:")
+        if url not in urls:
+            urls.append(url)
+        if len(urls) >= WEB_AUTO_URL_LIMIT:
+            break
+    if urls:
+        return {"urls": urls, "query": None}
+
+    explicit = bool(WEB_EXPLICIT_RE.search(text))
+    fresh = bool(WEB_FRESH_RE.search(text))
+    public_object = bool(WEB_PUBLIC_OBJECT_RE.search(text))
+    local_only = bool(WEB_LOCAL_ONLY_RE.search(text))
+
+    if public_object and explicit:
+        return {"urls": [], "query": text}
+    if public_object and fresh and not local_only:
+        return {"urls": [], "query": text}
+    if public_object and fresh and re.search(r"\b(release|version|changelog|pricing|price|cost|cve|vulnerability|advisory|availability|stock)\b", text, re.I):
+        return {"urls": [], "query": text}
+    return None
+
+
 def _short_error(exc: Exception) -> str:
     msg = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
     return msg[:60] + "..." if len(msg) > 60 else msg
@@ -809,6 +873,92 @@ def auto_route_turn(
                 files_added.append(rel)
             if files_added:
                 parts.append(f"repo(read {', '.join(files_added)})")
+
+    web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
+    if web_mode == "auto":
+        targets = detect_web_targets(prompt)
+        if targets:
+            timeout = max(1, min(int(config.timeout), WEB_AUTO_TIMEOUT))
+            fetched: list[str] = []
+            for url in targets.get("urls") or []:
+                try:
+                    content, content_type, truncated, text_chars = web_fetch_context(url, timeout)
+                except Exception as exc:
+                    audit_event(
+                        config,
+                        session,
+                        "auto_route_web",
+                        status="error",
+                        action="fetch",
+                        url=url,
+                        reason=_short_error(exc),
+                    )
+                    parts.append(f"web(fetch error: {_short_error(exc)})")
+                    continue
+                add_context(
+                    session,
+                    f"auto:/web-fetch {url}",
+                    context_block("web_fetch", url, content),
+                    source="auto-web-fetch",
+                    provenance={
+                        "url": url,
+                        "content_type": content_type or "",
+                        "truncated": truncated,
+                        "chars": text_chars,
+                    },
+                )
+                audit_event(
+                    config,
+                    session,
+                    "auto_route_web",
+                    status="ok",
+                    action="fetch",
+                    url=url,
+                    chars=text_chars,
+                    truncated=truncated,
+                )
+                fetched.append(_trunc(url, 48))
+            if fetched:
+                parts.append(f"web(fetch {', '.join(fetched)})")
+
+            query = targets.get("query")
+            if query:
+                try:
+                    content, result_count = web_search_context(str(query), timeout)
+                except Exception as exc:
+                    audit_event(
+                        config,
+                        session,
+                        "auto_route_web",
+                        status="error",
+                        action="search",
+                        query=str(query),
+                        reason=_short_error(exc),
+                    )
+                    parts.append(f"web(search error: {_short_error(exc)})")
+                else:
+                    add_context(
+                        session,
+                        f"auto:/web-search {query}",
+                        context_block("web_search", str(query), content),
+                        source="auto-web-search",
+                        provenance={
+                            "query": str(query),
+                            "results": result_count,
+                            "chars": len(content),
+                        },
+                    )
+                    audit_event(
+                        config,
+                        session,
+                        "auto_route_web",
+                        status="ok",
+                        action="search",
+                        query=str(query),
+                        results=result_count,
+                        chars=len(content),
+                    )
+                    parts.append(f'web(search {result_count} results, "{_trunc(str(query), 48)}")')
 
     if not parts:
         return None
@@ -1200,16 +1350,8 @@ def fetch_url(url: str, timeout: int, max_bytes: int = MAX_WEB_BYTES) -> tuple[s
     return content_type, text, truncated
 
 
-def command_web_fetch(config: Config, session: dict[str, Any], arg: str) -> None:
-    url = arg.strip()
-    if not url:
-        print("usage: /web-fetch <url>")
-        return
-    try:
-        content_type, text, truncated = fetch_url(url, config.timeout)
-    except Exception as exc:
-        print(f"web fetch failed: {exc}")
-        return
+def web_fetch_context(url: str, timeout: int) -> tuple[str, str, bool, int]:
+    content_type, text, truncated = fetch_url(url, timeout)
     lines = [
         f"url: {url}",
         f"content_type: {content_type or '[unknown]'}",
@@ -1217,12 +1359,31 @@ def command_web_fetch(config: Config, session: dict[str, Any], arg: str) -> None
         "",
         text,
     ]
+    return "\n".join(lines), content_type, truncated, len(text)
+
+
+def command_web_fetch(config: Config, session: dict[str, Any], arg: str) -> None:
+    url = arg.strip()
+    if not url:
+        print("usage: /web-fetch <url>")
+        return
+    try:
+        content, content_type, truncated, text_chars = web_fetch_context(url, config.timeout)
+    except Exception as exc:
+        print(f"web fetch failed: {exc}")
+        return
     add_context(
         session,
         f"/web-fetch {url}",
-        context_block("web_fetch", url, "\n".join(lines)),
+        context_block("web_fetch", url, content),
         source="manual-web-fetch",
-        provenance={"command": "/web-fetch", "url": url, "content_type": content_type or "", "truncated": truncated},
+        provenance={
+            "command": "/web-fetch",
+            "url": url,
+            "content_type": content_type or "",
+            "truncated": truncated,
+            "chars": text_chars,
+        },
     )
     suffix = " (truncated)" if truncated else ""
     print(f"web context added: {url}{suffix}")
@@ -1240,17 +1401,9 @@ def normalize_search_url(href: str) -> str:
     return href
 
 
-def command_web_search(config: Config, session: dict[str, Any], arg: str) -> None:
-    query = arg.strip()
-    if not query:
-        print("usage: /web-search <query>")
-        return
+def web_search_context(query: str, timeout: int) -> tuple[str, int]:
     url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-    try:
-        _, body, _ = fetch_raw_url(url, config.timeout)
-    except Exception as exc:
-        print(f"web search failed: {exc}")
-        return
+    _, body, _ = fetch_raw_url(url, timeout)
 
     parser = LinkExtractor()
     parser.feed(body)
@@ -1274,14 +1427,32 @@ def command_web_search(config: Config, session: dict[str, Any], arg: str) -> Non
         "",
     ]
     lines.extend(rows or ["No parseable search results found."])
+    return "\n".join(lines), len(rows)
+
+
+def command_web_search(config: Config, session: dict[str, Any], arg: str) -> None:
+    query = arg.strip()
+    if not query:
+        print("usage: /web-search <query>")
+        return
+    try:
+        content, result_count = web_search_context(query, config.timeout)
+    except Exception as exc:
+        print(f"web search failed: {exc}")
+        return
     add_context(
         session,
         f"/web-search {query}",
-        context_block("web_search", query, "\n".join(lines)),
+        context_block("web_search", query, content),
         source="manual-web-search",
-        provenance={"command": "/web-search", "query": query, "results": len(rows)},
+        provenance={
+            "command": "/web-search",
+            "query": query,
+            "results": result_count,
+            "chars": len(content),
+        },
     )
-    print(f"web search context added: {query} ({len(rows)} results)")
+    print(f"web search context added: {query} ({result_count} results)")
 
 
 def parse_propose_args(arg: str) -> tuple[str, str]:
@@ -2406,7 +2577,12 @@ def command_routing_mode(
     label: str,
     arg: str,
 ) -> None:
-    default = DEFAULT_HISTORY_MODE if key == "history_mode" else DEFAULT_REPO_MODE
+    defaults = {
+        "history_mode": DEFAULT_HISTORY_MODE,
+        "repo_mode": DEFAULT_REPO_MODE,
+        "web_mode": DEFAULT_WEB_MODE,
+    }
+    default = defaults.get(key, "auto")
     raw = (arg or "").strip().lower()
     if not raw:
         current = session.get(key, default)
@@ -2423,7 +2599,8 @@ def command_evidence(session: dict[str, Any]) -> None:
     blocks = session.get("context_blocks", [])
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
     repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
-    print(f"history_mode={history_mode}  repo_mode={repo_mode}")
+    web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
+    print(f"history_mode={history_mode}  repo_mode={repo_mode}  web_mode={web_mode}")
     if not blocks:
         print("No active context blocks.")
         return
@@ -2640,6 +2817,8 @@ def print_help() -> None:
                                     show or set AI History auto-routing mode (default auto)
               /repo-mode [auto|manual|off]
                                     show or set repo file auto-routing mode (default auto)
+              /web-mode [auto|manual|off]
+                                    show or set web auto-routing mode (default auto)
               /evidence             list active context blocks with source + provenance
               /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
@@ -2648,10 +2827,10 @@ def print_help() -> None:
               /paste                paste multi-line prompt, end with a single .
 
             Notes
-              AI History and repo files auto-route on prompts that clearly call for them.
+              AI History, repo files, and web context auto-route on prompts that clearly call for them.
               The disclosure line above the assistant reply names every routed source.
-              /history-mode and /repo-mode toggle auto-routing; manual slash commands always work.
-              Web tools run only when invoked; search results are leads, not proof.
+              /history-mode, /repo-mode, and /web-mode toggle auto-routing; manual slash commands always work.
+              Web search results are leads, not proof; fetch/open source text before relying on a claim.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
               /undo-apply restores only if the file still matches the applied proposal.
@@ -2878,6 +3057,10 @@ def handle_command(
         command_routing_mode(session, "repo_mode", "repo-mode", arg)
         return "handled", session, None
 
+    if command in {"web-mode", "webmode"}:
+        command_routing_mode(session, "web_mode", "web-mode", arg)
+        return "handled", session, None
+
     if command == "evidence":
         command_evidence(session)
         return "handled", session, None
@@ -3030,6 +3213,7 @@ def main(argv: list[str] | None = None) -> int:
     session.setdefault("commands", [])
     session.setdefault("history_mode", DEFAULT_HISTORY_MODE)
     session.setdefault("repo_mode", DEFAULT_REPO_MODE)
+    session.setdefault("web_mode", DEFAULT_WEB_MODE)
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")

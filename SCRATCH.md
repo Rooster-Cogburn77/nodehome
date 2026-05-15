@@ -1,24 +1,24 @@
 # Session Scratch - 2026-05-15 (Session 23)
-Focus: Re-frame Nodechat scope as full agentic terminal environment, land auto-routing lane #1, then close the apply loop with `/undo-apply`.
+Focus: Re-frame Nodechat scope as full agentic terminal environment, land auto-routing lanes, close the apply loop with `/undo-apply`, and start the web-routing lane.
 
 ## What was decided/executed this session
 - **Scope correction shipped (commit `938f3cd`).** New authoritative scope doc `docs/runbooks/nodechat-scope.md` defines Nodechat as the local agentic terminal environment for Nodehome — capability with evidence as the philosophy, 5-tier risk model (Observe / Analyze / Prepare / Mutate / Dangerous) as the control system. `nodechat-terminal.md` re-framed; `CURRENT_STATE.md` and `scripts/README.md` link the scope doc.
 - **Auto-routing lane #1 implemented and tested.** AI History routes on prior-decision phrasing; repo routes on concrete artifacts only (named files, known runbook stems, path tokens). Per user direction: vague topic phrases skip, bare filenames skip, history query is sent verbatim (no normalization), no `git status` injection on vague repo prompts. Two-file cap on repo routing per turn. Failures never block the chat turn — they emit an `auto_route_*` audit event with `status=error` and disclose inline.
 - **Disclosure + context controls + structured provenance + audit landed together.** `[auto-routed: ...]` line above every assistant reply that routed anything. `/history-mode`, `/repo-mode`, `/evidence`, `/forget` commands. Every context block now carries `source` and `provenance`; legacy blocks render under `manual-legacy`. New audit event types: `auto_route_history`, `auto_route_repo`.
 - **Undo lane implemented.** `/undo-apply [n|latest] [--check]` restores an applied proposal from its apply-time backup after verifying the current file still matches the exact applied content. It refuses post-apply file drift, writes an undo safety backup, records `undone_at`/`undo_backup_path`, injects `manual-undo-apply` context, and audits check/confirm/refusal paths.
-- **Tests:** 31/31 passing (13 prior + 12 new auto-routing + 2 reliability regressions + 4 undo/apply-backup tests). Includes the user-mandated "vague repo topic does not route" guardrail.
+- **Web auto-routing lane implemented.** `/web-mode auto|manual|off` now controls Observe-tier web routing. Direct URLs auto-fetch; fresh-public prompts (latest/release/version/CVE/pricing/availability/market) plus a public object auto-route through DuckDuckGo HTML search. Local-only status phrasing intentionally skips web. Auto web uses the same bounded `/web-search` and `/web-fetch` internals, a short timeout, disclosure, `auto-web-search` / `auto-web-fetch` context sources, and `auto_route_web` audit events.
+- **Tests:** 35/35 passing (13 prior + 12 first auto-routing + 2 reliability regressions + 4 undo/apply-backup + 4 web-routing tests). Includes the user-mandated "vague repo topic does not route" guardrail and a local-status web false-positive guardrail.
 
 ## End-of-session status
-- **Three commits on `origin/main` this session.** `938f3cd` (scope), `e0c83da` (auto-routing), `2a71947` (undo). Working tree clean.
-- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix.
+- **Session commits on `origin/main` before this web-routing work.** `938f3cd` (scope), `e0c83da` (auto-routing), `2a71947` (undo), `9ef17b0` (end-of-session log refresh). New web-routing work is in progress until committed.
+- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`.
 - **No regressions** in the existing apply/approve/cmd/audit/workspace-confinement surface.
 
 ## Plan (next session)
 **Nodechat — remaining roadmap per `docs/runbooks/nodechat-scope.md`:**
-1. Web auto-routing + `/web-mode auto|manual|off`. Heuristics for prompts that clearly call for fresh public data (upstream releases, CVEs, current pricing). Reuse the existing `/web-search` and `/web-fetch` infrastructure under the same disclosure + audit shape as history/repo routing.
-2. Live-node operator + `/live-mode auto|manual|off`. Observe-tier health checks (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Mutating service actions stay in the Mutate tier behind `/approve`.
-3. Grouped evidence view. `/evidence` today is flat; group by source with per-source totals and links.
-4. Auto-routing recall pass. Once the three lanes above land, widen heuristics with confusion-matrix evidence.
+1. Live-node operator + `/live-mode auto|manual|off`. Observe-tier health checks (`nvidia-smi`, `docker ps`, `docker inspect vllm-server`, `systemctl status ollama`, `df -h`, `smartctl` reads, BMC reachability) auto-route on relevant prompts. Mutating service actions stay in the Mutate tier behind `/approve`.
+2. Grouped evidence view. `/evidence` today is flat; group by source with per-source totals and links.
+3. Auto-routing recall pass. Widen heuristics with confusion-matrix evidence rather than guesses.
 
 **Out-of-Nodechat work still open today:**
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
