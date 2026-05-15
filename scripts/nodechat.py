@@ -230,8 +230,30 @@ WEB_PUBLIC_OBJECT_RE = re.compile(
     re.I,
 )
 WEB_LOCAL_ONLY_RE = re.compile(
-    r"\b(our|my|local|nodehome|homelab|rack|gpu2|pigtail|current state|status)\b",
-    re.I,
+    r"""\b(
+        # First-person pronouns / project ownership
+        our|my|us|ours
+        # Project nouns
+        |local|nodehome|homelab|sovereign
+        |gpu0|gpu1|gpu2|gpu3|pigtail|rack|chassis
+        # Status framing that's about local state, not public lookup
+        |current\ state|status
+        # Plural "all three" / "all 3" only makes sense for our 3-card box
+        |across\ all\ (?:three|two|3|2)
+        |all\ (?:three|two|3|2)\ (?:cards|gpus|3090s)
+        # Prepositional locality: "on the node", "in a container", etc.
+        |the\ (?:node|box|rack|chassis|stack|build|cluster|server|host|machine)
+        |on\ the\ (?:node|box|server|host|machine)
+        |in\ (?:the|a)\ (?:rack|container|chassis|cabinet)
+        # Local hardware/operational nouns
+        |container|containers
+        |power\ draw|power\ cap|power\ limit|fan\ curve
+        # First-person plural construction "we built / trained / configured / ordered"
+        |we\ (?:built|made|trained|created|configured|installed|capped|bought|
+              ordered|wrote|fixed|added|landed|shipped|deployed|patched|tested|
+              benchmarked|validated|run|ran)
+    )\b""",
+    re.I | re.VERBOSE,
 )
 
 LIVE_TRIGGER_RE = re.compile(
@@ -840,6 +862,11 @@ def detect_web_targets(prompt: str) -> dict[str, Any] | None:
     if public_object and fresh and not local_only:
         return {"urls": [], "query": text}
     if public_object and fresh and re.search(r"\b(release|version|changelog|pricing|price|cost|cve|vulnerability|advisory|availability|stock)\b", text, re.I):
+        return {"urls": [], "query": text}
+    # Explicit "search for X / look up X" with a freshness signal but no
+    # public-object hit (e.g. proprietary part numbers like SF-1600F14HT).
+    # Local context still wins -- "search for our local docs" stays put.
+    if explicit and fresh and not local_only:
         return {"urls": [], "query": text}
     return None
 

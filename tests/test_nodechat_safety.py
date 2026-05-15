@@ -957,13 +957,13 @@ class RoutingCorpusTests(unittest.TestCase):
     PRECISION_FLOORS = {
         "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
-        "web":     0.82,
+        "web":     1.00,  # Phase B (web)     landed: 0.82 -> 1.00
         "live":    0.78,
     }
     RECALL_FLOORS = {
         "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
-        "web":     0.93,
+        "web":     1.00,  # Phase B (web)     landed: 0.93 -> 1.00
         "live":    0.68,
     }
     PHASE_B_PRECISION_TARGET = 0.95
@@ -976,11 +976,12 @@ class RoutingCorpusTests(unittest.TestCase):
     PHASE_B_GUARDRAIL_TARGETS = {
         ("g006", "live"),    # local-status: extra 'health' added beside vllm
         ("g007", "live"),    # 'box' is not in LIVE_OBJECT_RE; no docker fallback
-        ("g008", "web"),     # "the latest model we trained" routes web on 'model'+'latest'
         # Phase B (history) landed -- removed:
         #   g009 history "history of the mongol empire"
         #   g010 history "remind me to call mom tomorrow"
         #   g011 history "previously the romans..."
+        # Phase B (web) landed -- removed:
+        #   g008 web "the latest model we trained"
     }
 
     @classmethod
