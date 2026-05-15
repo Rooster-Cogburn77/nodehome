@@ -840,6 +840,219 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(target, "local")
             self.assertEqual(argv, ["smartctl", "-a", "/dev/sda"])
 
+    # ---- Operator approval lane: /live diag ops + /live restart mutations ----
+
+    def _stub_run_live_op(self, op_argv_capture):
+        """Patch run_live_op to capture argv + return a deterministic result."""
+        def fake(config, key, spec):
+            op_argv_capture.append({"key": key, "argv": list(spec["argv"])})
+            return {
+                "check": key,
+                "target": "local",
+                "command": " ".join(spec["argv"]),
+                "exit_code": 0,
+                "executable": "/usr/bin/" + spec["argv"][0],
+                "output": f"{key} ok",
+            }
+        original = nodechat.run_live_op
+        nodechat.run_live_op = fake
+        return original
+
+    def test_live_diag_ps_runs_immediately_via_docker_ps_a(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            calls: list[dict] = []
+            original = self._stub_run_live_op(calls)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_live(config, session, "ps")
+            finally:
+                nodechat.run_live_op = original
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]["argv"], ["docker", "ps", "-a"])
+            blocks = session.get("context_blocks", [])
+            self.assertEqual(blocks[-1].get("source"), "manual-live")
+            self.assertEqual(blocks[-1].get("provenance", {}).get("kind"), "diag")
+            self.assertEqual(session.get("approvals", []), [])
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(r["event_type"] == "live_diag_executed" and r.get("op") == "ps" for r in rows))
+
+    def test_live_diag_logs_vllm_uses_docker_logs_no_follow(self):
+        spec = nodechat.LIVE_DIAG_OPS["logs vllm"]
+        self.assertEqual(spec["argv"], ["docker", "logs", "--tail", "200", "vllm-server"])
+        # Hard guardrail: no --follow / -f anywhere in the diag allowlist.
+        for key, op in nodechat.LIVE_DIAG_OPS.items():
+            for token in op["argv"]:
+                self.assertNotEqual(token, "--follow", msg=f"--follow leaked into {key}")
+                self.assertNotEqual(token, "-f", msg=f"-f leaked into {key}")
+
+    def test_live_diag_logs_ollama_aliased_to_journalctl(self):
+        # Both keys resolve to the same journalctl invocation.
+        self.assertEqual(
+            nodechat.LIVE_DIAG_OPS["logs ollama"]["argv"],
+            nodechat.LIVE_DIAG_OPS["journal ollama"]["argv"],
+        )
+        self.assertEqual(
+            nodechat.LIVE_DIAG_OPS["journal ollama"]["argv"],
+            ["journalctl", "-u", "ollama", "--no-pager", "-n", "200"],
+        )
+
+    def test_live_diag_inspect_uses_docker_inspect_for_known_services(self):
+        self.assertEqual(
+            nodechat.LIVE_DIAG_OPS["inspect vllm"]["argv"],
+            ["docker", "inspect", "vllm-server"],
+        )
+        self.assertEqual(
+            nodechat.LIVE_DIAG_OPS["inspect open-webui"]["argv"],
+            ["docker", "inspect", "open-webui"],
+        )
+
+    def test_live_diag_arbitrary_unit_or_container_refused(self):
+        # Arbitrary container / unit names are NOT in the allowlist.
+        for key in (
+            "logs nginx",
+            "logs sshd",
+            "journal sshd",
+            "journal docker",
+            "inspect random-container",
+            "inspect ollama",  # ollama is systemd, not docker; intentionally unsupported as inspect
+        ):
+            self.assertNotIn(key, nodechat.LIVE_DIAG_OPS, msg=f"unexpected diag key: {key}")
+            self.assertNotIn(key, nodechat.LIVE_MUTATION_OPS, msg=f"unexpected mutation key: {key}")
+
+    def test_live_restart_vllm_queues_approval_and_does_not_execute(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            calls: list[dict] = []
+            original = self._stub_run_live_op(calls)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_live(config, session, "restart vllm-server")
+            finally:
+                nodechat.run_live_op = original
+            self.assertEqual(calls, [], msg="run_live_op must not be called on /live restart")
+            self.assertIn("APPROVAL_REQUIRED", buf.getvalue())
+            approvals = session.get("approvals", [])
+            self.assertEqual(len(approvals), 1)
+            self.assertEqual(approvals[0]["class"], "live-mutation")
+            self.assertEqual(approvals[0]["status"], "pending")
+            self.assertEqual(approvals[0]["command"], "/live restart vllm-server")
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(
+                r["event_type"] == "live_mutation_queued"
+                and r.get("op") == "restart vllm-server"
+                and r.get("argv") == ["docker", "restart", "vllm-server"]
+                for r in rows
+            ))
+
+    def test_live_restart_open_webui_alias_queues_open_webui_argv(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_live(config, session, "restart webui")
+            approvals = session.get("approvals", [])
+            self.assertEqual(len(approvals), 1)
+            self.assertEqual(approvals[0]["command"], "/live restart webui")
+            rows = nodechat.read_recent_audit(config, 10)
+            queued = [r for r in rows if r["event_type"] == "live_mutation_queued"]
+            self.assertTrue(queued)
+            self.assertEqual(queued[-1]["argv"], ["docker", "restart", "open-webui"])
+
+    def test_live_restart_ollama_refused_with_deferred_message(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_live(config, session, "restart ollama")
+            text = buf.getvalue()
+            self.assertIn("LIVE_MUTATION_REFUSED", text)
+            self.assertIn("sudoers", text)
+            self.assertIn("docs/runbooks/live-mutations.md", text)
+            self.assertEqual(session.get("approvals", []), [])
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertTrue(any(
+                r["event_type"] == "live_mutation_refused"
+                and r.get("op") == "restart ollama"
+                for r in rows
+            ))
+
+    def test_live_restart_arbitrary_container_falls_through_to_unknown(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_live(config, session, "restart nginx")
+            self.assertIn("unknown live check", buf.getvalue())
+            self.assertEqual(session.get("approvals", []), [])
+
+    def test_approve_executes_queued_live_mutation(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_live(config, session, "restart vllm-server")
+            calls: list[dict] = []
+            original = self._stub_run_live_op(calls)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_approve(config, session, "a1")
+            finally:
+                nodechat.run_live_op = original
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]["argv"], ["docker", "restart", "vllm-server"])
+            self.assertIn("COMMAND_OUTPUT", buf.getvalue())
+            self.assertEqual(session["approvals"][0]["status"], "executed")
+            rows = nodechat.read_recent_audit(config, 20)
+            event_types = [r["event_type"] for r in rows]
+            self.assertIn("live_mutation_queued", event_types)
+            self.assertIn("live_mutation_executed", event_types)
+            executed = next(r for r in rows if r["event_type"] == "live_mutation_executed")
+            self.assertEqual(executed["op"], "restart vllm-server")
+            self.assertEqual(executed["argv"], ["docker", "restart", "vllm-server"])
+            self.assertEqual(executed["exit_code"], 0)
+            self.assertEqual(executed["status"], "executed")
+            # Re-approve should be a no-op (status already executed)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_approve(config, session, "a1")
+            self.assertIn("already executed", buf.getvalue())
+
+    def test_existing_git_approval_flow_still_works_after_live_mutation_branch(self):
+        # Regression: make sure the new class-based branch in command_approve
+        # didn't break the original git fetch/pull/push approval path.
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_cmd(config, session, "git fetch")
+            self.assertEqual(session["approvals"][0]["class"], "network")
+            original = nodechat.run_approved_command
+            try:
+                nodechat.run_approved_command = lambda config, session, parts, approval_reason: (
+                    0, "fetch ok", "/usr/bin/git", True,
+                )
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_approve(config, session, "a1")
+            finally:
+                nodechat.run_approved_command = original
+            self.assertIn("approval_id: a1", buf.getvalue())
+            self.assertEqual(session["approvals"][0]["status"], "executed")
+
     def test_routing_mode_set_get_and_invalid(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)

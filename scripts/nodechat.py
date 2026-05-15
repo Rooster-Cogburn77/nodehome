@@ -1743,6 +1743,174 @@ def _format_argv(parts: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in parts)
 
 
+# ---------------------------------------------------------------------------
+# Live-node operator: extended diagnostics + queueable mutations.
+#
+# All entries are exact-string keys (after lowercase + whitespace collapse).
+# No arbitrary container names, no arbitrary journalctl units, no --follow,
+# no shell composition. The runner uses the same SSH / local plumbing as the
+# fixed LIVE_CHECKS reads.
+# ---------------------------------------------------------------------------
+
+# Read-only diagnostics. Run immediately under /live, no approval.
+LIVE_DIAG_OPS: dict[str, dict[str, Any]] = {
+    "ps": {
+        "description": "All Docker containers (running and stopped)",
+        "argv": ["docker", "ps", "-a"],
+    },
+    "logs vllm": {
+        "description": "Last 200 lines of vllm-server container logs",
+        "argv": ["docker", "logs", "--tail", "200", "vllm-server"],
+    },
+    "logs vllm-server": {  # alias
+        "description": "Last 200 lines of vllm-server container logs",
+        "argv": ["docker", "logs", "--tail", "200", "vllm-server"],
+    },
+    "logs open-webui": {
+        "description": "Last 200 lines of open-webui container logs",
+        "argv": ["docker", "logs", "--tail", "200", "open-webui"],
+    },
+    "logs webui": {  # alias
+        "description": "Last 200 lines of open-webui container logs",
+        "argv": ["docker", "logs", "--tail", "200", "open-webui"],
+    },
+    "logs ollama": {  # aliased to journalctl since ollama is systemd-managed
+        "description": "Last 200 ollama systemd journal entries (alias of /live journal ollama)",
+        "argv": ["journalctl", "-u", "ollama", "--no-pager", "-n", "200"],
+    },
+    "journal ollama": {
+        "description": "Last 200 ollama systemd journal entries",
+        "argv": ["journalctl", "-u", "ollama", "--no-pager", "-n", "200"],
+    },
+    "inspect vllm": {
+        "description": "docker inspect vllm-server (full)",
+        "argv": ["docker", "inspect", "vllm-server"],
+    },
+    "inspect vllm-server": {  # alias
+        "description": "docker inspect vllm-server (full)",
+        "argv": ["docker", "inspect", "vllm-server"],
+    },
+    "inspect open-webui": {
+        "description": "docker inspect open-webui (full)",
+        "argv": ["docker", "inspect", "open-webui"],
+    },
+    "inspect webui": {  # alias
+        "description": "docker inspect open-webui (full)",
+        "argv": ["docker", "inspect", "open-webui"],
+    },
+}
+
+# Queueable mutations. Caught by /live but routed to /approve before exec.
+LIVE_MUTATION_OPS: dict[str, dict[str, Any]] = {
+    "restart vllm-server": {
+        "description": "Restart the vllm-server Docker container",
+        "argv": ["docker", "restart", "vllm-server"],
+        "approval_reason": "approved live-mutation: docker restart vllm-server",
+    },
+    "restart vllm": {  # alias
+        "description": "Restart the vllm-server Docker container",
+        "argv": ["docker", "restart", "vllm-server"],
+        "approval_reason": "approved live-mutation: docker restart vllm-server",
+    },
+    "restart open-webui": {
+        "description": "Restart the open-webui Docker container",
+        "argv": ["docker", "restart", "open-webui"],
+        "approval_reason": "approved live-mutation: docker restart open-webui",
+    },
+    "restart webui": {  # alias
+        "description": "Restart the open-webui Docker container",
+        "argv": ["docker", "restart", "open-webui"],
+        "approval_reason": "approved live-mutation: docker restart open-webui",
+    },
+}
+
+# Mutations that are explicitly out of scope today. Refuse with a clear pointer
+# so the user is not surprised; do not queue them.
+LIVE_DEFERRED_MUTATIONS: dict[str, str] = {
+    "restart ollama": (
+        "ollama runs as a systemd service and restart needs sudo. Deferred until "
+        "a NOPASSWD sudoers entry for `systemctl restart ollama` is documented "
+        "in docs/runbooks/live-mutations.md and installed on the node."
+    ),
+}
+
+
+def _live_op_key(arg: str) -> str:
+    """Normalize /live op argument: lowercase, collapse internal whitespace."""
+    return re.sub(r"\s+", " ", (arg or "").strip().lower())
+
+
+def _live_argv_for_op(config: Config, local_argv: list[str]) -> tuple[list[str], str]:
+    """Wrap argv for SSH if `live_ssh` is set; otherwise return local argv."""
+    if config.live_ssh:
+        remote = " ".join(shlex.quote(part) for part in local_argv)
+        return ["ssh", "-o", "BatchMode=yes", config.live_ssh, remote], "ssh:" + config.live_ssh
+    return list(local_argv), "local"
+
+
+def _run_live_argv(
+    config: Config,
+    label: str,
+    target: str,
+    argv: list[str],
+) -> dict[str, Any]:
+    """Execute argv (already SSH-wrapped if needed) with timeout + capture."""
+    display = " ".join(argv) if target.startswith("ssh:") else _format_argv(argv)
+    resolved = shutil.which(argv[0])
+    if not resolved:
+        return {
+            "check": label,
+            "target": target,
+            "command": display,
+            "exit_code": 127,
+            "executable": "",
+            "output": f"executable not found: {argv[0]}",
+        }
+    run_argv = [resolved, *argv[1:]]
+    try:
+        result = subprocess.run(
+            run_argv,
+            cwd=str(pathlib.Path.cwd() if config.live_ssh else config.workspace),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=config.cmd_timeout,
+            check=False,
+        )
+        return {
+            "check": label,
+            "target": target,
+            "command": display,
+            "exit_code": result.returncode,
+            "executable": resolved,
+            "output": result.stdout.strip(),
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "check": label,
+            "target": target,
+            "command": display,
+            "exit_code": 124,
+            "executable": resolved,
+            "output": f"timed out after {config.cmd_timeout}s",
+        }
+    except Exception as exc:
+        return {
+            "check": label,
+            "target": target,
+            "command": display,
+            "exit_code": "error",
+            "executable": resolved,
+            "output": str(exc),
+        }
+
+
+def run_live_op(config: Config, key: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Run a /live diag or mutation op (already validated against an allowlist)."""
+    argv, target = _live_argv_for_op(config, list(spec["argv"]))
+    return _run_live_argv(config, key, target, argv)
+
+
 def parse_live_arg(arg: str) -> tuple[list[str], str]:
     raw = (arg or "").strip()
     if not raw:
@@ -1893,13 +2061,185 @@ def run_live_checks(config: Config, checks: list[str], extra: str = "") -> list[
     return results
 
 
+def _live_diag_block(key: str, result: dict[str, Any]) -> str:
+    """Format a single LIVE_DIAG result the same way live_context_block does."""
+    output = str(result.get("output") or "")
+    truncated = False
+    if len(output) > MAX_CMD_OUTPUT_CHARS:
+        output = output[:MAX_CMD_OUTPUT_CHARS] + "\n...[truncated for nodechat live output cap]"
+        truncated = True
+    lines = [
+        "LIVE_NODE_STATUS",
+        f"timestamp: {utc_now()}",
+        "",
+        f"check: {key}",
+        f"target: {result.get('target', '')}",
+        f"command: {result.get('command', '')}",
+        f"exit_code: {result.get('exit_code', '')}",
+        f"truncated: {str(truncated).lower()}",
+    ]
+    if result.get("executable"):
+        lines.append(f"executable: {result.get('executable')}")
+    lines.extend(["", output or "(no output)"])
+    return "\n".join(lines).strip()
+
+
+def _handle_live_deferred_mutation(
+    config: Config,
+    session: dict[str, Any],
+    key: str,
+    message: str,
+) -> None:
+    """Refuse a known-deferred mutation with a clear pointer; audit the refusal."""
+    block = "\n".join(
+        [
+            "LIVE_MUTATION_REFUSED",
+            f"timestamp: {utc_now()}",
+            f"op: {key}",
+            f"target: {config.live_ssh or 'local'}",
+            f"reason: {message}",
+        ]
+    ).strip()
+    add_context(
+        session,
+        f"/live {key}",
+        context_block("live_mutation_refused", key, block),
+        source="manual-live-refused",
+        provenance={
+            "command": "/live",
+            "op": key,
+            "target": config.live_ssh or "local",
+            "status": "refused",
+            "reason": message,
+        },
+    )
+    audit_event(
+        config,
+        session,
+        "live_mutation_refused",
+        status="refused",
+        op=key,
+        target=config.live_ssh or "local",
+        reason=message,
+    )
+    print(block)
+    print()
+    print(f"live mutation refused: {key}")
+
+
+def _handle_live_diag(
+    config: Config,
+    session: dict[str, Any],
+    key: str,
+    spec: dict[str, Any],
+) -> None:
+    """Run a read-only diagnostic op immediately (no approval)."""
+    result = run_live_op(config, key, spec)
+    block = _live_diag_block(key, result)
+    add_context(
+        session,
+        f"/live {key}",
+        context_block("live_status", key, block),
+        source="manual-live",
+        provenance={
+            "command": "/live",
+            "op": key,
+            "kind": "diag",
+            "target": result.get("target", ""),
+            "exit_code": result.get("exit_code", ""),
+            "executable": result.get("executable", ""),
+            "chars": len(block),
+        },
+    )
+    audit_event(
+        config,
+        session,
+        "live_diag_executed",
+        status="ok",
+        op=key,
+        target=result.get("target", ""),
+        exit_code=result.get("exit_code", ""),
+        executable=result.get("executable", ""),
+        **output_digest(block),
+    )
+    print(block)
+    print()
+    print(f"live context added: {key}")
+
+
+def _handle_live_mutation_queue(
+    config: Config,
+    session: dict[str, Any],
+    key: str,
+    spec: dict[str, Any],
+) -> None:
+    """Queue a mutation for /approve. Does not execute."""
+    command_str = "/live " + key
+    row = queue_approval(
+        session,
+        command=command_str,
+        class_name="live-mutation",
+        reason=str(spec.get("description", key)),
+        approval_reason=str(spec.get("approval_reason", f"approved live-mutation: {key}")),
+    )
+    audit_event(
+        config,
+        session,
+        "live_mutation_queued",
+        status="pending",
+        approval_id=row.get("id", ""),
+        op=key,
+        target=config.live_ssh or "local",
+        argv=list(spec["argv"]),
+    )
+    cwd = workspace_path(config, session)
+    block = approval_required_block(row, cwd)
+    add_context(
+        session,
+        command_str,
+        block,
+        source="manual-live-mutation",
+        provenance={
+            "command": "/live",
+            "op": key,
+            "kind": "mutation",
+            "target": config.live_ssh or "local",
+            "status": "approval_queued",
+            "approval_id": row.get("id", ""),
+        },
+    )
+    print(block)
+    print()
+    print(f"approval queued: {row.get('id')} (live mutation)")
+
+
 def command_live(config: Config, session: dict[str, Any], arg: str) -> None:
+    # Phase 1: extended /live ops (diag + mutation + deferred). These keys are
+    # multi-word and exact-string (after lowercase + whitespace collapse), so
+    # they're matched before the comma/space-split fixed-check parsing path.
+    key = _live_op_key(arg)
+    if key in LIVE_DEFERRED_MUTATIONS:
+        _handle_live_deferred_mutation(config, session, key, LIVE_DEFERRED_MUTATIONS[key])
+        return
+    if key in LIVE_MUTATION_OPS:
+        _handle_live_mutation_queue(config, session, key, LIVE_MUTATION_OPS[key])
+        return
+    if key in LIVE_DIAG_OPS:
+        _handle_live_diag(config, session, key, LIVE_DIAG_OPS[key])
+        return
+
+    # Phase 2: existing fixed-check flow (health/gpu/power/docker/vllm/ollama/
+    # storage/bmc/ups/smart and comma/space-separated combos).
     raw_names, extra = parse_live_arg(arg)
     checks = expand_live_checks(raw_names)
     invalid = [name for name in checks if name != "smart" and name not in LIVE_CHECKS]
     if invalid:
         print(f"unknown live check(s): {', '.join(invalid)}")
-        print("usage: /live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]")
+        print(
+            "usage: /live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|"
+            "smart /dev/<device>|ps|logs <vllm|open-webui|ollama>|"
+            "journal ollama|inspect <vllm|open-webui>|restart <vllm-server|open-webui>]"
+        )
         return
     results = run_live_checks(config, checks, extra)
     block = live_context_block(results)
@@ -3208,6 +3548,91 @@ def command_reject(config: Config, session: dict[str, Any], arg: str) -> None:
     print(f"rejected approval {row.get('id')}: {row.get('command')}")
 
 
+def _approve_live_mutation(config: Config, session: dict[str, Any], row: dict[str, Any]) -> None:
+    """Execute a queued live-mutation approval through the live runner."""
+    command = str(row.get("command") or "")
+    op_key = command[len("/live "):].strip().lower() if command.startswith("/live ") else ""
+    spec = LIVE_MUTATION_OPS.get(op_key)
+    if not spec:
+        print(f"approval {row.get('id')} no longer matches a known live mutation")
+        return
+    approval_reason = str(row.get("approval_reason") or spec.get("approval_reason", f"approved live-mutation: {op_key}"))
+    result = run_live_op(config, op_key, spec)
+    exit_code = result.get("exit_code", "")
+    output = str(result.get("output") or "")
+    executable = str(result.get("executable") or "")
+    target = str(result.get("target") or (config.live_ssh or "local"))
+    cwd = workspace_path(config, session)
+
+    command_ran = isinstance(exit_code, int)
+    row["status"] = "executed" if command_ran else "blocked"
+    row["executed_at"] = utc_now()
+    row["exit_code"] = exit_code
+    row["executable"] = executable
+    row["output"] = output[:MAX_CMD_OUTPUT_CHARS]
+    row["approval_reason"] = approval_reason
+    row["target"] = target
+    event_type = "live_mutation_executed" if command_ran else "live_mutation_blocked"
+
+    block = command_output_block(
+        command=command,
+        cwd=cwd,
+        class_name="live-mutation",
+        exit_code=exit_code,
+        output=output,
+        reason=approval_reason,
+        executable=executable,
+        approval_id=str(row.get("id", "")),
+    )
+    record_command(
+        session,
+        command,
+        "live-mutation",
+        exit_code,
+        output,
+        approval_reason,
+        executable,
+        str(row.get("id", "")),
+    )
+    audit_event(
+        config,
+        session,
+        event_type,
+        approval_id=row.get("id", ""),
+        op=op_key,
+        argv=list(spec["argv"]),
+        target=target,
+        exit_code=exit_code,
+        executable=executable,
+        approval_scope=approval_reason,
+        status=row.get("status", ""),
+        **output_digest(output),
+    )
+    add_context(
+        session,
+        f"/approve {row.get('id', '')}",
+        block,
+        source="manual-approve",
+        provenance={
+            "command": "/approve",
+            "approval_id": row.get("id", ""),
+            "subcommand": command,
+            "class": "live-mutation",
+            "op": op_key,
+            "target": target,
+            "status": row.get("status", ""),
+            "exit_code": exit_code,
+            "executable": executable,
+        },
+    )
+    print(block)
+    print()
+    if command_ran:
+        print(f"approved live mutation executed: {row.get('id')}")
+    else:
+        print(f"approved live mutation blocked: {row.get('id')}")
+
+
 def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
     index, row = select_approval(session, arg)
     if row is None:
@@ -3215,6 +3640,10 @@ def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
         return
     if row.get("status") != "pending":
         print(f"approval {row.get('id')} is already {row.get('status')}")
+        return
+
+    if str(row.get("class") or "") == "live-mutation":
+        _approve_live_mutation(config, session, row)
         return
 
     command = str(row.get("command") or "")
@@ -3336,6 +3765,9 @@ def print_help() -> None:
               /web-fetch <url>      add fetched web page text context
               /web-open <url>       alias for /web-fetch
               /live [check]         add read-only live node status context
+                                    fixed checks: health|gpu|power|docker|vllm|ollama|storage|bmc|ups
+                                    diag ops: ps|logs <vllm|open-webui|ollama>|journal ollama|inspect <vllm|open-webui>
+                                    mutations (queue for /approve): restart vllm-server|restart open-webui
               /propose-edit <path> :: <instruction>
                                     generate and store a patch proposal only
               /diff [all]           show latest or all stored patch proposals

@@ -89,6 +89,11 @@ Inside `nodechat`:
 /web-fetch <url>
 /web-open <url>
 /live [all|health|gpu|power|docker|vllm|ollama|storage|bmc|ups|smart /dev/<device>]
+/live ps
+/live logs <vllm|open-webui|ollama>
+/live journal ollama
+/live inspect <vllm|open-webui>
+/live restart <vllm-server|open-webui>      (queues for /approve)
 /propose-edit <path> :: <instruction>
 /diff [all]
 /apply [n|latest] [--check|--confirm]
@@ -236,7 +241,28 @@ Live-node context auto-routes for clear Nodehome status prompts and can also be 
 /live-mode off
 ```
 
-Default `/live` runs the fixed `health` check. `/live all` currently expands to health, GPU, power, Docker, vLLM, Ollama, and storage checks. These commands are Observe-tier status reads only. They do not restart services, change power caps, write configs, or install packages.
+Default `/live` runs the fixed `health` check. `/live all` currently expands to health, GPU, power, Docker, vLLM, Ollama, and storage checks.
+
+Beyond the fixed checks, `/live` also exposes a small allowlisted surface of read-only diagnostics and approval-gated mutations (full reference: [`live-mutations.md`](live-mutations.md)):
+
+```text
+# Observe tier -- run immediately
+/live ps                      # docker ps -a
+/live logs vllm               # docker logs --tail 200 vllm-server
+/live logs open-webui         # docker logs --tail 200 open-webui
+/live logs ollama             # alias of /live journal ollama
+/live journal ollama          # journalctl -u ollama --no-pager -n 200
+/live inspect vllm            # docker inspect vllm-server
+/live inspect open-webui      # docker inspect open-webui
+
+# Mutate tier -- queue for /approve
+/live restart vllm-server     # docker restart vllm-server  (queued)
+/live restart open-webui      # docker restart open-webui   (queued)
+```
+
+`/live restart …` does not execute. It queues an approval row (class `live-mutation`) and prints an `APPROVAL_REQUIRED` block. The restart only runs after `/approve <id>`. Audit trail records the queued argv, the executed argv, exit code, executable provenance, and target (`local` or `ssh:user@host`) on separate `live_mutation_queued` and `live_mutation_executed` events.
+
+`/live restart ollama` is currently refused with a pointer to the sudoers entry needed to enable it (see the runbook). Hard guardrails: no arbitrary container names, no arbitrary journalctl units, no `--follow`, no shell composition, no restart without `/approve`.
 
 By default, live checks run from the current machine. From Windows, point Nodechat at the homelab with:
 
