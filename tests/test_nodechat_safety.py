@@ -928,5 +928,117 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(session["context_blocks"], [])
 
 
+# ---------------------------------------------------------------------------
+# Routing corpus regression suite (Phase A of the auto-routing recall pass).
+#
+# Phase A ships measurement infrastructure with no behavior change. Floors are
+# pinned to the measured Phase A baseline so the suite is a regression ratchet
+# (no router can drop below baseline). Phase B will widen heuristics router by
+# router and ratchet floors upward.
+#
+# Phase B targets (precision 0.95, recall 0.95 across all routers; zero
+# guardrail failures) are documented but not enforced in Phase A.
+# ---------------------------------------------------------------------------
+
+ROUTING_CORPUS_PATH = ROOT / "tests" / "routing_corpus.py"
+_RC_SPEC = importlib.util.spec_from_file_location("routing_corpus", ROUTING_CORPUS_PATH)
+routing_corpus = importlib.util.module_from_spec(_RC_SPEC)
+assert _RC_SPEC and _RC_SPEC.loader
+sys.modules["routing_corpus"] = routing_corpus
+_RC_SPEC.loader.exec_module(routing_corpus)
+
+
+class RoutingCorpusTests(unittest.TestCase):
+    """Phase A regression ratchet over the labeled routing corpus."""
+
+    # Precision/recall floors pinned at Phase A baseline (measured 2026-05-15
+    # against the corpus in tests/routing_corpus.py). Rounded down to 0.01 so
+    # tiny float noise doesn't cause flaky failures. Phase B will raise these.
+    PRECISION_FLOORS = {
+        "history": 0.81,
+        "repo":    1.00,
+        "web":     0.82,
+        "live":    0.78,
+    }
+    RECALL_FLOORS = {
+        "history": 0.81,
+        "repo":    1.00,
+        "web":     0.93,
+        "live":    0.68,
+    }
+    PHASE_B_PRECISION_TARGET = 0.95
+    PHASE_B_RECALL_TARGET = 0.95
+
+    # Guardrail failures recorded at Phase A baseline. Each tuple is
+    # (case_id, router) -- a known FP/FN that Phase B will fix. Any guardrail
+    # failure NOT in this set is a regression; any tuple that disappears from
+    # this set is a Phase B win and should be removed from the list.
+    PHASE_B_GUARDRAIL_TARGETS = {
+        ("g006", "live"),    # local-status: extra 'health' added beside vllm
+        ("g007", "live"),    # 'box' is not in LIVE_OBJECT_RE; no docker fallback
+        ("g008", "web"),     # "the latest model we trained" routes web on 'model'+'latest'
+        ("g009", "history"), # "history of the mongol empire" hits history pattern
+        ("g010", "history"), # "remind me to call mom tomorrow" hits 'remind me'
+        ("g011", "history"), # "previously the romans..." hits 'previously'
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config, cls.session = routing_corpus.make_corpus_config_and_session()
+        cls.matrix = routing_corpus.evaluate(cls.config, cls.session)
+
+    def test_precision_floor_per_router(self):
+        for router, floor in self.PRECISION_FLOORS.items():
+            with self.subTest(router=router):
+                p = self.matrix["metrics"][router]["precision"]
+                fps = self.matrix["fps"][router]
+                msg = (
+                    f"{router} precision {p:.3f} below Phase A floor {floor:.2f}. "
+                    f"FPs ({len(fps)}):\n"
+                    + "\n".join(f"  {cid} {prompt!r} got={act!r} exp={exp!r}"
+                                for cid, prompt, act, exp in fps)
+                )
+                self.assertGreaterEqual(p, floor, msg=msg)
+
+    def test_recall_floor_per_router(self):
+        for router, floor in self.RECALL_FLOORS.items():
+            with self.subTest(router=router):
+                r = self.matrix["metrics"][router]["recall"]
+                fns = self.matrix["fns"][router]
+                msg = (
+                    f"{router} recall {r:.3f} below Phase A floor {floor:.2f}. "
+                    f"FNs ({len(fns)}):\n"
+                    + "\n".join(f"  {cid} {prompt!r} got={act!r} exp={exp!r}"
+                                for cid, prompt, act, exp in fns)
+                )
+                self.assertGreaterEqual(r, floor, msg=msg)
+
+    def test_no_new_guardrail_regressions(self):
+        observed = {(cid, router) for cid, router, *_ in self.matrix["guardrail_failures"]}
+        new = observed - self.PHASE_B_GUARDRAIL_TARGETS
+        details = {
+            (cid, router): (prompt, act, exp)
+            for cid, router, prompt, act, exp in self.matrix["guardrail_failures"]
+        }
+        msg = "NEW guardrail regressions (not in PHASE_B_GUARDRAIL_TARGETS):\n" + "\n".join(
+            f"  {cid} [{router}] {details[(cid, router)][0]!r} "
+            f"got={details[(cid, router)][1]!r} exp={details[(cid, router)][2]!r}"
+            for cid, router in sorted(new)
+        )
+        self.assertEqual(set(), new, msg=msg)
+
+    def test_phase_b_targets_still_failing_or_promote(self):
+        """Inverse ratchet: if a Phase B target now passes, prompt the operator
+        to remove it from PHASE_B_GUARDRAIL_TARGETS so the regression set shrinks."""
+        observed = {(cid, router) for cid, router, *_ in self.matrix["guardrail_failures"]}
+        promoted = self.PHASE_B_GUARDRAIL_TARGETS - observed
+        msg = (
+            "Phase B guardrails now passing -- remove from "
+            "RoutingCorpusTests.PHASE_B_GUARDRAIL_TARGETS:\n"
+            + "\n".join(f"  {cid} [{router}]" for cid, router in sorted(promoted))
+        )
+        self.assertEqual(set(), promoted, msg=msg)
+
+
 if __name__ == "__main__":
     unittest.main()
