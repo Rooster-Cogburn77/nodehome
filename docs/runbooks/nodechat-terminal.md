@@ -228,9 +228,9 @@ Rules:
 - `/apply --confirm` applies the latest proposal after validation and writes a backup under `~/.nodehome/nodechat/backups/`.
 - `/apply <n> --confirm` applies a specific proposal by its session index.
 
-## Read-Only Command Tools
+## Command Tools
 
-Phase 5A implements read-only command output capture only:
+Phase 5A implements read-only command output capture plus a narrow approval queue for selected Git network/update commands:
 
 ```text
 /cmd git status --short --branch
@@ -238,6 +238,12 @@ Phase 5A implements read-only command output capture only:
 /cmd rg Nodechat docs
 /cmd dir scripts
 /cmd type docs\runbooks\nodechat-terminal.md
+/cmd git fetch
+/cmd git pull --ff-only
+/cmd git push
+/approvals
+/approve a1
+/reject a1
 ```
 
 Output is injected as:
@@ -258,9 +264,12 @@ executable: C:\Program Files\Git\cmd\git.exe
 Rules:
 
 - Only allowlisted read-only commands run immediately.
+- Selected Git network/update commands queue for `/approve`: `git fetch`, `git fetch origin`, `git fetch --all`, `git fetch --prune`, `git fetch --prune origin`, `git pull --ff-only`, and `git push`.
+- `/approve <id>` reclassifies the queued command before execution and records the resulting command output with `approval_id: ...`.
+- `git pull --ff-only` requires a clean working tree before execution.
 - Refused commands are still logged as `COMMAND_OUTPUT` with `exit_code: refused`.
 - Allowed examples: read-only `git` subcommands, `rg` without risky traversal/preprocessor flags, `dir`, `ls`, `type`, `cat`, `pwd`, and version checks.
-- Refused examples: `git pull`, `git push`, `git add`, `git commit`, package-manager commands, network commands, destructive deletes, privileged service commands, and unknown commands.
+- Refused examples: `git add`, `git commit`, package-manager commands, arbitrary network commands, destructive deletes, privileged service commands, and unknown commands.
 - `rg --pre`, `rg --hidden`, `rg --no-ignore`, and `git --output` / `git --ext-diff` style paths are refused in this phase.
 - This is not arbitrary shell. Commands are parsed and run without shell metacharacter expansion.
 - External executables are resolved through `PATH` and recorded in the output block as `executable: ...`.
@@ -279,6 +288,8 @@ Current coverage:
 - Workspace confinement blocks outside paths.
 - `/read` refuses outside-workspace files.
 - `/cmd` classifier refuses outside paths, risky `rg` flags, and network commands.
+- `/cmd` queues selected Git network/update commands instead of executing them.
+- `/approve` executes a queued command once and records `approval_id`.
 - `/apply` refuses ambiguous repeated hunks.
 - `/apply` still works when repeated hunk context has an exact preferred location.
 - `/cmd` read-only subprocess execution records a resolved executable path.
@@ -382,26 +393,30 @@ Partially implemented command:
 
 ```text
 /cmd <command>
+/approve <id|latest>
+/approvals
+/reject <id|latest>
 ```
 
 Rules:
 
 - No unrestricted shell by default.
 - Classify commands as read-only, write, network, privileged, or destructive.
-- Phase 5A runs read-only allowlisted commands only.
-- Write/network/privileged/destructive commands are refused, not queued.
+- Phase 5A runs read-only allowlisted commands immediately.
+- Selected Git network/update commands queue for explicit `/approve`.
+- Package-manager, privileged, destructive, arbitrary network, and unknown commands are refused, not queued.
 - Never auto-run destructive commands.
 - Keep command output in the session log as structured `COMMAND_OUTPUT`.
 - Record resolved executable provenance for subprocess-backed commands.
 
 ## Safety Boundary
 
-Nodechat currently has explicit read-only file/context tools and explicit web fetch/search tools. It still has no write/edit tools and no arbitrary shell. Future tool support should continue in this order:
+Nodechat currently has explicit file/context tools, explicit web fetch/search tools, approval-gated patch application, read-only command capture, and a narrow command approval queue. It still has no arbitrary shell. Future tool support should continue in this order:
 
 1. Read-only local context commands. Done.
 2. Explicit web search/fetch commands. Done.
 3. Proposed edit/diff commands with no writes. Done.
 4. Gated write/edit commands with explicit approval. Partially done via `/apply`; no freeform `/write`.
-5. Approval-gated shell, never unrestricted by default. Phase 5A read-only `/cmd` done; `/approve` deferred.
+5. Approval-gated shell, never unrestricted by default. Narrow `/approve` is done for selected Git network/update commands only.
 
 The point is to preserve a reliable terminal chat surface while adding agent behavior deliberately.

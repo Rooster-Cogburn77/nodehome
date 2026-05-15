@@ -82,6 +82,69 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertEqual(cls, "network")
             self.assertIn("refused", reason)
 
+    def test_cmd_queues_selected_git_network_command(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_cmd(config, session, "git pull --ff-only")
+
+            text = buf.getvalue()
+            self.assertIn("APPROVAL_REQUIRED", text)
+            self.assertIn("/approve a1", text)
+            approvals = session.get("approvals", [])
+            self.assertEqual(len(approvals), 1)
+            self.assertEqual(approvals[0]["id"], "a1")
+            self.assertEqual(approvals[0]["status"], "pending")
+
+    def test_cmd_refuses_destructive_without_approval_queue(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_cmd(config, session, "del tmp.txt")
+
+            self.assertIn("COMMAND_REFUSED", buf.getvalue())
+            self.assertEqual(session.get("approvals"), [])
+
+    def test_approve_executes_queued_command_once(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_cmd(config, session, "git fetch")
+
+            original = nodechat.run_approved_command
+            try:
+                nodechat.run_approved_command = lambda config, session, parts, approval_reason: (
+                    0,
+                    "fetch ok",
+                    "C:\\Program Files\\Git\\cmd\\git.exe",
+                )
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_approve(config, session, "a1")
+            finally:
+                nodechat.run_approved_command = original
+
+            text = buf.getvalue()
+            self.assertIn("COMMAND_OUTPUT", text)
+            self.assertIn("approval_id: a1", text)
+            self.assertIn("fetch ok", text)
+            self.assertEqual(session["approvals"][0]["status"], "executed")
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_approve(config, session, "a1")
+            self.assertIn("already executed", buf.getvalue())
+
     def test_apply_refuses_ambiguous_repeated_hunks(self):
         original = "alpha\nbeta\nalpha\nbeta\n"
         patch = "\n".join(

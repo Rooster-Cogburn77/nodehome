@@ -43,6 +43,7 @@ MAX_SEARCH_FILE_BYTES = 220000
 MAX_PROPOSE_FILE_CHARS = 30000
 MAX_PROPOSAL_TOKENS = 2400
 MAX_CMD_OUTPUT_CHARS = 20000
+MAX_APPROVALS = 50
 HUNK_RE = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@")
 
 BLOCKED_PATH_PARTS = {
@@ -124,7 +125,7 @@ private history unless a HISTORY_CONTEXT block is present in this conversation.
 
 You only have access to context explicitly injected by slash commands such as
 /history, /read, /tree, /search-files, /git-status, /web-fetch, /web-search,
-and /cmd.
+and /cmd or approved command output from /approve.
 Do not claim broad filesystem, shell, or internet access. If the needed context
 was not injected, say what slash command would retrieve it.
 Patch proposals created by /propose-edit are proposals only. Do not claim they
@@ -192,6 +193,7 @@ def make_session(config: Config) -> dict[str, Any]:
         "system": DEFAULT_SYSTEM_PROMPT,
         "messages": [],
         "context_blocks": [],
+        "approvals": [],
     }
 
 
@@ -434,7 +436,7 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
             f"workspace: {session.get('cwd') or config.workspace}",
-            "tool_access: explicit read-only local context, explicit web fetch/search, and allowlisted read-only /cmd only",
+            "tool_access: explicit read-only local context, explicit web fetch/search, read-only /cmd, and selected /approve command output",
             "no_access: no arbitrary shell, no file writes, no automatic browsing",
         ]
     )
@@ -1377,6 +1379,151 @@ def classify_command(config: Config, session: dict[str, Any], command: str) -> t
     return "unknown", "command is not in the Phase 5A read-only allowlist", parts
 
 
+def approvable_command_reason(class_name: str, parts: list[str]) -> str | None:
+    if not parts:
+        return None
+    exe = parts[0].lower()
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    lowered = [part.lower() for part in parts]
+    if exe != "git":
+        return None
+    if sub == "fetch" and lowered in (
+        ["git", "fetch"],
+        ["git", "fetch", "origin"],
+        ["git", "fetch", "--all"],
+        ["git", "fetch", "--prune"],
+        ["git", "fetch", "--prune", "origin"],
+    ):
+        return "approved git fetch/fetch-prune network update"
+    if sub == "pull" and lowered == ["git", "pull", "--ff-only"]:
+        return "approved fast-forward-only git pull"
+    if sub == "push" and lowered == ["git", "push"]:
+        return "approved default-upstream git push"
+    return None
+
+
+def approval_display_reason(reason: str) -> str:
+    return reason.replace(" refused in Phase 5A", " requires approval")
+
+
+def next_approval_id(session: dict[str, Any]) -> str:
+    max_seen = 0
+    for row in session.get("approvals", []):
+        value = str(row.get("id", ""))
+        if value.startswith("a") and value[1:].isdigit():
+            max_seen = max(max_seen, int(value[1:]))
+    return f"a{max_seen + 1}"
+
+
+def queue_approval(
+    session: dict[str, Any],
+    command: str,
+    class_name: str,
+    reason: str,
+    approval_reason: str,
+) -> dict[str, Any]:
+    row = {
+        "id": next_approval_id(session),
+        "created_at": utc_now(),
+        "status": "pending",
+        "command": command,
+        "class": class_name,
+        "reason": reason,
+        "approval_reason": approval_reason,
+    }
+    approvals = session.setdefault("approvals", [])
+    approvals.append(row)
+    if len(approvals) > MAX_APPROVALS:
+        del approvals[:-MAX_APPROVALS]
+    return row
+
+
+def approval_required_block(row: dict[str, Any], cwd: pathlib.Path) -> str:
+    return "\n".join(
+        [
+            "APPROVAL_REQUIRED",
+            f"timestamp: {utc_now()}",
+            f"id: {row.get('id', '')}",
+            f"cwd: {cwd}",
+            f"class: {row.get('class', '')}",
+            f"command: {row.get('command', '')}",
+            f"reason: {row.get('reason', '')}",
+            f"approval_scope: {row.get('approval_reason', '')}",
+            "",
+            f"Run /approve {row.get('id', '')} to execute, or /reject {row.get('id', '')} to cancel.",
+        ]
+    ).strip()
+
+
+def select_approval(session: dict[str, Any], selector: str) -> tuple[int, dict[str, Any] | None]:
+    approvals = session.get("approvals", [])
+    if not approvals:
+        return -1, None
+    value = (selector or "latest").strip().lower()
+    if value == "latest":
+        for idx in range(len(approvals) - 1, -1, -1):
+            if approvals[idx].get("status") == "pending":
+                return idx, approvals[idx]
+        return len(approvals) - 1, approvals[-1]
+    if value.isdigit():
+        index = int(value) - 1
+        if 0 <= index < len(approvals):
+            return index, approvals[index]
+    for idx, row in enumerate(approvals):
+        if str(row.get("id", "")).lower() == value:
+            return idx, row
+    return -1, None
+
+
+def git_worktree_clean(config: Config, session: dict[str, Any]) -> tuple[bool, str]:
+    git_exe = shutil.which("git")
+    if not git_exe:
+        return False, "git executable not found"
+    result = subprocess.run(
+        [git_exe, "status", "--porcelain"],
+        cwd=str(workspace_path(config, session)),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=config.cmd_timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, result.stdout.strip() or f"git status exited {result.returncode}"
+    if result.stdout.strip():
+        return False, "working tree is not clean; refusing approved git pull"
+    return True, ""
+
+
+def run_approved_command(
+    config: Config,
+    session: dict[str, Any],
+    parts: list[str],
+    approval_reason: str,
+) -> tuple[int, str, str]:
+    exe = parts[0].lower() if parts else ""
+    sub = parts[1].lower() if len(parts) > 1 else ""
+    if exe == "git" and sub == "pull":
+        clean, reason = git_worktree_clean(config, session)
+        if not clean:
+            return 1, reason, shutil.which("git") or ""
+
+    resolved_exe = shutil.which(parts[0])
+    if not resolved_exe:
+        return 127, f"executable not found: {parts[0]}", ""
+    argv = [resolved_exe, *parts[1:]]
+    result = subprocess.run(
+        argv,
+        cwd=str(workspace_path(config, session)),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=config.cmd_timeout,
+        check=False,
+    )
+    return result.returncode, result.stdout.strip(), resolved_exe
+
+
 def internal_dir(config: Config, session: dict[str, Any], parts: list[str]) -> tuple[int, str]:
     raw = parts[1] if len(parts) > 1 else "."
     path = resolve_workspace_path(config, session, raw)
@@ -1456,6 +1603,7 @@ def command_output_block(
     output: str,
     reason: str = "",
     executable: str = "",
+    approval_id: str = "",
 ) -> str:
     text = output.strip()
     truncated = False
@@ -1473,6 +1621,8 @@ def command_output_block(
     ]
     if executable:
         lines.append(f"executable: {executable}")
+    if approval_id:
+        lines.append(f"approval_id: {approval_id}")
     if reason:
         lines.append(f"reason: {reason}")
     lines.extend(["", text or "(no output)"])
@@ -1487,6 +1637,7 @@ def record_command(
     output: str,
     reason: str = "",
     executable: str = "",
+    approval_id: str = "",
 ) -> None:
     session.setdefault("commands", []).append(
         {
@@ -1496,6 +1647,7 @@ def record_command(
             "exit_code": exit_code,
             "reason": reason,
             "executable": executable,
+            "approval_id": approval_id,
             "output": output[:MAX_CMD_OUTPUT_CHARS],
         }
     )
@@ -1509,6 +1661,15 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
     class_name, reason, parts = classify_command(config, session, command)
     cwd = workspace_path(config, session)
     if class_name != "read-only":
+        approval_reason = approvable_command_reason(class_name, parts)
+        if approval_reason:
+            row = queue_approval(session, command, class_name, approval_display_reason(reason), approval_reason)
+            block = approval_required_block(row, cwd)
+            add_context(session, f"/cmd {command}", block)
+            print(block)
+            print()
+            print(f"approval queued: {row['id']}")
+            return
         output = f"COMMAND_REFUSED\nclass: {class_name}\nreason: {reason}\ncommand: {command}"
         block = command_output_block(
             command=command,
@@ -1548,6 +1709,96 @@ def command_cmd(config: Config, session: dict[str, Any], arg: str) -> None:
     print(block)
     print()
     print("command output context added")
+
+
+def command_approvals(session: dict[str, Any]) -> None:
+    approvals = session.get("approvals", [])
+    if not approvals:
+        print("No approval requests in this session.")
+        return
+    for idx, row in enumerate(approvals, 1):
+        print(
+            "{idx}. {id} | {status} | {class_name} | {command}".format(
+                idx=idx,
+                id=row.get("id", ""),
+                status=row.get("status", ""),
+                class_name=row.get("class", ""),
+                command=row.get("command", ""),
+            )
+        )
+        if row.get("approval_reason"):
+            print(f"   scope: {row.get('approval_reason')}")
+        if row.get("exit_code") is not None:
+            print(f"   exit_code: {row.get('exit_code')}")
+
+
+def command_reject(session: dict[str, Any], arg: str) -> None:
+    index, row = select_approval(session, arg)
+    if row is None:
+        print("No matching approval request.")
+        return
+    if row.get("status") != "pending":
+        print(f"approval {row.get('id')} is already {row.get('status')}")
+        return
+    row["status"] = "rejected"
+    row["rejected_at"] = utc_now()
+    print(f"rejected approval {row.get('id')}: {row.get('command')}")
+
+
+def command_approve(config: Config, session: dict[str, Any], arg: str) -> None:
+    index, row = select_approval(session, arg)
+    if row is None:
+        print("No matching approval request.")
+        return
+    if row.get("status") != "pending":
+        print(f"approval {row.get('id')} is already {row.get('status')}")
+        return
+
+    command = str(row.get("command") or "")
+    class_name, reason, parts = classify_command(config, session, command)
+    approval_reason = approvable_command_reason(class_name, parts)
+    if not approval_reason:
+        print(f"approval {row.get('id')} no longer matches the approved command policy")
+        return
+
+    try:
+        exit_code, output, executable = run_approved_command(config, session, parts, approval_reason)
+    except subprocess.TimeoutExpired:
+        exit_code, output, executable = 124, f"command timed out after {config.cmd_timeout}s", ""
+    except Exception as exc:
+        exit_code, output, executable = 1, str(exc), ""
+
+    row["status"] = "executed"
+    row["executed_at"] = utc_now()
+    row["exit_code"] = exit_code
+    row["executable"] = executable
+    row["output"] = output[:MAX_CMD_OUTPUT_CHARS]
+    row["approval_reason"] = approval_reason
+
+    block = command_output_block(
+        command=command,
+        cwd=workspace_path(config, session),
+        class_name=class_name,
+        exit_code=exit_code,
+        output=output,
+        reason=approval_reason,
+        executable=executable,
+        approval_id=str(row.get("id", "")),
+    )
+    record_command(
+        session,
+        command,
+        class_name,
+        exit_code,
+        output,
+        approval_reason,
+        executable,
+        str(row.get("id", "")),
+    )
+    add_context(session, f"/approve {row.get('id', '')}", block)
+    print(block)
+    print()
+    print(f"approved command executed: {row.get('id')}")
 
 
 def command_diff(session: dict[str, Any], arg: str) -> None:
@@ -1596,6 +1847,9 @@ def print_help() -> None:
               /apply [n|latest] [--check|--confirm]
                                     validate or apply a stored proposal with backup
               /cmd <command>        run allowlisted read-only command and inject output
+              /approvals            list queued command approval requests
+              /approve <id|latest>  execute a queued approved-scope command
+              /reject <id|latest>   reject a queued command approval request
               /context              show active injected context blocks
               /clear-context        remove injected context blocks
               /status               check vLLM models and AI History health
@@ -1606,7 +1860,8 @@ def print_help() -> None:
               Web tools run only when invoked; search results are leads, not proof.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
-              /cmd Phase 5A allows read-only commands only; writes/network/destructive are refused.
+              /cmd runs read-only commands immediately; selected git network commands queue for /approve.
+              Destructive, privileged, package-manager, and unknown commands are refused.
               Use /history explicitly when you want private project memory.
             """
         ).strip()
@@ -1793,6 +2048,18 @@ def handle_command(
 
     if command == "cmd":
         command_cmd(config, session, arg)
+        return "handled", session, None
+
+    if command == "approvals":
+        command_approvals(session)
+        return "handled", session, None
+
+    if command == "approve":
+        command_approve(config, session, arg)
+        return "handled", session, None
+
+    if command == "reject":
+        command_reject(session, arg)
         return "handled", session, None
 
     if command == "context":
