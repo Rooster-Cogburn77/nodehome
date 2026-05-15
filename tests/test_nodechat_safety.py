@@ -732,12 +732,30 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             nodechat.detect_live_targets("is vLLM running and are GPU temps okay?"),
             ["gpu", "vllm"],
         )
+        # Phase B (live) tightening: when specific checks fire (docker,
+        # storage), the project-context "node" word no longer also adds
+        # health. Health still fires on explicit health words and as the
+        # no-specific-check fallback for stack/nodehome/homelab/the node.
         self.assertEqual(
             nodechat.detect_live_targets("check docker and storage status on the node"),
-            ["health", "docker", "storage"],
+            ["docker", "storage"],
+        )
+        self.assertEqual(
+            nodechat.detect_live_targets("diagnose the homelab stack"),
+            ["health"],
         )
         self.assertEqual(
             nodechat.detect_live_targets("what did we decide about GPU2?"),
+            [],
+        )
+        # Phase B (live) tightening: web-explicit/public-destination prompts
+        # don't fire live even when they mention live objects like vllm.
+        self.assertEqual(
+            nodechat.detect_live_targets("look up qwen2.5 awq vllm benchmarks online"),
+            [],
+        )
+        self.assertEqual(
+            nodechat.detect_live_targets("current ollama version on github"),
             [],
         )
 
@@ -954,35 +972,38 @@ class RoutingCorpusTests(unittest.TestCase):
     # Precision/recall floors pinned at Phase A baseline (measured 2026-05-15
     # against the corpus in tests/routing_corpus.py). Rounded down to 0.01 so
     # tiny float noise doesn't cause flaky failures. Phase B will raise these.
+    # Phase B complete. All four routers measured at 1.00 / 1.00 on the
+    # 100-prompt corpus. Floors pinned at the post-Phase-B baseline; any
+    # regression below 1.00 fails the suite.
     PRECISION_FLOORS = {
         "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
         "web":     1.00,  # Phase B (web)     landed: 0.82 -> 1.00
-        "live":    0.78,
+        "live":    1.00,  # Phase B (live)    landed: 0.78 -> 1.00
     }
     RECALL_FLOORS = {
         "history": 1.00,  # Phase B (history) landed: 0.81 -> 1.00
         "repo":    1.00,
         "web":     1.00,  # Phase B (web)     landed: 0.93 -> 1.00
-        "live":    0.68,
+        "live":    1.00,  # Phase B (live)    landed: 0.68 -> 1.00
     }
     PHASE_B_PRECISION_TARGET = 0.95
     PHASE_B_RECALL_TARGET = 0.95
 
-    # Guardrail failures recorded at Phase A baseline. Each tuple is
-    # (case_id, router) -- a known FP/FN that Phase B will fix. Any guardrail
-    # failure NOT in this set is a regression; any tuple that disappears from
-    # this set is a Phase B win and should be removed from the list.
-    PHASE_B_GUARDRAIL_TARGETS = {
-        ("g006", "live"),    # local-status: extra 'health' added beside vllm
-        ("g007", "live"),    # 'box' is not in LIVE_OBJECT_RE; no docker fallback
-        # Phase B (history) landed -- removed:
-        #   g009 history "history of the mongol empire"
-        #   g010 history "remind me to call mom tomorrow"
-        #   g011 history "previously the romans..."
-        # Phase B (web) landed -- removed:
-        #   g008 web "the latest model we trained"
-    }
+    # Guardrail failures from Phase A are all resolved. Any new guardrail
+    # failure is a regression. The inverse-ratchet test will surface a fixed
+    # guardrail by failing -- which is fine: this set should stay empty until
+    # corpus growth surfaces a new known-bad case.
+    PHASE_B_GUARDRAIL_TARGETS: set[tuple[str, str]] = set()
+    # Phase B (history) landed -- removed:
+    #   g009 history "history of the mongol empire"
+    #   g010 history "remind me to call mom tomorrow"
+    #   g011 history "previously the romans built aqueducts"
+    # Phase B (web) landed -- removed:
+    #   g008 web "the latest model we trained"
+    # Phase B (live) landed -- removed:
+    #   g006 live "current vLLM status on our node" (extra 'health' added)
+    #   g007 live "what's running on the box right now" ('box' missing)
 
     @classmethod
     def setUpClass(cls):

@@ -264,8 +264,27 @@ LIVE_TRIGGER_RE = re.compile(
 LIVE_OBJECT_RE = re.compile(
     r"\b(node|nodehome|homelab|stack|service|gpu|nvidia|docker|container|vllm|ollama|"
     r"open webui|webui|disk|storage|filesystem|df|bmc|ipmi|power cap|power limit|"
-    r"healthcheck|ups)\b",
+    r"healthcheck|ups|box)\b",
     re.I,
+)
+# When a prompt clearly points at a public destination ("on github", "on
+# huggingface", "online") and has no local hint, live should not fire even
+# if it shares an object word with the live router (e.g. "ollama version on
+# github" is a web-search prompt, not a live-status prompt).
+LIVE_PUBLIC_DEST_RE = re.compile(
+    r"\b(github|huggingface|hugging\s*face|amazon|ebay|walmart|best\s*buy|"
+    r"newegg|reddit|stack\s*overflow|hacker\s*news|google|"
+    r"online|on\s+the\s+(?:web|internet))\b",
+    re.I,
+)
+LIVE_LOCAL_HINT_RE = re.compile(
+    r"""\b(
+        our|my|us|ours|local|nodehome|homelab|sovereign
+        |the\ (?:node|box|rack|chassis|stack|build|cluster|server|host|machine)
+        |on\ the\ (?:node|box|server|host|machine)
+        |in\ (?:the|a)\ (?:rack|container|chassis|cabinet)
+    )\b""",
+    re.I | re.VERBOSE,
 )
 SMART_DEVICE_RE = re.compile(r"^/dev/[A-Za-z0-9_.\-/]+$")
 
@@ -872,12 +891,21 @@ def detect_web_targets(prompt: str) -> dict[str, Any] | None:
 
 
 def detect_live_targets(prompt: str) -> list[str]:
-    """Return read-only live checks to auto-run for clear live-status prompts."""
+    """Return read-only live checks to auto-run for clear live-status prompts.
+
+    A prompt with a public destination ("on github", "online") or an explicit
+    web-search signal ("look up", "verify online") and no local hint is treated
+    as a web-routing prompt, not a live-status prompt, even if it shares an
+    object word like "vllm" or "ollama" with the live router.
+    """
     if not prompt or not prompt.strip():
         return []
     text = prompt.strip()
     lowered = text.lower()
     if not LIVE_TRIGGER_RE.search(text) or not LIVE_OBJECT_RE.search(text):
+        return []
+    if (LIVE_PUBLIC_DEST_RE.search(text) or WEB_EXPLICIT_RE.search(text)) and \
+            not LIVE_LOCAL_HINT_RE.search(text):
         return []
 
     checks: list[str] = []
@@ -886,7 +914,8 @@ def detect_live_targets(prompt: str) -> list[str]:
         if name not in checks:
             checks.append(name)
 
-    if re.search(r"\b(health|healthy|healthcheck|stack|nodehome|homelab|node)\b", text, re.I):
+    # Explicit health words always route to a health check.
+    if re.search(r"\b(health|healthy|healthcheck)\b", text, re.I):
         add("health")
     if re.search(r"\b(gpu|nvidia|temperature|temp|temps|power draw|utilization|utilisation|vram)\b", text, re.I):
         add("gpu")
@@ -904,6 +933,14 @@ def detect_live_targets(prompt: str) -> list[str]:
         add("bmc")
     if re.search(r"\b(ups)\b", text, re.I):
         add("ups")
+
+    # Project-context fallback: if no specific check fired, a project-context
+    # token like "stack" / "nodehome" / "homelab" / "the node" stands in for
+    # a "give me a quick health overview" intent. This is the non-explicit
+    # cousin of the explicit health trigger above and intentionally does not
+    # fire when a more specific check has already routed.
+    if not checks and re.search(r"\b(stack|nodehome|homelab|the node)\b", text, re.I):
+        add("health")
 
     if not checks and re.search(r"\b(running|up|down|service|services)\b", text, re.I):
         add("docker")
