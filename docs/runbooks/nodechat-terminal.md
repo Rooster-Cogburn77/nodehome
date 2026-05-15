@@ -1,10 +1,12 @@
 # Nodechat Terminal Client
 
-Status: validated terminal chat client; tool roadmap accepted but not implemented.
+Status: validated terminal chat client with explicit read-only local context tools and explicit web fetch/search tools.
 
 `scripts/nodechat.py` is a small stdlib-only terminal client for talking to the Nodehome local model stack through an OpenAI-compatible endpoint such as vLLM. It is meant to mirror the useful feel of Codex/Claude Code: terminal-first, sessioned, slash-command driven, and project-context aware.
 
-It is not yet a coding agent. It does not execute shell commands, read files, edit files, browse the web, or run tools inside the chat. That boundary is intentional until the approval and sandbox model is designed.
+It is not a write-capable coding agent. It can now inject explicitly requested read-only local context and explicitly requested web context into the chat. It still does not edit files, run arbitrary shell commands, browse automatically, or persist fetched web content unless the user explicitly saves it outside Nodechat.
+
+It can also generate patch proposals with `/propose-edit`, but those proposals are stored only in the Nodechat session. Nodechat does not apply them to disk.
 
 The client injects a small `NODECHAT_RUNTIME` system message on every request so the model can answer identity questions from the actual configured model and endpoint instead of inventing an identity.
 
@@ -70,6 +72,16 @@ Inside `nodechat`:
 /endpoint [url]
 /system [text]
 /history <query>
+/pwd
+/tree [path]
+/read <path>
+/search-files <query> [path]
+/git-status
+/web-search <query>
+/web-fetch <url>
+/web-open <url>
+/propose-edit <path> :: <instruction>
+/diff [all]
 /context
 /clear-context
 /status
@@ -141,6 +153,7 @@ NODECHAT_API_KEY
 NODECHAT_HISTORY_URL
 NODECHAT_HISTORY_TOKEN
 NODECHAT_SESSION_ROOT
+NODECHAT_WORKSPACE
 NODECHAT_TEMPERATURE
 NODECHAT_MAX_TOKENS
 ```
@@ -151,6 +164,58 @@ Windows launcher scripts:
 scripts/windows/nodechat.cmd
 scripts/windows/nodechat-tunnel.cmd
 ```
+
+`scripts/windows/nodechat.cmd` sets the default Nodechat workspace to the repo root (`C:\Users\bmoor\Local_AI`) so `/read`, `/tree`, `/search-files`, and `/git-status` work from the correct project even when the Command Prompt starts in `C:\Users\bmoor`.
+
+## Local Context Tools
+
+These tools add context blocks to the current session. The model sees only the injected output, not the whole filesystem.
+
+```text
+/pwd
+/tree docs
+/read docs\CURRENT_STATE.md
+/search-files gpu2 docs
+/git-status
+```
+
+Rules:
+
+- `/read` is text-only and size-capped.
+- `/tree` is depth/result capped.
+- `/search-files` searches text files only and returns bounded filename/line matches.
+- `/git-status` runs only the fixed read-only `git status --short --branch` command.
+- Secret-ish paths and generated/private stores are refused rather than injected.
+
+## Web Context Tools
+
+Web access is explicit and transient:
+
+```text
+/web-search qwen2.5 awq vllm
+/web-fetch https://example.com
+/web-open https://example.com
+```
+
+`/web-search` uses DuckDuckGo HTML results and stores titles/URLs as leads. Use `/web-fetch` or `/web-open` on a result before treating the source text as evidence.
+
+## Proposed Edit Tools
+
+Nodechat can ask the local model for a diff proposal, but it does not write or apply the result:
+
+```text
+/propose-edit docs\runbooks\nodechat-terminal.md :: add a warning that web search snippets are not proof
+/diff
+/diff all
+```
+
+Rules:
+
+- The syntax requires `::` between the path and the instruction.
+- The command reads one bounded text file and asks the model for a unified diff.
+- The proposal is stored in the current session only.
+- `/diff` prints the latest proposal; `/diff all` prints every proposal stored in that session.
+- Applying a proposal is still manual/outside Nodechat until the later approval-gated write phase exists.
 
 ## Tool Roadmap
 
@@ -171,7 +236,7 @@ SSH tunnel path for private history
 
 ### Phase 1 - Explicit Read-Only Local Context
 
-Planned commands:
+Implemented commands:
 
 ```text
 /read <path>
@@ -188,10 +253,11 @@ Rules:
 - Cap file size and result count.
 - Prefer repo/workspace paths; warn before reading secrets, env files, exports, or private data stores.
 - Do not edit files in this phase.
+- Block common private/generated paths such as `.nodehome`, `.ssh`, `.git`, `node-private`, `chat-exports`, `node_modules`, and likely key/token files.
 
 ### Phase 2 - Explicit Web Tools
 
-Planned commands:
+Implemented commands:
 
 ```text
 /web-search <query>
@@ -210,7 +276,7 @@ Rules:
 
 ### Phase 3 - Proposed Edits Only
 
-Planned commands:
+Implemented commands:
 
 ```text
 /propose-edit <path>
@@ -222,6 +288,7 @@ Rules:
 - Generate patch/diff proposals only.
 - No write to disk.
 - User manually reviews/applies or approves moving to Phase 4 behavior.
+- `/propose-edit` strips outer Markdown code fences from model output before storing the proposal.
 
 ### Phase 4 - Approval-Gated Writes
 
@@ -258,12 +325,12 @@ Rules:
 
 ## Safety Boundary
 
-Nodechat currently has no file, web, shell, or edit tools. Future tool support should be added in this order:
+Nodechat currently has explicit read-only file/context tools and explicit web fetch/search tools. It still has no write/edit tools and no arbitrary shell. Future tool support should continue in this order:
 
-1. Read-only local status commands.
-2. Explicit web search/fetch commands.
-3. Read-only repo inspection commands.
+1. Read-only local context commands. Done.
+2. Explicit web search/fetch commands. Done.
+3. Proposed edit/diff commands with no writes. Done.
 4. Gated write/edit commands with explicit approval.
-5. Never unrestricted shell by default.
+5. Approval-gated shell, never unrestricted by default.
 
-The point is to get a reliable terminal chat surface first, then add agent behavior deliberately.
+The point is to preserve a reliable terminal chat surface while adding agent behavior deliberately.
