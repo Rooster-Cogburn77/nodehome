@@ -104,7 +104,7 @@ These are the next implementation lanes, not future-maybes.
 In rough order. Each lane should land with audit + tier-correct approval; capability without provenance is a regression.
 
 1. **Auto-routing recall pass — corpus growth.** Phase B is complete (all routers 1.00 / 1.00 on the 100-prompt corpus). The next iteration is corpus growth: add prompts surfaced by real Nodechat use that don't currently route the way the user expects. This is now a maintenance loop, not a discrete lane.
-2. **Broader operator approvals — additional ops.** First iteration covers `docker restart` for two services. Next-up additions: `systemctl restart ollama` once the sudoers entry is installed, then narrow `docker compose up -d <service>` for restart-equivalent flows. Each new op follows the same pattern: fixed argv in `LIVE_MUTATION_OPS`, runbook entry, regression test that asserts queue + execute + audit.
+2. **Broader operator approvals — additional ops.** First iteration covers `docker restart` for two services. Next-up addition: `systemctl restart ollama` once the sudoers entry is installed. Narrow `docker compose up -d <service>` should wait until a compose-managed service exists in this repo/host layout. Each new op follows the same pattern: fixed argv in `LIVE_MUTATION_OPS`, runbook entry, regression test that asserts queue + execute + audit.
 3. **Model routing refinement.** Remote profiles are in place. Next refinements are provider usage-accounting when available, live smoke validation with real keys only when intentionally enabled, and explicit local/remote routing policy improvements after real use.
 
 ## What Nodechat Is Not

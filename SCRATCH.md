@@ -20,8 +20,8 @@ Focus: Re-frame Nodechat scope as full agentic terminal environment, land Observ
 - **Tests:** 80/80 passing; routing corpus remains 1.00 / 1.00 across history, repo, web, and live.
 
 ## Current status
-- **Commits on `origin/main`:** through `fc06156` (model auto-routing Phase 2).
-- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`, live-node Observe checks + `/live-mode`, grouped `/evidence`, routing recall Phase A + Phase B (all four routers 1.00 / 1.00), broader operator approvals first iteration (`/live` diag + restart for vllm-server / open-webui), explicit model profiles, model auto-routing Phase 2 with per-turn dispatch + `/model-mode`, and **remote profiles Phase 3 with env gates + per-session enable + estimated cost tracking (working tree, not yet committed).**
+- **Commits on `origin/main`:** through `8c7dbcd` (remote model profiles Phase 3).
+- **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`, live-node Observe checks + `/live-mode`, grouped `/evidence`, routing recall Phase A + Phase B (all four routers 1.00 / 1.00), broader operator approvals first iteration (`/live` diag + restart for vllm-server / open-webui), explicit model profiles, model auto-routing Phase 2 with per-turn dispatch + `/model-mode`, and remote profiles Phase 3 with env gates + per-session enable + estimated cost tracking.
 - **No regressions** in the existing apply/approve/cmd/audit/workspace-confinement surface.
 
 ## Behavior rule (added 2026-05-15 mid-session, hard rule)
@@ -31,7 +31,7 @@ Never suggest ending the session in any form. Banned: "or call the session", "or
 **Nodechat — remaining roadmap per `docs/runbooks/nodechat-scope.md`:**
 1. Auto-routing recall pass — corpus growth maintenance loop. Phase B is complete (all routers 1.00 / 1.00). Future iterations are corpus growth as real-use prompts surface new categories. Not a discrete lane.
 2. Remote-profile refinement — provider usage accounting when available, live smoke with real keys only when intentionally enabled, and explicit local/remote routing policy improvements after real use.
-3. Broader operator approvals — additional ops. First iteration covers `docker restart` for two services. Next: `systemctl restart ollama` once the sudoers entry is installed; narrow `docker compose up -d <service>` for restart-equivalent flows.
+3. Broader operator approvals — additional ops. First iteration covers `docker restart` for two services. Next: `systemctl restart ollama` once the sudoers entry is installed. Narrow `docker compose up -d <service>` should wait until a compose-managed service exists in this repo/host layout.
 
 **Out-of-Nodechat work still open today:**
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
