@@ -19,9 +19,10 @@ Focus: Re-frame Nodechat scope as full agentic terminal environment, land Observ
 - **Model auto-routing (Phase 2) implemented.** `/model-mode auto|manual|fast|strong|deep` controls per-turn dispatch (default `auto`). Auto defaults to `fast`, lifts to `strong` on long prompts (>800 chars), code markers, analysis verbs, history-routing intent, or multi-file repo routing -- only if vLLM is reachable (cached `/models` probe, 60s TTL). `deep` never auto-selected. **Per-turn dispatch only**: session.profile/.model/.base_url stay unchanged unless user runs `/profile` or `/model`. Disclosure shows rationale on lift (`[model: strong <- auto-routed: long prompt; code markers]`) and on fallback (`[model: fast <- strong unavailable: vLLM probe failed (3012ms)]`). New audit event `auto_route_model` fires on lift/fallback. 10 new safety tests, including the no-silent-switch guardrail in manual mode.
 - **Model remote profiles (Phase 3) implemented.** OpenAI and Anthropic profiles are env-gated and session-gated. They appear only when key+model env vars are set, require `/remote-models enable`, and dispatch only when explicitly selected through `/profile <remote>`, `/model <remote>`, or `/model-mode <remote>`. Auto model routing never chooses remote. `/costs` reports per-session estimated remote usage; `model_dispatched` records `remote`, `provider_kind`, estimated input/output tokens, and estimated cost.
 - **Tests:** 82/82 passing; routing corpus remains 1.00 / 1.00 across history, repo, web, and live.
+- **CFD feasibility scoped for later.** This machine can credibly reach "Level 4" CFD for Nodehome-scale rack/chassis airflow and thermal modeling if the work is treated as a validated engineering loop, not a button-click benchmark. Current 16-core EPYC + 128GB ECC + 2TB NVMe is enough for serious moderate CPU CFD. Adding the second 128GB RDIMM set (256GB total, all 8 channels populated) would improve mesh size, transient case headroom, retained timesteps, ParaView/post-processing, and memory bandwidth, but it will not automatically make solves fast. OpenFOAM-class solvers are CPU-first unless a GPU-native solver is deliberately selected; do not count the RTX 3090s as generic CFD acceleration.
 
 ## Current status
-- **Commits on `origin/main`:** through `7c17d48` (Ollama live restart approval queue).
+- **Commits on `origin/main`:** through `a931d7f` (Nodechat live log/journal tail truncation fix).
 - **Nodechat capability lanes done:** scope correction, AI History + repo auto-routing with disclosure / context controls / structured provenance / audit, `/undo-apply` with freshness check + safety backup + Windows CRLF fix, web auto-routing + `/web-mode`, live-node Observe checks + `/live-mode`, grouped `/evidence`, routing recall Phase A + Phase B (all four routers 1.00 / 1.00), broader operator approvals (`/live` diag + restart for vllm-server / open-webui / ollama), explicit model profiles, model auto-routing Phase 2 with per-turn dispatch + `/model-mode`, and remote profiles Phase 3 with env gates + per-session enable + estimated cost tracking.
 - **No regressions** in the existing apply/approve/cmd/audit/workspace-confinement surface.
 
@@ -31,14 +32,16 @@ Never suggest ending the session in any form. Banned: "or call the session", "or
 ## Plan (next)
 **Nodechat — remaining roadmap per `docs/runbooks/nodechat-scope.md`:**
 1. Auto-routing recall pass — corpus growth maintenance loop. Phase B is complete (all routers 1.00 / 1.00). Future iterations are corpus growth as real-use prompts surface new categories. Not a discrete lane.
-2. Remote-profile refinement — provider usage accounting when available, live smoke with real keys only when intentionally enabled, and explicit local/remote routing policy improvements after real use.
-3. Broader operator approvals — additional ops. Current restart allowlist covers `vllm-server`, `open-webui`, and `ollama`. Narrow `docker compose up -d <service>` should wait until a compose-managed service exists in this repo/host layout.
+2. Re-smoke `/live journal ollama` from the homelab Nodechat session to confirm the `a931d7f` tail-preservation fix shows the newest restart entries.
+3. Fix Windows-local live mutation refusal: Nodechat should not queue Linux-only local mutations (`sudo -n /bin/systemctl ...`) from a Windows-local session unless `--live-ssh` targets the homelab.
+4. Add more operator ops only when a real fixed command/path exists in this repo/host layout; no fake compose op without a compose-managed service.
 
 **Out-of-Nodechat work still open today:**
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
 - 12TB drives arriving May 16-20 — SMART-verify before format. sv2deals serial `5PJHV96C`; PayMore packaging photo before opening.
 - BMC/IPMI Phase 1 (password rotation + cert hygiene) — next free security task; factory password is in repo git history.
 - Open WebUI re-pin `:main` → `:v0.9.5`.
+- CFD proof path remains future work: OpenFOAM proof run -> simplified rack/chassis airflow model -> measured probes -> calibrate against idle/load thermal data -> increase mesh/detail. Buy/add the second 128GB RAM set when a sane matching RDIMM opportunity appears or when the proof path shows 128GB is the limiter.
 
 ## Pre-session work (carry-forward from Session 21 evening, still relevant)
 
@@ -73,6 +76,7 @@ Focus carryover: Storage procurement recovery after Walmart canceled Drive #1; r
 - Current priority decision (2026-05-15): GPU 3 proper cable remains the safety unlock; BMC/IPMI Phase 1 (password rotation + cert hygiene) is the next free security task; RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at sane price; the cable-company router should be replaced rather than used as the long-term segmentation foundation.
 - UPS posture revised: current local UPS is acceptable for blips and graceful shutdown at idle/light load. It is not sized for peak multi-GPU ride-through, and the stack should not plan to run sustained inference through an outage on the BX1500M.
 - RAM posture revised: more RAM (4x 32GB DDR4-2400 ECC RDIMM, target Samsung M393A4K40CB1-CRC4Q) is not an emergency capacity gap today, but DDR4 ECC RDIMM has the highest run-away-price risk in the remaining upgrade list.
+- CFD posture added: RAM matters more if rack/chassis CFD becomes real, but the first blockers are geometry cleanup, fan/heat assumptions, boundary conditions, instrumentation, and mesh-convergence validation. GPUs are not assumed to accelerate the first OpenFOAM-class path.
 - Network segmentation posture: important before dedicated IPMI LAN patch or broader service exposure, but execute as phases: Phase 1 credentials/cert first, then replace the router/gateway path. Preferred target stack: ISP box in bridge/modem mode -> Ubiquiti Cloud Gateway Ultra -> UniFi Switch Lite 8 PoE -> U7 Lite AP. Cloud Gateway Max only if >1Gbps / 2.5GbE headroom becomes a real requirement.
 - UPS upgrade remains a real reliability upgrade (used SMT2200, ~$200-350), but it no longer outranks a sane matching RAM opportunity.
 - Tier 4 (deferred until specific trigger fires): storage expansion, NVMe expansion via Hyper M.2 card, 10GbE networking, PiKVM v4, internal CA.

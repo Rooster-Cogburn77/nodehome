@@ -1,7 +1,7 @@
 # Hardware Upgrade Roadmap
 
 **Status:** Living document. Captures prioritized future hardware spends with concrete triggers, not a fixed plan.
-**Last Updated:** 2026-05-15
+**Last Updated:** 2026-05-16
 
 The build is operationally complete as of Session 19. This roadmap covers what to spend on next, when triggers fire, and what to defer. Ordered by value-per-dollar in the current build state, not by absolute cost.
 
@@ -64,10 +64,11 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 - Fine-tuning workload lands (DeepSpeed ZeRO offload is memory-hungry)
 - Dense stacked-services workload pushes RAM utilization >70% (currently ~10-15%)
 - Large CPU-offload / KV-cache-offload model experimentation becomes a real goal
+- Rack/chassis CFD proof path grows past 128 GB through larger meshes, transient cases, retained timesteps, or ParaView/post-processing
 
 **Recommendation:** 4x Samsung M393A4K40CB1-CRC4Q (DDR4-2400 32GB 2Rx4 ECC RDIMM) to match the existing kit. Prefer exact match; verify against H12SSL-i memory support and seller photos/part numbers before purchase.
 
-**Why this tier:** Not an emergency capacity gap today, but DDR4 ECC RDIMM is the highest run-away-price risk in the remaining upgrade list. 256 GB also improves future CPU offload, long-context, multi-agent, and service-stacking headroom.
+**Why this tier:** Not an emergency capacity gap today, but DDR4 ECC RDIMM is the highest run-away-price risk in the remaining upgrade list. 256 GB also improves future CPU offload, long-context, multi-agent, service-stacking, and CFD headroom. For CFD specifically, more RAM helps capacity and post-processing comfort; it does not automatically make solves faster. Solver setup, geometry cleanup, boundary conditions, fan/heat assumptions, mesh convergence, and measured validation come first. Treat OpenFOAM-class CFD as CPU-first unless a GPU-native solver is deliberately selected.
 
 **Cost:** ~$320-600 depending on sourcing and timing. Fast-move range: ~$300-450 for a clean matching 4x32GB set.
 
