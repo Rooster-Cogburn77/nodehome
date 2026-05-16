@@ -1,12 +1,14 @@
 import contextlib
 import importlib.util
 import io
+import os
 import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -1517,20 +1519,197 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             session = nodechat.make_session(config)
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                nodechat.command_model_mode(session, "")
+                nodechat.command_model_mode(config, session, "")
             self.assertIn("model-mode: auto", buf.getvalue())
 
             for mode in ("manual", "fast", "strong", "deep", "auto"):
                 buf = io.StringIO()
                 with contextlib.redirect_stdout(buf):
-                    nodechat.command_model_mode(session, mode)
+                    nodechat.command_model_mode(config, session, mode)
                 self.assertEqual(session["model_mode"], mode)
 
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                nodechat.command_model_mode(session, "off")  # not a model mode
+                nodechat.command_model_mode(config, session, "off")  # not a model mode
             self.assertIn("invalid mode", buf.getvalue())
             self.assertEqual(session["model_mode"], "auto")  # last valid set
+
+    # ---- Remote model profiles (Phase 3) -------------------------------
+
+    def _remote_env(self):
+        return {
+            "NODECHAT_OPENAI_API_KEY": "sk-test",
+            "NODECHAT_OPENAI_MODEL": "gpt-test",
+            "NODECHAT_OPENAI_INPUT_PER_MTOK": "2.0",
+            "NODECHAT_OPENAI_OUTPUT_PER_MTOK": "8.0",
+            "NODECHAT_ANTHROPIC_API_KEY": "sk-ant-test",
+            "NODECHAT_ANTHROPIC_MODEL": "claude-test",
+            "NODECHAT_ANTHROPIC_INPUT_PER_MTOK": "3.0",
+            "NODECHAT_ANTHROPIC_OUTPUT_PER_MTOK": "15.0",
+        }
+
+    def test_remote_profiles_are_env_gated(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            with mock.patch.dict(os.environ, {
+                "NODECHAT_OPENAI_API_KEY": "",
+                "NODECHAT_OPENAI_MODEL": "",
+                "NODECHAT_ANTHROPIC_API_KEY": "",
+                "NODECHAT_ANTHROPIC_MODEL": "",
+            }, clear=False):
+                profiles = nodechat.load_model_profiles(config)
+                self.assertNotIn("openai", profiles)
+                self.assertNotIn("anthropic", profiles)
+
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                profiles = nodechat.load_model_profiles(config)
+                self.assertEqual(profiles["openai"]["model"], "gpt-test")
+                self.assertTrue(profiles["openai"]["remote"])
+                self.assertEqual(profiles["openai"]["provider_kind"], "openai")
+                self.assertEqual(profiles["anthropic"]["model"], "claude-test")
+                self.assertTrue(profiles["anthropic"]["remote"])
+                self.assertEqual(profiles["anthropic"]["provider_kind"], "anthropic")
+
+    def test_remote_profile_selection_requires_session_enable(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_profile(config, session, "openai")
+                self.assertIn("requires /remote-models enable", buf.getvalue())
+                self.assertNotEqual(session.get("profile"), "openai")
+
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_remote_models(config, session, "enable")
+                    nodechat.command_profile(config, session, "openai")
+                self.assertEqual(session.get("profile"), "openai")
+                self.assertEqual(session.get("model"), "gpt-test")
+                self.assertEqual(session.get("base_url"), "https://api.openai.com/v1")
+
+    def test_remote_model_mode_requires_enable_and_then_pins_remote(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_model_mode(config, session, "anthropic")
+                self.assertIn("requires /remote-models enable", buf.getvalue())
+                self.assertEqual(session.get("model_mode"), "auto")
+
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_remote_models(config, session, "enable")
+                    nodechat.command_model_mode(config, session, "anthropic")
+                self.assertEqual(session.get("model_mode"), "anthropic")
+
+                dispatch = nodechat.pick_turn_dispatch(config, session, "short prompt")
+                self.assertEqual(dispatch["profile"], "anthropic")
+                self.assertTrue(dispatch["remote"])
+                self.assertEqual(dispatch["provider_kind"], "anthropic")
+
+    def test_remote_disabled_dispatch_falls_back_to_fast(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                session["model_mode"] = "openai"
+                dispatch = nodechat.pick_turn_dispatch(config, session, "short prompt")
+                self.assertEqual(dispatch["profile"], "fast")
+                self.assertTrue(dispatch["fallback"])
+                self.assertTrue(dispatch["remote_blocked"])
+                self.assertIn("remote profile 'openai' disabled", dispatch["rationale"])
+
+    def test_remote_openai_dispatch_audits_cost_estimate(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_remote_models(config, session, "enable")
+                    nodechat.command_model_mode(config, session, "openai")
+                seen = []
+
+                def fake_complete(config, session):
+                    seen.append({
+                        "profile": session.get("profile"),
+                        "headers": nodechat.model_auth_headers(config, session),
+                    })
+                    return "remote ok"
+
+                original = nodechat.complete_chat
+                try:
+                    nodechat.complete_chat = fake_complete
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        nodechat.send_user_prompt(config, session, "hello remote")
+                finally:
+                    nodechat.complete_chat = original
+
+                self.assertEqual(seen[0]["profile"], "openai")
+                self.assertEqual(seen[0]["headers"], {"Authorization": "Bearer sk-test"})
+                rows = nodechat.read_recent_audit(config, 10)
+                event = next(row for row in rows if row["event_type"] == "model_dispatched")
+                self.assertTrue(event["remote"])
+                self.assertEqual(event["provider_kind"], "openai")
+                self.assertGreater(event["estimated_input_tokens"], 0)
+                self.assertGreater(event["estimated_output_tokens"], 0)
+                self.assertGreaterEqual(event["estimated_cost_usd"], 0)
+                self.assertEqual(session["costs"]["remote_turns"], 1)
+
+    def test_anthropic_payload_and_complete_shim(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_remote_models(config, session, "enable")
+                    nodechat.command_profile(config, session, "anthropic")
+                captured = {}
+
+                def fake_post(url, payload, timeout, headers):
+                    captured["url"] = url
+                    captured["payload"] = payload
+                    captured["headers"] = headers
+                    return {"content": [{"type": "text", "text": "anthropic ok"}]}
+
+                original = nodechat.post_json
+                try:
+                    nodechat.post_json = fake_post
+                    buf = io.StringIO()
+                    with contextlib.redirect_stdout(buf):
+                        result = nodechat.complete_chat(config, session)
+                finally:
+                    nodechat.post_json = original
+
+                self.assertEqual(result, "anthropic ok")
+                self.assertIn("/messages", captured["url"])
+                self.assertEqual(captured["payload"]["model"], "claude-test")
+                self.assertIn("system", captured["payload"])
+                self.assertEqual(captured["headers"]["x-api-key"], "sk-ant-test")
+
+    def test_remote_models_disable_clears_remote_model_mode(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with mock.patch.dict(os.environ, self._remote_env(), clear=False):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.command_remote_models(config, session, "enable")
+                    nodechat.command_profile(config, session, "openai")
+                    nodechat.command_model_mode(config, session, "openai")
+                    nodechat.command_remote_models(config, session, "disable")
+                self.assertFalse(session["remote_models_enabled"])
+                self.assertEqual(session["model_mode"], nodechat.DEFAULT_MODEL_MODE)
+                self.assertEqual(session["profile"], "strong")
+                self.assertEqual(session["model"], nodechat.DEFAULT_MODEL)
+                self.assertNotIn("api.openai.com", session["base_url"])
 
 
 # ---------------------------------------------------------------------------

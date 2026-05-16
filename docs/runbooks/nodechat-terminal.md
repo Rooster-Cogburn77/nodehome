@@ -2,7 +2,7 @@
 
 Status: early implementation of the Nodehome local agentic terminal environment. Authoritative scope and product philosophy live in [`nodechat-scope.md`](nodechat-scope.md); this doc covers operational usage, slash commands, env vars, and current safety posture.
 
-`scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint, keeps sessions, exposes model profiles plus slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
+`scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against local OpenAI-compatible endpoints and explicit env-gated remote profiles, keeps sessions, exposes model profiles plus slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
 
 Auto-routing is on for AI History, repo files, and fresh public web context. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. When the prompt includes a URL, Nodechat auto-fetches it; when the prompt clearly needs fresh public data (`latest`, releases, versions, CVEs, current pricing/availability, etc.) and names a public object, Nodechat auto-routes a bounded DuckDuckGo HTML search. Vague local-status phrases, vague repo topic phrases, and bare filenames do not auto-route. Every assistant turn prints a one-line model disclosure; routed turns include the routed sources in that same disclosure. Slash commands remain the manual override and the visibility surface.
 
@@ -30,7 +30,7 @@ endpoint on homelab: http://127.0.0.1:8000/v1
 endpoint from LAN/Windows: http://192.168.1.198:8000/v1
 ```
 
-Use `/profile` to list profiles and `/profile <name>` or `/model <name>` to switch. `/model <literal-model-id>` still works for backward compatibility; profile names resolve first. Optional user profiles can be added at:
+Use `/profile` to list profiles and `/profile <name>` or `/model <name>` to switch. `/model <literal-model-id>` still works for backward compatibility; profile names resolve first. `/model-mode auto|manual|<profile>` controls per-turn dispatch: `auto` only selects local `fast` or `strong`, and any pinned profile name dispatches that profile each turn. Optional user profiles can be added at:
 
 ```text
 ~/.nodehome/nodechat/profiles.json
@@ -38,7 +38,39 @@ Use `/profile` to list profiles and `/profile <name>` or `/model <name>` to swit
 
 The built-in `strong` profile follows the active `NODECHAT_BASE_URL` / `--base-url`, so the Windows launcher keeps using the LAN vLLM endpoint. Set `NODECHAT_OLLAMA_BASE_URL` if the `fast` and `deep` Ollama profiles should use a LAN endpoint instead of `http://localhost:11434/v1`.
 
-In this iteration profiles are local/private endpoints only (`localhost`, loopback, LAN/private IPs, or `host.docker.internal`). Public remote model providers are a later gated lane, not part of the Phase 1 profile registry.
+User-defined profiles remain local/private endpoints only (`localhost`, loopback, LAN/private IPs, or `host.docker.internal`) so a `profiles.json` edit cannot silently send data off-box.
+
+Remote profiles are built in but env-gated and session-gated. They do not appear unless the matching key and model env vars are present. They do not dispatch unless the user enables them for the current session:
+
+```text
+/remote-models status
+/remote-models enable
+/remote-models disable
+/profile openai
+/profile anthropic
+/model-mode openai
+/costs
+```
+
+Remote profiles are explicit-only. `auto` model routing never selects `openai` or `anthropic`; the user must run `/profile <remote>`, `/model <remote>`, or `/model-mode <remote>` after `/remote-models enable`.
+
+Remote env vars:
+
+```text
+NODECHAT_OPENAI_API_KEY or OPENAI_API_KEY
+NODECHAT_OPENAI_MODEL
+NODECHAT_OPENAI_BASE_URL                 optional, default https://api.openai.com/v1
+NODECHAT_OPENAI_INPUT_PER_MTOK           optional, for cost estimate
+NODECHAT_OPENAI_OUTPUT_PER_MTOK          optional, for cost estimate
+
+NODECHAT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY
+NODECHAT_ANTHROPIC_MODEL
+NODECHAT_ANTHROPIC_BASE_URL              optional, default https://api.anthropic.com/v1
+NODECHAT_ANTHROPIC_INPUT_PER_MTOK        optional, for cost estimate
+NODECHAT_ANTHROPIC_OUTPUT_PER_MTOK       optional, for cost estimate
+```
+
+Remote cost tracking is a session estimate. Until provider usage accounting is wired in, Nodechat estimates tokens as `chars / 4`, multiplies by the optional per-million-token env vars above, records the estimate in `model_dispatched`, and rolls it up in `/costs`.
 
 Run on the homelab node:
 
@@ -90,6 +122,9 @@ Inside `nodechat`:
 /help
 /profile [name]
 /model [name]
+/model-mode [auto|manual|fast|strong|deep|profile]
+/remote-models [status|enable|disable]
+/costs
 /endpoint [url]
 /system [text]
 /history <query>
@@ -196,6 +231,18 @@ NODECHAT_SESSION_ROOT
 NODECHAT_WORKSPACE
 NODECHAT_TEMPERATURE
 NODECHAT_MAX_TOKENS
+NODECHAT_OPENAI_API_KEY
+OPENAI_API_KEY
+NODECHAT_OPENAI_MODEL
+NODECHAT_OPENAI_BASE_URL
+NODECHAT_OPENAI_INPUT_PER_MTOK
+NODECHAT_OPENAI_OUTPUT_PER_MTOK
+NODECHAT_ANTHROPIC_API_KEY
+ANTHROPIC_API_KEY
+NODECHAT_ANTHROPIC_MODEL
+NODECHAT_ANTHROPIC_BASE_URL
+NODECHAT_ANTHROPIC_INPUT_PER_MTOK
+NODECHAT_ANTHROPIC_OUTPUT_PER_MTOK
 ```
 
 Windows launcher scripts:
@@ -397,6 +444,7 @@ Current coverage:
 - `/evidence` groups blocks by source while preserving global `/forget` indexes.
 - Live routing detection avoids history-style prompts such as "what did we decide about GPU2?"
 - Live checks can run through an optional SSH target, validate SMART device paths, disclose provenance, and respect `/live-mode off`.
+- Remote profiles are env-gated, require `/remote-models enable`, never auto-select in model `auto` mode, support explicit OpenAI/Anthropic dispatch shims, and record remote cost estimates.
 
 ## Capability Lanes
 
@@ -417,6 +465,10 @@ chat with local vLLM (streaming, sessioned, slash-command UX)
 /web-open <url>            same as fetch but opens in session view
 /live [check]              fixed live-node status checks; optional SSH target
 /cmd <read-only command>   allowlisted: git read subcommands, rg, dir/ls, type/cat, pwd, --version
+/profile [name]            local profiles and env-gated remote profiles
+/model-mode [auto|manual|profile]
+/remote-models [status|enable|disable]
+/costs
 /history-mode [auto|manual|off]
 /repo-mode [auto|manual|off]
 /web-mode [auto|manual|off]

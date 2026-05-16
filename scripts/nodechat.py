@@ -144,10 +144,13 @@ TEXT_EXTENSIONS = {
 DEFAULT_HISTORY_MODE = "auto"
 DEFAULT_REPO_MODE = "auto"
 DEFAULT_MODEL_MODE = "auto"
+MODEL_MODE_CONTROLS = ("auto", "manual")
 MODEL_MODES = ("auto", "manual", "fast", "strong", "deep")
 AUTO_STRONG_LENGTH_THRESHOLD = 800
 VLLM_PROBE_TTL_S = 60
 VLLM_PROBE_TIMEOUT_S = 3
+ANTHROPIC_API_VERSION = "2023-06-01"
+ANTHROPIC_DEFAULT_MAX_TOKENS = 2048
 AUTO_STRONG_CODE_RE = re.compile(
     r"```|"
     r"\b(def|class|function|import|return|async|await|lambda|"
@@ -397,7 +400,30 @@ def safe_filename(value: str) -> str:
     return "".join(keep)[:120] or "session"
 
 
-def normalize_model_profile(name: str, raw: Any, source: str) -> dict[str, str] | None:
+def first_env_name(*names: str) -> str:
+    for name in names:
+        if os.environ.get(name):
+            return name
+    return ""
+
+
+def env_float(name: str, default: float = 0.0) -> float:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def normalize_model_profile(
+    name: str,
+    raw: Any,
+    source: str,
+    *,
+    allow_remote: bool = False,
+) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     profile_name = str(name or "").strip().lower()
@@ -405,16 +431,22 @@ def normalize_model_profile(name: str, raw: Any, source: str) -> dict[str, str] 
     base_url = str(raw.get("base_url") or raw.get("baseUrl") or raw.get("endpoint") or "").strip().rstrip("/")
     if not profile_name or not model or not base_url:
         return None
-    if not is_local_model_endpoint(base_url):
+    remote = bool(raw.get("remote"))
+    if not is_local_model_endpoint(base_url) and not (allow_remote and remote):
         return None
     return {
         "name": profile_name,
         "model": model,
         "base_url": base_url,
         "provider": str(raw.get("provider") or raw.get("runtime") or "").strip(),
+        "provider_kind": str(raw.get("provider_kind") or raw.get("providerKind") or "openai-compatible").strip().lower(),
         "speed": str(raw.get("speed") or "").strip(),
         "description": str(raw.get("description") or raw.get("notes") or "").strip(),
         "source": source,
+        "remote": remote,
+        "api_key_env": str(raw.get("api_key_env") or raw.get("apiKeyEnv") or "").strip(),
+        "input_per_mtok_usd": float(raw.get("input_per_mtok_usd") or 0.0),
+        "output_per_mtok_usd": float(raw.get("output_per_mtok_usd") or 0.0),
     }
 
 
@@ -445,10 +477,56 @@ def builtin_model_profiles(config: "Config") -> dict[str, dict[str, str]]:
     return profiles
 
 
-def load_model_profiles(config: "Config") -> dict[str, dict[str, str]]:
-    profiles: dict[str, dict[str, str]] = {}
+def remote_builtin_model_profiles() -> dict[str, dict[str, Any]]:
+    """Return env-gated remote profiles.
+
+    Remote providers are intentionally absent unless both an API key and a
+    model id are configured. This avoids hard-coding drift-prone remote model
+    names and makes cost-bearing providers opt-in at process launch.
+    """
+    profiles: dict[str, dict[str, Any]] = {}
+
+    openai_key = first_env_name("NODECHAT_OPENAI_API_KEY", "OPENAI_API_KEY")
+    openai_model = os.environ.get("NODECHAT_OPENAI_MODEL", "").strip()
+    if openai_key and openai_model:
+        profiles["openai"] = {
+            "model": openai_model,
+            "base_url": os.environ.get("NODECHAT_OPENAI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/"),
+            "provider": "OpenAI",
+            "provider_kind": "openai",
+            "description": "remote OpenAI profile; explicit enable required",
+            "remote": True,
+            "api_key_env": openai_key,
+            "input_per_mtok_usd": env_float("NODECHAT_OPENAI_INPUT_PER_MTOK"),
+            "output_per_mtok_usd": env_float("NODECHAT_OPENAI_OUTPUT_PER_MTOK"),
+        }
+
+    anthropic_key = first_env_name("NODECHAT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+    anthropic_model = os.environ.get("NODECHAT_ANTHROPIC_MODEL", "").strip()
+    if anthropic_key and anthropic_model:
+        profiles["anthropic"] = {
+            "model": anthropic_model,
+            "base_url": os.environ.get("NODECHAT_ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").strip().rstrip("/"),
+            "provider": "Anthropic",
+            "provider_kind": "anthropic",
+            "description": "remote Anthropic Messages API profile; explicit enable required",
+            "remote": True,
+            "api_key_env": anthropic_key,
+            "input_per_mtok_usd": env_float("NODECHAT_ANTHROPIC_INPUT_PER_MTOK"),
+            "output_per_mtok_usd": env_float("NODECHAT_ANTHROPIC_OUTPUT_PER_MTOK"),
+        }
+
+    return profiles
+
+
+def load_model_profiles(config: "Config") -> dict[str, dict[str, Any]]:
+    profiles: dict[str, dict[str, Any]] = {}
     for name, raw in builtin_model_profiles(config).items():
         profile = normalize_model_profile(name, raw, "builtin")
+        if profile:
+            profiles[name] = profile
+    for name, raw in remote_builtin_model_profiles().items():
+        profile = normalize_model_profile(name, raw, "remote-builtin", allow_remote=True)
         if profile:
             profiles[name] = profile
 
@@ -494,6 +572,43 @@ def apply_model_profile(session: dict[str, Any], profile: dict[str, str]) -> Non
     session["profile"] = profile["name"]
     session["model"] = profile["model"]
     session["base_url"] = profile["base_url"].rstrip("/")
+
+
+def profile_is_remote(profile: dict[str, Any] | None) -> bool:
+    return bool(profile and profile.get("remote"))
+
+
+def remote_models_enabled(session: dict[str, Any]) -> bool:
+    return bool(session.get("remote_models_enabled"))
+
+
+def model_profile_for_dispatch(config: "Config", profile_name: str) -> dict[str, Any] | None:
+    return load_model_profiles(config).get(str(profile_name or "").strip().lower())
+
+
+def active_model_profile_data(config: "Config", session: dict[str, Any]) -> dict[str, Any] | None:
+    name = active_model_profile(config, session)
+    if not name:
+        return None
+    return model_profile_for_dispatch(config, name)
+
+
+def profile_api_key(profile: dict[str, Any] | None) -> str:
+    env_name = str((profile or {}).get("api_key_env") or "")
+    return os.environ.get(env_name, "") if env_name else ""
+
+
+def model_auth_headers(config: "Config", session: dict[str, Any]) -> dict[str, str]:
+    profile = active_model_profile_data(config, session)
+    if profile_is_remote(profile):
+        key = profile_api_key(profile)
+        return {"Authorization": f"Bearer {key}"} if key else {}
+    return auth_headers(config.api_key)
+
+
+def valid_model_modes(config: "Config") -> tuple[str, ...]:
+    profiles = tuple(sorted(load_model_profiles(config)))
+    return MODEL_MODE_CONTROLS + profiles
 
 
 def model_disclosure(config: "Config", session: dict[str, Any]) -> str:
@@ -564,7 +679,7 @@ def pick_turn_dispatch(
     """
     profiles = load_model_profiles(config)
     mode = str(session.get("model_mode") or DEFAULT_MODEL_MODE).strip().lower()
-    if mode not in MODEL_MODES:
+    if mode not in valid_model_modes(config):
         mode = DEFAULT_MODEL_MODE
 
     configured_profile_name = active_model_profile(config, session) or ""
@@ -577,6 +692,29 @@ def pick_turn_dispatch(
             return profile_name, profile["model"], profile["base_url"].rstrip("/")
         # Profile name not found -- fall back to configured.
         return (configured_profile_name or "literal"), configured_model, configured_base_url
+
+    def set_from_profile(profile_name: str) -> None:
+        name, model, base_url = resolved(profile_name)
+        dispatch["profile"] = name
+        dispatch["model"] = model
+        dispatch["base_url"] = base_url
+        profile = profiles.get(name)
+        if profile_is_remote(profile):
+            dispatch["remote"] = True
+            dispatch["provider_kind"] = profile.get("provider_kind") or "remote"
+        else:
+            dispatch["remote"] = False
+            dispatch["provider_kind"] = (profile or {}).get("provider_kind") or "openai-compatible"
+
+    def remote_disabled_fallback(profile_name: str) -> bool:
+        profile = profiles.get(profile_name)
+        if not profile_is_remote(profile) or remote_models_enabled(session):
+            return False
+        set_from_profile("fast")
+        dispatch["fallback"] = True
+        dispatch["rationale"] = f"remote profile '{profile_name}' disabled: run /remote-models enable"
+        dispatch["remote_blocked"] = True
+        return True
 
     dispatch: dict[str, Any] = {
         "mode": mode,
@@ -591,22 +729,24 @@ def pick_turn_dispatch(
         "triggers": [],
     }
 
-    if mode in ("fast", "strong", "deep"):
-        name, model, base_url = resolved(mode)
-        dispatch["profile"] = name
-        dispatch["model"] = model
-        dispatch["base_url"] = base_url
+    if mode in profiles:
+        if remote_disabled_fallback(mode):
+            return dispatch
+        set_from_profile(mode)
         return dispatch
 
     if mode == "manual":
         # Use the configured profile / model / endpoint as-is.
         if configured_profile_name and configured_profile_name in profiles:
-            name, model, base_url = resolved(configured_profile_name)
+            if remote_disabled_fallback(configured_profile_name):
+                return dispatch
+            set_from_profile(configured_profile_name)
         else:
-            name, model, base_url = (configured_profile_name or "literal"), configured_model, configured_base_url
-        dispatch["profile"] = name
-        dispatch["model"] = model
-        dispatch["base_url"] = base_url
+            dispatch["profile"] = configured_profile_name or "literal"
+            dispatch["model"] = configured_model
+            dispatch["base_url"] = configured_base_url
+            dispatch["remote"] = False
+            dispatch["provider_kind"] = "openai-compatible"
         return dispatch
 
     # mode == "auto"
@@ -615,10 +755,7 @@ def pick_turn_dispatch(
 
     if not triggers:
         # Default to fast.
-        name, model, base_url = resolved("fast")
-        dispatch["profile"] = name
-        dispatch["model"] = model
-        dispatch["base_url"] = base_url
+        set_from_profile("fast")
         return dispatch
 
     # Want strong -- probe vLLM first.
@@ -626,10 +763,7 @@ def pick_turn_dispatch(
     strong_base_url = (strong_profile or {}).get("base_url", "").rstrip("/")
     if not strong_base_url:
         # No strong profile available; fall back to fast silently (shouldn't happen with builtins).
-        name, model, base_url = resolved("fast")
-        dispatch["profile"] = name
-        dispatch["model"] = model
-        dispatch["base_url"] = base_url
+        set_from_profile("fast")
         dispatch["fallback"] = True
         dispatch["rationale"] = "strong unavailable: no strong profile registered"
         return dispatch
@@ -639,18 +773,13 @@ def pick_turn_dispatch(
     dispatch["vllm_probe_ms"] = latency_ms
 
     if ok:
-        dispatch["profile"] = "strong"
-        dispatch["model"] = strong_profile["model"]
-        dispatch["base_url"] = strong_base_url
+        set_from_profile("strong")
         dispatch["auto_routed"] = True
         dispatch["rationale"] = "; ".join(triggers)
         return dispatch
 
     # vLLM unhealthy -- fall back to fast and disclose.
-    name, model, base_url = resolved("fast")
-    dispatch["profile"] = name
-    dispatch["model"] = model
-    dispatch["base_url"] = base_url
+    set_from_profile("fast")
     dispatch["fallback"] = True
     dispatch["rationale"] = f"strong unavailable: vLLM probe failed ({latency_ms}ms)"
     return dispatch
@@ -734,6 +863,8 @@ def make_session(config: Config) -> dict[str, Any]:
         "web_mode": DEFAULT_WEB_MODE,
         "live_mode": DEFAULT_LIVE_MODE,
         "model_mode": DEFAULT_MODEL_MODE,
+        "remote_models_enabled": False,
+        "costs": {},
     }
 
 
@@ -757,6 +888,54 @@ def output_digest(output: str) -> dict[str, Any]:
         "output_chars": len(text),
         "output_sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest(),
     }
+
+
+def estimate_tokens_from_chars(chars: int) -> int:
+    if chars <= 0:
+        return 0
+    return max(1, int((chars + 3) / 4))
+
+
+def remote_cost_estimate(
+    config: Config,
+    dispatch: dict[str, Any],
+    prompt_chars: int,
+    response_chars: int,
+) -> dict[str, Any]:
+    profile = model_profile_for_dispatch(config, str(dispatch.get("profile") or ""))
+    if not profile_is_remote(profile):
+        return {
+            "remote": False,
+            "provider_kind": dispatch.get("provider_kind") or "openai-compatible",
+            "estimated_input_tokens": 0,
+            "estimated_output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+        }
+    input_tokens = estimate_tokens_from_chars(prompt_chars)
+    output_tokens = estimate_tokens_from_chars(response_chars)
+    input_rate = float(profile.get("input_per_mtok_usd") or 0.0)
+    output_rate = float(profile.get("output_per_mtok_usd") or 0.0)
+    cost = (input_tokens / 1_000_000.0 * input_rate) + (output_tokens / 1_000_000.0 * output_rate)
+    return {
+        "remote": True,
+        "provider_kind": profile.get("provider_kind") or dispatch.get("provider_kind") or "remote",
+        "estimated_input_tokens": input_tokens,
+        "estimated_output_tokens": output_tokens,
+        "estimated_cost_usd": round(cost, 8),
+    }
+
+
+def record_remote_cost(session: dict[str, Any], estimate: dict[str, Any]) -> None:
+    if not estimate.get("remote"):
+        return
+    costs = session.setdefault("costs", {})
+    costs["remote_turns"] = int(costs.get("remote_turns") or 0) + 1
+    costs["remote_input_tokens"] = int(costs.get("remote_input_tokens") or 0) + int(estimate.get("estimated_input_tokens") or 0)
+    costs["remote_output_tokens"] = int(costs.get("remote_output_tokens") or 0) + int(estimate.get("estimated_output_tokens") or 0)
+    costs["remote_estimated_usd"] = round(
+        float(costs.get("remote_estimated_usd") or 0.0) + float(estimate.get("estimated_cost_usd") or 0.0),
+        8,
+    )
 
 
 def text_sha256(text: str) -> str:
@@ -921,7 +1100,66 @@ def build_api_messages(config: Config, session: dict[str, Any]) -> list[dict[str
     return messages
 
 
+def provider_kind_for_session(config: Config, session: dict[str, Any]) -> str:
+    profile = active_model_profile_data(config, session)
+    return str((profile or {}).get("provider_kind") or "openai-compatible").lower()
+
+
+def anthropic_headers(config: Config, session: dict[str, Any]) -> dict[str, str]:
+    profile = active_model_profile_data(config, session)
+    key = profile_api_key(profile)
+    if not key:
+        return {}
+    return {
+        "x-api-key": key,
+        "anthropic-version": ANTHROPIC_API_VERSION,
+    }
+
+
+def anthropic_payload_from_messages(
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int,
+    stream: bool,
+) -> dict[str, Any]:
+    system_parts: list[str] = []
+    chat_messages: list[dict[str, str]] = []
+    for message in messages:
+        role = message.get("role")
+        content = str(message.get("content") or "")
+        if not content:
+            continue
+        if role == "system":
+            system_parts.append(content)
+            continue
+        if role not in {"user", "assistant"}:
+            continue
+        if chat_messages and chat_messages[-1]["role"] == role:
+            chat_messages[-1]["content"] += "\n\n" + content
+        else:
+            chat_messages.append({"role": role, "content": content})
+    if not chat_messages or chat_messages[0]["role"] != "user":
+        chat_messages.insert(0, {"role": "user", "content": "Continue."})
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": chat_messages,
+        "max_tokens": max_tokens if max_tokens > 0 else ANTHROPIC_DEFAULT_MAX_TOKENS,
+        "temperature": temperature,
+        "stream": stream,
+    }
+    if system_parts:
+        payload["system"] = "\n\n".join(system_parts)
+    return payload
+
+
 def stream_chat(config: Config, session: dict[str, Any]) -> str:
+    if provider_kind_for_session(config, session) == "anthropic":
+        return stream_anthropic_chat(config, session)
+    return stream_openai_chat(config, session)
+
+
+def stream_openai_chat(config: Config, session: dict[str, Any]) -> str:
     payload = {
         "model": session.get("model") or config.model,
         "messages": build_api_messages(config, session),
@@ -935,7 +1173,7 @@ def stream_chat(config: Config, session: dict[str, Any]) -> str:
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **auth_headers(config.api_key)},
+        headers={"Content-Type": "application/json", **model_auth_headers(config, session)},
         method="POST",
     )
 
@@ -973,7 +1211,58 @@ def stream_chat(config: Config, session: dict[str, Any]) -> str:
     return "".join(parts).strip()
 
 
+def stream_anthropic_chat(config: Config, session: dict[str, Any]) -> str:
+    messages = build_api_messages(config, session)
+    payload = anthropic_payload_from_messages(
+        str(session.get("model") or config.model),
+        messages,
+        config.temperature,
+        config.max_tokens,
+        True,
+    )
+    url = endpoint(str(session.get("base_url") or config.base_url), "messages")
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", **anthropic_headers(config, session)},
+        method="POST",
+    )
+    parts: list[str] = []
+    try:
+        with urllib.request.urlopen(req, timeout=config.timeout) as res:
+            for raw_line in res:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") == "content_block_delta":
+                    delta = obj.get("delta") or {}
+                    token = delta.get("text") or ""
+                    if token:
+                        print(token, end="", flush=True)
+                        parts.append(token)
+                if obj.get("type") == "message_stop":
+                    break
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"could not reach chat endpoint: {exc.reason}") from exc
+    print()
+    return "".join(parts).strip()
+
+
 def complete_chat(config: Config, session: dict[str, Any]) -> str:
+    if provider_kind_for_session(config, session) == "anthropic":
+        return complete_anthropic_chat(config, session)
+    return complete_openai_chat(config, session)
+
+
+def complete_openai_chat(config: Config, session: dict[str, Any]) -> str:
     payload = {
         "model": session.get("model") or config.model,
         "messages": build_api_messages(config, session),
@@ -987,13 +1276,38 @@ def complete_chat(config: Config, session: dict[str, Any]) -> str:
         endpoint(str(session.get("base_url") or config.base_url), "chat/completions"),
         payload,
         config.timeout,
-        auth_headers(config.api_key),
+        model_auth_headers(config, session),
     )
     choices = data.get("choices") or []
     if not choices:
         raise RuntimeError(f"no choices returned: {data}")
     message = choices[0].get("message") or {}
     content = str(message.get("content") or "").strip()
+    print(content)
+    return content
+
+
+def complete_anthropic_chat(config: Config, session: dict[str, Any]) -> str:
+    payload = anthropic_payload_from_messages(
+        str(session.get("model") or config.model),
+        build_api_messages(config, session),
+        config.temperature,
+        config.max_tokens,
+        False,
+    )
+    data = post_json(
+        endpoint(str(session.get("base_url") or config.base_url), "messages"),
+        payload,
+        config.timeout,
+        anthropic_headers(config, session),
+    )
+    content_parts = []
+    for part in data.get("content") or []:
+        if isinstance(part, dict) and part.get("type") == "text":
+            content_parts.append(str(part.get("text") or ""))
+    content = "".join(content_parts).strip()
+    if not content:
+        raise RuntimeError(f"no text returned: {data}")
     print(content)
     return content
 
@@ -1046,6 +1360,7 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"web_mode: {web_mode}",
             f"live_mode: {live_mode}",
             f"model_mode: {model_mode}",
+            f"remote_models_enabled: {str(remote_models_enabled(session)).lower()}",
             f"live_target: {live_target}",
         ]
     )
@@ -1072,6 +1387,30 @@ def complete_tool_prompt(
     prompt: str,
     max_tokens: int = MAX_PROPOSAL_TOKENS,
 ) -> str:
+    profile = active_model_profile_data(config, session)
+    if profile_is_remote(profile) and not remote_models_enabled(session):
+        name = active_model_profile(config, session) or "remote"
+        raise RuntimeError(f"remote profile '{name}' disabled: run /remote-models enable")
+    if provider_kind_for_session(config, session) == "anthropic":
+        payload = anthropic_payload_from_messages(
+            str(session.get("model") or config.model),
+            tool_messages(config, session, prompt),
+            0.1,
+            max_tokens,
+            False,
+        )
+        data = post_json(
+            endpoint(str(session.get("base_url") or config.base_url), "messages"),
+            payload,
+            config.timeout,
+            anthropic_headers(config, session),
+        )
+        return "".join(
+            str(part.get("text") or "")
+            for part in data.get("content") or []
+            if isinstance(part, dict) and part.get("type") == "text"
+        ).strip()
+
     payload = {
         "model": session.get("model") or config.model,
         "messages": tool_messages(config, session, prompt),
@@ -1083,7 +1422,7 @@ def complete_tool_prompt(
         endpoint(str(session.get("base_url") or config.base_url), "chat/completions"),
         payload,
         config.timeout,
-        auth_headers(config.api_key),
+        model_auth_headers(config, session),
     )
     choices = data.get("choices") or []
     if not choices:
@@ -3760,27 +4099,30 @@ def command_routing_mode(
     print(f"{label}: {raw}")
 
 
-def command_model_mode(session: dict[str, Any], arg: str) -> None:
-    """Show or set model_mode: auto | manual | fast | strong | deep.
+def command_model_mode(config: Config, session: dict[str, Any], arg: str) -> None:
+    """Show or set model_mode.
 
     auto    -- per-turn dispatch picks fast by default and lifts to strong on
                long prompts, code markers, analysis verbs, history routing,
                or multi-file repo routing (only if vLLM is reachable).
     manual  -- always dispatch on the configured /profile.
-    fast    -- pin every turn to the fast profile.
-    strong  -- pin every turn to the strong profile.
-    deep    -- pin every turn to the deep profile.
+    <profile> -- pin every turn to the named profile.
 
     Profile changes are still per-turn; session.profile remains the user's
     configured choice and is only changed by /profile or /model.
     """
+    modes = valid_model_modes(config)
     raw = (arg or "").strip().lower()
     if not raw:
         current = session.get("model_mode", DEFAULT_MODEL_MODE)
         print(f"model-mode: {current}")
         return
-    if raw not in MODEL_MODES:
-        print(f"model-mode: invalid mode '{raw}', use one of {'|'.join(MODEL_MODES)}")
+    if raw not in modes:
+        print(f"model-mode: invalid mode '{raw}', use one of {'|'.join(modes)}")
+        return
+    profile = load_model_profiles(config).get(raw)
+    if profile_is_remote(profile) and not remote_models_enabled(session):
+        print(f"model-mode refused: remote profile '{raw}' requires /remote-models enable")
         return
     session["model_mode"] = raw
     print(f"model-mode: {raw}")
@@ -4163,8 +4505,11 @@ def print_help() -> None:
                                     show or set web auto-routing mode (default auto)
               /live-mode [auto|manual|off]
                                     show or set live-node auto-routing mode (default auto)
-              /model-mode [auto|manual|fast|strong|deep]
+              /model-mode [auto|manual|fast|strong|deep|profile]
                                     show or set per-turn model dispatch mode (default auto)
+              /remote-models [status|enable|disable]
+                                    enable env-gated remote profiles for this session
+              /costs                show estimated remote model cost for this session
               /evidence             group active context blocks by source with provenance
               /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
@@ -4177,7 +4522,8 @@ def print_help() -> None:
               The disclosure line above the assistant reply names every routed source.
               /history-mode, /repo-mode, /web-mode, and /live-mode toggle auto-routing; manual slash commands always work.
               Web search results are leads, not proof; fetch/open source text before relying on a claim.
-              /live runs fixed read-only checks only; mutations stay behind future approval gates.
+              Remote profiles are explicit-only and require /remote-models enable per session.
+              /live fixed checks run immediately; service restarts queue for /approve.
               /propose-edit never writes files; it only prints/stores a proposal.
               /apply writes only with --confirm after diff validation.
               /undo-apply restores only if the file still matches the applied proposal.
@@ -4216,14 +4562,25 @@ def print_context(session: dict[str, Any]) -> None:
 
 def check_status(config: Config, session: dict[str, Any]) -> None:
     base_url = str(session.get("base_url") or config.base_url)
-    try:
-        models = get_json(endpoint(base_url, "models"), config.timeout, auth_headers(config.api_key))
-        ids = [str(item.get("id", "")) for item in models.get("data", [])]
-        print(f"vLLM/OpenAI endpoint: OK ({base_url})")
-        if ids:
-            print("models: " + ", ".join(ids[:8]))
-    except Exception as exc:
-        print(f"vLLM/OpenAI endpoint: FAIL ({exc})")
+    active_profile_data = active_model_profile_data(config, session)
+    if profile_is_remote(active_profile_data) and not remote_models_enabled(session):
+        profile = active_model_profile(config, session) or "remote"
+        print(f"model endpoint: remote profile disabled ({profile}); run /remote-models enable to probe")
+        provider_kind = ""
+    else:
+        provider_kind = provider_kind_for_session(config, session)
+    if provider_kind == "anthropic":
+        profile = active_model_profile(config, session) or "anthropic"
+        print(f"model endpoint: Anthropic profile configured ({profile}, {base_url}); /models probe skipped")
+    elif provider_kind:
+        try:
+            models = get_json(endpoint(base_url, "models"), config.timeout, model_auth_headers(config, session))
+            ids = [str(item.get("id", "")) for item in models.get("data", [])]
+            print(f"vLLM/OpenAI endpoint: OK ({base_url})")
+            if ids:
+                print("models: " + ", ".join(ids[:8]))
+        except Exception as exc:
+            print(f"vLLM/OpenAI endpoint: FAIL ({exc})")
 
     try:
         health = get_json(endpoint(config.history_url, "health"), config.timeout, history_headers(config))
@@ -4261,7 +4618,9 @@ def command_profile(config: Config, session: dict[str, Any], arg: str) -> None:
             provider = profile.get("provider") or "OpenAI-compatible"
             speed = profile.get("speed") or ""
             source = profile.get("source") or ""
-            suffix = " | ".join(item for item in (provider, speed, source) if item)
+            remote = "remote" if profile_is_remote(profile) else ""
+            locked = "disabled" if profile_is_remote(profile) and not remote_models_enabled(session) else ""
+            suffix = " | ".join(item for item in (provider, speed, source, remote, locked) if item)
             if suffix:
                 suffix = " | " + suffix
             print(f"{marker} {name:<8} {profile['model']:<36} {profile['base_url']}{suffix}")
@@ -4273,6 +4632,9 @@ def command_profile(config: Config, session: dict[str, Any], arg: str) -> None:
     if not profile:
         print(f"unknown profile: {arg}")
         print("available: " + ", ".join(sorted(profiles)))
+        return
+    if profile_is_remote(profile) and not remote_models_enabled(session):
+        print(f"profile refused: remote profile '{name}' requires /remote-models enable")
         return
     apply_model_profile(session, profile)
     print(f"profile: {name}")
@@ -4292,6 +4654,9 @@ def command_model(config: Config, session: dict[str, Any], arg: str) -> None:
     name = arg.strip().lower()
     profile = profiles.get(name)
     if profile:
+        if profile_is_remote(profile) and not remote_models_enabled(session):
+            print(f"model refused: remote profile '{name}' requires /remote-models enable")
+            return
         apply_model_profile(session, profile)
         print(f"profile: {name}")
         print(f"model: {profile['model']}")
@@ -4301,6 +4666,67 @@ def command_model(config: Config, session: dict[str, Any], arg: str) -> None:
     session["model"] = arg
     session["profile"] = ""
     print(f"model: {arg}")
+
+
+def command_remote_models(config: Config, session: dict[str, Any], arg: str) -> None:
+    raw = (arg or "status").strip().lower()
+    profiles = {
+        name: profile
+        for name, profile in load_model_profiles(config).items()
+        if profile_is_remote(profile)
+    }
+    if raw in {"status", ""}:
+        print(f"remote-models: {'enabled' if remote_models_enabled(session) else 'disabled'}")
+        if profiles:
+            print("available remote profiles:")
+            for name in sorted(profiles):
+                profile = profiles[name]
+                provider = profile.get("provider") or profile.get("provider_kind") or "remote"
+                env_name = profile.get("api_key_env") or ""
+                print(f"  {name}: {provider} | {profile['model']} | key_env={env_name}")
+        else:
+            print("available remote profiles: none")
+            print("set NODECHAT_OPENAI_API_KEY + NODECHAT_OPENAI_MODEL or NODECHAT_ANTHROPIC_API_KEY + NODECHAT_ANTHROPIC_MODEL")
+        return
+    if raw == "enable":
+        if not profiles:
+            print("remote-models: no env-gated remote profiles available")
+            print("set NODECHAT_OPENAI_API_KEY + NODECHAT_OPENAI_MODEL or NODECHAT_ANTHROPIC_API_KEY + NODECHAT_ANTHROPIC_MODEL")
+            return
+        session["remote_models_enabled"] = True
+        print("remote-models: enabled for this session")
+        print("remote dispatch is explicit only: /profile <remote>, /model <remote>, or /model-mode <remote>")
+        return
+    if raw == "disable":
+        session["remote_models_enabled"] = False
+        if str(session.get("model_mode") or "") in profiles:
+            session["model_mode"] = DEFAULT_MODEL_MODE
+        current_profile = profiles.get(active_model_profile(config, session))
+        if profile_is_remote(current_profile):
+            local_profile = load_model_profiles(config).get("strong")
+            if local_profile:
+                apply_model_profile(session, local_profile)
+            else:
+                session["profile"] = ""
+                session["model"] = config.model
+                session["base_url"] = str(config.base_url).rstrip("/")
+        print("remote-models: disabled")
+        return
+    print("usage: /remote-models [status|enable|disable]")
+
+
+def command_costs(session: dict[str, Any]) -> None:
+    costs = session.get("costs") if isinstance(session.get("costs"), dict) else {}
+    remote_turns = int(costs.get("remote_turns") or 0)
+    input_tokens = int(costs.get("remote_input_tokens") or 0)
+    output_tokens = int(costs.get("remote_output_tokens") or 0)
+    estimated = float(costs.get("remote_estimated_usd") or 0.0)
+    print("remote cost estimate for this session:")
+    print(f"turns: {remote_turns}")
+    print(f"input_tokens_est: {input_tokens}")
+    print(f"output_tokens_est: {output_tokens}")
+    print(f"estimated_usd: {estimated:.6f}")
+    print("note: token counts are char/4 estimates unless provider usage accounting is added later")
 
 
 def handle_command(
@@ -4351,6 +4777,14 @@ def handle_command(
 
     if command == "profile":
         command_profile(config, session, arg)
+        return "handled", session, None
+
+    if command in {"remote-models", "remotemodels"}:
+        command_remote_models(config, session, arg)
+        return "handled", session, None
+
+    if command in {"costs", "cost"}:
+        command_costs(session)
         return "handled", session, None
 
     if command == "endpoint":
@@ -4474,7 +4908,7 @@ def handle_command(
         return "handled", session, None
 
     if command in {"model-mode", "modelmode"}:
-        command_model_mode(session, arg)
+        command_model_mode(config, session, arg)
         return "handled", session, None
 
     if command == "evidence":
@@ -4558,6 +4992,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
         try:
             content = stream_chat(config, session) if config.stream else complete_chat(config, session)
         except Exception as exc:
+            cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
             audit_event(
                 config,
                 session,
@@ -4569,14 +5004,24 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
                 model=dispatch.get("model"),
                 auto_routed=bool(dispatch.get("auto_routed")),
                 fallback=bool(dispatch.get("fallback")),
+                remote=cost_estimate.get("remote"),
+                provider_kind=cost_estimate.get("provider_kind"),
                 prompt_chars=prompt_chars,
                 response_chars=0,
+                estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
+                estimated_output_tokens=cost_estimate.get("estimated_output_tokens"),
+                estimated_cost_usd=cost_estimate.get("estimated_cost_usd"),
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 reason=_short_error(exc),
             )
             print(f"CHAT_ERROR: {exc}")
+            session["profile"] = saved_profile if saved_profile is not None else ""
+            session["model"] = saved_model
+            session["base_url"] = saved_base_url
             save_session(config, session)
             return
+        cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, len(content))
+        record_remote_cost(session, cost_estimate)
         audit_event(
             config,
             session,
@@ -4588,8 +5033,13 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
             model=dispatch.get("model"),
             auto_routed=bool(dispatch.get("auto_routed")),
             fallback=bool(dispatch.get("fallback")),
+            remote=cost_estimate.get("remote"),
+            provider_kind=cost_estimate.get("provider_kind"),
             prompt_chars=prompt_chars,
             response_chars=len(content),
+            estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
+            estimated_output_tokens=cost_estimate.get("estimated_output_tokens"),
+            estimated_cost_usd=cost_estimate.get("estimated_cost_usd"),
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
     finally:
@@ -4714,6 +5164,9 @@ def main(argv: list[str] | None = None) -> int:
     session.setdefault("repo_mode", DEFAULT_REPO_MODE)
     session.setdefault("web_mode", DEFAULT_WEB_MODE)
     session.setdefault("live_mode", DEFAULT_LIVE_MODE)
+    session.setdefault("model_mode", DEFAULT_MODEL_MODE)
+    session.setdefault("remote_models_enabled", False)
+    session.setdefault("costs", {})
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")
