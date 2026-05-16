@@ -65,6 +65,8 @@ The intended workflow for a service hiccup:
 
 Every step writes an audit row under `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`. `/audit 20` will show the diag → queued → executed chain with op names and argv.
 
+Chronological logs are tail-sensitive: `/live logs …` and `/live journal ollama` preserve the newest tail when the live-output cap is hit, so restart events and recent failures stay visible. Non-log diagnostics preserve the head when truncated.
+
 ## Future work
 
 ### Adding new mutations

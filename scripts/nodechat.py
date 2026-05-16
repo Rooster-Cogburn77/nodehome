@@ -72,6 +72,8 @@ MAX_SEARCH_FILE_BYTES = 220000
 MAX_PROPOSE_FILE_CHARS = 30000
 MAX_PROPOSAL_TOKENS = 2400
 MAX_CMD_OUTPUT_CHARS = 20000
+LIVE_OUTPUT_TRUNCATED_HEAD = "...[truncated earlier output for nodechat live output cap]"
+LIVE_OUTPUT_TRUNCATED_TAIL = "...[truncated for nodechat live output cap]"
 MAX_APPROVALS = 50
 HUNK_RE = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@")
 
@@ -2691,11 +2693,11 @@ def run_live_check(config: Config, check: str, extra: str = "") -> dict[str, Any
 def live_context_block(results: list[dict[str, Any]]) -> str:
     lines = ["LIVE_NODE_STATUS", f"timestamp: {utc_now()}"]
     for result in results:
-        output = str(result.get("output") or "")
-        truncated = False
-        if len(output) > MAX_CMD_OUTPUT_CHARS:
-            output = output[:MAX_CMD_OUTPUT_CHARS] + "\n...[truncated for nodechat live output cap]"
-            truncated = True
+        output, truncated = truncate_live_output(
+            str(result.get("check") or ""),
+            str(result.get("command") or ""),
+            str(result.get("output") or ""),
+        )
         lines.extend(
             [
                 "",
@@ -2742,13 +2744,35 @@ def run_live_checks(config: Config, checks: list[str], extra: str = "") -> list[
     return results
 
 
+def _live_output_preserve_tail(key: str, command: str) -> bool:
+    """Chronological logs need the newest lines, which are at the tail."""
+    key_l = (key or "").lower()
+    command_l = (command or "").lower()
+    return (
+        key_l.startswith("journal ")
+        or key_l.startswith("logs ")
+        or "journalctl " in command_l
+        or "docker logs " in command_l
+    )
+
+
+def truncate_live_output(key: str, command: str, output: str) -> tuple[str, bool]:
+    if len(output) <= MAX_CMD_OUTPUT_CHARS:
+        return output, False
+    if _live_output_preserve_tail(key, command):
+        prefix = LIVE_OUTPUT_TRUNCATED_HEAD + "\n"
+        keep = max(0, MAX_CMD_OUTPUT_CHARS - len(prefix))
+        return prefix + output[-keep:], True
+    return output[:MAX_CMD_OUTPUT_CHARS] + "\n" + LIVE_OUTPUT_TRUNCATED_TAIL, True
+
+
 def _live_diag_block(key: str, result: dict[str, Any]) -> str:
     """Format a single LIVE_DIAG result the same way live_context_block does."""
-    output = str(result.get("output") or "")
-    truncated = False
-    if len(output) > MAX_CMD_OUTPUT_CHARS:
-        output = output[:MAX_CMD_OUTPUT_CHARS] + "\n...[truncated for nodechat live output cap]"
-        truncated = True
+    output, truncated = truncate_live_output(
+        key,
+        str(result.get("command") or ""),
+        str(result.get("output") or ""),
+    )
     lines = [
         "LIVE_NODE_STATUS",
         f"timestamp: {utc_now()}",
@@ -4433,7 +4457,7 @@ def print_help() -> None:
               /live [check]         add read-only live node status context
                                     fixed checks: health|gpu|power|docker|vllm|ollama|storage|bmc|ups
                                     diag ops: ps|logs <vllm|open-webui|ollama>|journal ollama|inspect <vllm|open-webui>
-                                    mutations (queue for /approve): restart vllm-server|restart open-webui
+                                    mutations (queue for /approve): restart vllm-server|restart open-webui|restart ollama
               /propose-edit <path> :: <instruction>
                                     generate and store a patch proposal only
               /diff [all]           show latest or all stored patch proposals

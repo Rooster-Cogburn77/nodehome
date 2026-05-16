@@ -901,6 +901,42 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             ["journalctl", "-u", "ollama", "--no-pager", "-n", "200"],
         )
 
+    def test_live_journal_truncation_preserves_newest_tail(self):
+        limit = nodechat.MAX_CMD_OUTPUT_CHARS
+        output = "OLDEST_START\n" + ("x" * (limit + 100)) + "\nNEWEST_RESTART_EVENT"
+        block = nodechat._live_diag_block(
+            "journal ollama",
+            {
+                "target": "local",
+                "command": "journalctl -u ollama --no-pager -n 200",
+                "exit_code": 0,
+                "executable": "/usr/bin/journalctl",
+                "output": output,
+            },
+        )
+        self.assertIn("truncated: true", block)
+        self.assertIn(nodechat.LIVE_OUTPUT_TRUNCATED_HEAD, block)
+        self.assertIn("NEWEST_RESTART_EVENT", block)
+        self.assertNotIn("OLDEST_START", block)
+
+    def test_live_non_log_truncation_preserves_head(self):
+        limit = nodechat.MAX_CMD_OUTPUT_CHARS
+        output = "INSPECT_BEGIN\n" + ("x" * (limit + 100)) + "\nINSPECT_END"
+        block = nodechat._live_diag_block(
+            "inspect vllm",
+            {
+                "target": "local",
+                "command": "docker inspect vllm-server",
+                "exit_code": 0,
+                "executable": "/usr/bin/docker",
+                "output": output,
+            },
+        )
+        self.assertIn("truncated: true", block)
+        self.assertIn(nodechat.LIVE_OUTPUT_TRUNCATED_TAIL, block)
+        self.assertIn("INSPECT_BEGIN", block)
+        self.assertNotIn("INSPECT_END", block)
+
     def test_live_diag_inspect_uses_docker_inspect_for_known_services(self):
         self.assertEqual(
             nodechat.LIVE_DIAG_OPS["inspect vllm"]["argv"],
