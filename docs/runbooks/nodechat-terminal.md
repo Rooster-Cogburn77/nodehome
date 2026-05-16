@@ -324,11 +324,12 @@ Beyond the fixed checks, `/live` also exposes a small allowlisted surface of rea
 # Mutate tier -- queue for /approve
 /live restart vllm-server     # docker restart vllm-server  (queued)
 /live restart open-webui      # docker restart open-webui   (queued)
+/live restart ollama          # sudo -n /bin/systemctl restart ollama  (queued)
 ```
 
 `/live restart …` does not execute. It queues an approval row (class `live-mutation`) and prints an `APPROVAL_REQUIRED` block. The restart only runs after `/approve <id>`. Audit trail records the queued argv, the executed argv, exit code, executable provenance, and target (`local` or `ssh:user@host`) on separate `live_mutation_queued` and `live_mutation_executed` events.
 
-`/live restart ollama` is currently refused with a pointer to the sudoers entry needed to enable it (see the runbook). Hard guardrails: no arbitrary container names, no arbitrary journalctl units, no `--follow`, no shell composition, no restart without `/approve`.
+Hard guardrails: no arbitrary container names, no arbitrary journalctl units, no templated systemd units, no `--follow`, no shell composition, no restart without `/approve`.
 
 By default, live checks run from the current machine. From Windows, point Nodechat at the homelab with:
 

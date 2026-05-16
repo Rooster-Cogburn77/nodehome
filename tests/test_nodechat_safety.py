@@ -967,23 +967,32 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertTrue(queued)
             self.assertEqual(queued[-1]["argv"], ["docker", "restart", "open-webui"])
 
-    def test_live_restart_ollama_refused_with_deferred_message(self):
+    def test_live_restart_ollama_queues_sudo_systemctl_argv(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
             config = make_config(workspace, workspace / ".sessions")
             session = nodechat.make_session(config)
+            calls: list[dict] = []
+            original = self._stub_run_live_op(calls)
             buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                nodechat.command_live(config, session, "restart ollama")
+            try:
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_live(config, session, "restart ollama")
+            finally:
+                nodechat.run_live_op = original
             text = buf.getvalue()
-            self.assertIn("LIVE_MUTATION_REFUSED", text)
-            self.assertIn("sudoers", text)
-            self.assertIn("docs/runbooks/live-mutations.md", text)
-            self.assertEqual(session.get("approvals", []), [])
+            self.assertEqual(calls, [], msg="run_live_op must not be called on /live restart")
+            self.assertIn("APPROVAL_REQUIRED", text)
+            approvals = session.get("approvals", [])
+            self.assertEqual(len(approvals), 1)
+            self.assertEqual(approvals[0]["class"], "live-mutation")
+            self.assertEqual(approvals[0]["status"], "pending")
+            self.assertEqual(approvals[0]["command"], "/live restart ollama")
             rows = nodechat.read_recent_audit(config, 10)
             self.assertTrue(any(
-                r["event_type"] == "live_mutation_refused"
+                r["event_type"] == "live_mutation_queued"
                 and r.get("op") == "restart ollama"
+                and r.get("argv") == ["sudo", "-n", "/bin/systemctl", "restart", "ollama"]
                 for r in rows
             ))
 

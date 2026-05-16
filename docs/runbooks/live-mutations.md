@@ -26,20 +26,15 @@ Each diag run injects a `LIVE_NODE_STATUS` block with command, target (`local` o
 |--------------------------------|--------------------------------------------|
 | `/live restart vllm-server`    | `docker restart vllm-server`               |
 | `/live restart open-webui`     | `docker restart open-webui`                |
+| `/live restart ollama`         | `sudo -n /bin/systemctl restart ollama`    |
 
 `/live restart …` does **not** execute the restart. It queues an approval row (class `live-mutation`) with the resolved argv, prints an `APPROVAL_REQUIRED` block, and writes a `live_mutation_queued` audit event. The restart only runs after `/approve <id>`, which writes a `live_mutation_executed` (or `live_mutation_blocked`) event with exit code, executable, target, and the SHA256 of the captured output.
 
-### Deferred mutations (refused with a pointer)
-
-| Slash command          | Reason                                                                                                |
-|------------------------|--------------------------------------------------------------------------------------------------------|
-| `/live restart ollama` | Needs `sudo systemctl restart ollama`. Refused until the NOPASSWD sudoers entry below is installed.    |
-
-A refusal prints a `LIVE_MUTATION_REFUSED` block, writes a `live_mutation_refused` audit event, and adds a context block tagged `manual-live-refused` so the chat surface knows the action did not run.
+Host prerequisite for Ollama restart: the homelab operator account has a narrow NOPASSWD sudoers entry for exactly `/bin/systemctl restart ollama`. This was validated from the node with `sudo -n /bin/systemctl restart ollama` returning exit code `0`.
 
 ## Hard guardrails
 
-- **No arbitrary container names.** Only `vllm-server` and `open-webui` are reachable via `/live` mutations or container-targeted diag ops.
+- **No arbitrary container names.** Only `vllm-server` and `open-webui` are reachable via container-targeted diag ops and Docker restart mutations. Ollama restart is a fixed systemd argv, not a templated unit name.
 - **No arbitrary journalctl units.** Only `ollama` is reachable via `/live journal …`.
 - **No `--follow` / `-f`.** The diag allowlist is byte-for-byte fixed argv; no streaming options.
 - **No shell composition.** Argv is passed directly to `subprocess.run` (or wrapped through `ssh -o BatchMode=yes <target> <shell-quoted command>` when `live_ssh` is set). No `&&`, `||`, `;`, `|`, or redirection.
@@ -71,34 +66,6 @@ The intended workflow for a service hiccup:
 Every step writes an audit row under `%USERPROFILE%\.nodehome\nodechat\audit\nodechat-audit.jsonl`. `/audit 20` will show the diag → queued → executed chain with op names and argv.
 
 ## Future work
-
-### Enabling `/live restart ollama`
-
-Two things need to happen on the homelab node before the deferred entry can be promoted:
-
-1. **Install a narrow NOPASSWD sudoers entry** at `/etc/sudoers.d/nodechat-live`:
-
-   ```sudoers
-   # Allow the nodechat operator to restart only the ollama systemd unit
-   # without a password. No other systemctl verbs, no other units.
-   bmoore_77 ALL=(root) NOPASSWD: /bin/systemctl restart ollama
-   ```
-
-   Validate with `sudo -n systemctl restart ollama` from the operator account; the command must succeed without a password prompt and with no other systemctl verbs reachable.
-
-2. **Promote the entry in `LIVE_MUTATION_OPS`:**
-
-   ```python
-   "restart ollama": {
-       "description": "Restart the ollama systemd service",
-       "argv": ["sudo", "-n", "systemctl", "restart", "ollama"],
-       "approval_reason": "approved live-mutation: sudo systemctl restart ollama",
-   },
-   ```
-
-   And remove the corresponding entry from `LIVE_DEFERRED_MUTATIONS`. Add a regression test that asserts `/live restart ollama` queues with the `sudo -n` argv.
-
-Until both are in place, `/live restart ollama` stays in `LIVE_DEFERRED_MUTATIONS` and the refusal path is exercised by the safety suite.
 
 ### Adding new mutations
 

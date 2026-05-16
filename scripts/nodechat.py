@@ -2508,16 +2508,11 @@ LIVE_MUTATION_OPS: dict[str, dict[str, Any]] = {
         "argv": ["docker", "restart", "open-webui"],
         "approval_reason": "approved live-mutation: docker restart open-webui",
     },
-}
-
-# Mutations that are explicitly out of scope today. Refuse with a clear pointer
-# so the user is not surprised; do not queue them.
-LIVE_DEFERRED_MUTATIONS: dict[str, str] = {
-    "restart ollama": (
-        "ollama runs as a systemd service and restart needs sudo. Deferred until "
-        "a NOPASSWD sudoers entry for `systemctl restart ollama` is documented "
-        "in docs/runbooks/live-mutations.md and installed on the node."
-    ),
+    "restart ollama": {
+        "description": "Restart the ollama systemd service",
+        "argv": ["sudo", "-n", "/bin/systemctl", "restart", "ollama"],
+        "approval_reason": "approved live-mutation: sudo -n /bin/systemctl restart ollama",
+    },
 }
 
 
@@ -2770,49 +2765,6 @@ def _live_diag_block(key: str, result: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def _handle_live_deferred_mutation(
-    config: Config,
-    session: dict[str, Any],
-    key: str,
-    message: str,
-) -> None:
-    """Refuse a known-deferred mutation with a clear pointer; audit the refusal."""
-    block = "\n".join(
-        [
-            "LIVE_MUTATION_REFUSED",
-            f"timestamp: {utc_now()}",
-            f"op: {key}",
-            f"target: {config.live_ssh or 'local'}",
-            f"reason: {message}",
-        ]
-    ).strip()
-    add_context(
-        session,
-        f"/live {key}",
-        context_block("live_mutation_refused", key, block),
-        source="manual-live-refused",
-        provenance={
-            "command": "/live",
-            "op": key,
-            "target": config.live_ssh or "local",
-            "status": "refused",
-            "reason": message,
-        },
-    )
-    audit_event(
-        config,
-        session,
-        "live_mutation_refused",
-        status="refused",
-        op=key,
-        target=config.live_ssh or "local",
-        reason=message,
-    )
-    print(block)
-    print()
-    print(f"live mutation refused: {key}")
-
-
 def _handle_live_diag(
     config: Config,
     session: dict[str, Any],
@@ -2900,13 +2852,10 @@ def _handle_live_mutation_queue(
 
 
 def command_live(config: Config, session: dict[str, Any], arg: str) -> None:
-    # Phase 1: extended /live ops (diag + mutation + deferred). These keys are
+    # Phase 1: extended /live ops (diag + mutation). These keys are
     # multi-word and exact-string (after lowercase + whitespace collapse), so
     # they're matched before the comma/space-split fixed-check parsing path.
     key = _live_op_key(arg)
-    if key in LIVE_DEFERRED_MUTATIONS:
-        _handle_live_deferred_mutation(config, session, key, LIVE_DEFERRED_MUTATIONS[key])
-        return
     if key in LIVE_MUTATION_OPS:
         _handle_live_mutation_queue(config, session, key, LIVE_MUTATION_OPS[key])
         return
