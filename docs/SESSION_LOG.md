@@ -9,8 +9,9 @@
 - **LLM synthesis profile targeting fixed.** `sweeps/run_workflow.py` now passes `--profile` through to `sweeps/llm_synthesize.py`, and `llm_synthesize.py` resolves core/extended operator briefs by profile-aware filename. This prevents an `extended` workflow from synthesizing the same-date core operator brief by accident.
 - **Direct digest sender env loading fixed.** `sweeps/send_digest_email.py` now loads `.env` and then `sweeps/.env`, matching workflow behavior. A dry-run against the exact extended digest resolved subject `Daily Sweep - 2026-05-16.extended`, visible `to` `digest@nodehome.ai`, and BCC `bmoore7789@gmail.com` without sending.
 - **UPS comms installed and verified end-to-end.** The APC Back-UPS XS 1500M/BX1500M USB device enumerated as `051d:0002 American Power Conversion Uninterruptible Power Supply`; kernel logs identified `Back-UPS XS 1500M FW:947.d13 .D USB FW:d13`; NUT was configured with `usbhid-ups` and `MODE=standalone`; `upsc ups` returned live telemetry including `battery.charge: 99`, `input.voltage: 122.0`, `ups.status: OL CHRG`, `driver.name: usbhid-ups`, and `ups.realpower.nominal: 900`. Nodechat `/live ups` then executed `upsc ups` with `exit_code: 0`, proving the live-node UPS check is now backed by real telemetry.
+- **Nodechat paste/interrupt fix pulled and live-smoked on homelab.** Homelab repo `/home/bmoore_77/nodehome` fast-forwarded from `7c17d48` to `9551197`, then a fresh Nodechat session `20260516-175111` started against `http://127.0.0.1:8000/v1`. Live smoke: prompt `say numbers 1 to 100 slowly`, `Ctrl-C` during streaming, result `CHAT_INTERRUPTED` and clean return to `nodechat:175111>` with no traceback. This verifies the streaming interrupt fix on the actual homelab terminal client.
 **Validation:**
-- `python -m unittest discover -s tests` passed: `96/96`.
+- `python -m unittest discover -s tests` passed: `98/98`.
 - `py_compile` passed for the touched sweep scripts.
 - `python -m json.tool sweeps/sources.json` passed.
 - `git diff --check` passed with only expected CRLF warnings.
