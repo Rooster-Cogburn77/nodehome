@@ -23,12 +23,13 @@
 | [vllm-300w-power-cap](decisions/vllm-300w-power-cap.md) | 2026-05 | Why 300W + top fan is the sustained 2-GPU vLLM default |
 | [rack-acoustic-treatment](decisions/rack-acoustic-treatment.md) | 2026-05 | Why rack-internal foam is rejected; damping is allowed only for vibration |
 
-## Research (8 articles)
+## Research (9 articles)
 | Topic | Status | Summary |
 |-------|--------|---------|
 | [ai-agent-traps](research/ai-agent-traps.md) | Complete | DeepMind's 6 trap categories mapped to Sovereign Node threat model |
 | [hyperscaler-capex](research/hyperscaler-capex.md) | Logged for deep dive | $600B+/yr 2026, $1.3T over 3 years |
 | [karpathy-dossier](research/karpathy-dossier.md) | Complete | Full research on repos, cognitive core, knowledge base workflow |
+| [memory-architectures](research/memory-architectures.md) | Watch lane | delta-mem and future serving-layer memory architectures; watch, do not pivot Nodechat |
 | [gpu-resale-side-hustle](research/gpu-resale-side-hustle.md) | Explored, not committed | Blower arbitrage from ITAD vendors |
 | [gpu-architecture-comparison](research/gpu-architecture-comparison.md) | Complete | RTX 3090/4090/5090 vs A100/H100 |
 | [ebay-seller-behavior](research/ebay-seller-behavior.md) | Complete | China bulk seller dynamics, 12.5% response rate |
