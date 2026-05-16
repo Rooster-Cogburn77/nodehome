@@ -2,6 +2,8 @@
 
 **Last Updated:** 2026-05-16
 
+**Cross-cutting reference:** [`docs/wiki/concepts/full-stack-inventory.md`](wiki/concepts/full-stack-inventory.md) — every component (hardware, OS, inference, tooling, media, watch lane) in one rolled-up table with status (shipped / in-flight / planned / deferred / watch / declined). Use that for the bird's-eye view; this file is the deeper narrative on active work.
+
 ## Active Work
 - Hardware bring-up is now well past POST. `Supermicro H12SSL-i` BIOS `3.3` / build `03/28/2025` / CPLD `F0.A6.47`, BMC firmware `01.05.02`, IPMI Working, all four `Samsung M393A4K40CB1-CRC4Q` RDIMMs trained at `Total Memory: 128 GB`.
 - **Ubuntu Server 26.04 LTS is installed on `BLK0` (the Acer Predator GM7 2TB NVMe) and boots cleanly from NVMe.** Kernel is `Linux 7.0.0-15-generic`, hostname `homelab`, OS partitions are `/boot/efi` (1 GiB FAT32) + `/` (1.86 TiB ext4). System is fully patched.
