@@ -17,6 +17,7 @@ it is replaced rather than appended again.
 Usage:
     python sweeps/llm_synthesize.py
     python sweeps/llm_synthesize.py 2026-05-09
+    python sweeps/llm_synthesize.py --profile extended
     python sweeps/llm_synthesize.py --model qwen2.5:32b-instruct-q4_K_M
     python sweeps/llm_synthesize.py --endpoint http://localhost:8000/v1/chat/completions
 """
@@ -62,15 +63,23 @@ USER_PROMPT_TEMPLATE = (
 )
 
 
-def latest_brief_path() -> Path:
-    candidates = sorted(OPERATOR_DIR.glob("*.md"))
+def suffix_for_profile(profile: str) -> str:
+    return "" if profile == "core" else f".{profile}"
+
+
+def latest_brief_path(profile: str = "core") -> Path:
+    suffix = suffix_for_profile(profile)
+    pattern = f"*{suffix}.md"
+    candidates = sorted(OPERATOR_DIR.glob(pattern))
+    if profile == "core":
+        candidates = [p for p in candidates if p.stem.count(".") == 0]
     if not candidates:
-        sys.exit(f"No briefs found in {OPERATOR_DIR}")
+        sys.exit(f"No {profile} briefs found in {OPERATOR_DIR}")
     return candidates[-1]
 
 
-def brief_path_for_date(brief_date: str) -> Path:
-    p = OPERATOR_DIR / f"{brief_date}.md"
+def brief_path_for_date(brief_date: str, profile: str = "core") -> Path:
+    p = OPERATOR_DIR / f"{brief_date}{suffix_for_profile(profile)}.md"
     if not p.exists():
         sys.exit(f"No brief at {p}")
     return p
@@ -132,6 +141,12 @@ def parse_args() -> argparse.Namespace:
         help="YYYY-MM-DD; defaults to the latest brief in docs/sweeps/operator/",
     )
     p.add_argument(
+        "--profile",
+        choices=("core", "extended", "all"),
+        default="core",
+        help="Operator brief profile to synthesize (default: core).",
+    )
+    p.add_argument(
         "--model",
         default=DEFAULT_MODEL,
         help=f"Model tag (default: {DEFAULT_MODEL}). For vLLM, use the HF repo id.",
@@ -151,7 +166,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     brief_path = (
-        brief_path_for_date(args.brief_date) if args.brief_date else latest_brief_path()
+        brief_path_for_date(args.brief_date, args.profile)
+        if args.brief_date
+        else latest_brief_path(args.profile)
     )
     brief_content = brief_path.read_text(encoding="utf-8")
     user = USER_PROMPT_TEMPLATE.format(

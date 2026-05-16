@@ -119,7 +119,7 @@ def main() -> int:
         if not synth_endpoint:
             print("LLM_SYNTHESIS_ENDPOINT not set; skipping synthesis. Set in .env to enable.")
         else:
-            synth_cmd = [python_exe, str(LLM_SYNTHESIZE)]
+            synth_cmd = [python_exe, str(LLM_SYNTHESIZE), "--profile", args.profile]
             if args.run_date:
                 synth_cmd.append(args.run_date)
             synth_cmd.extend(["--endpoint", synth_endpoint])

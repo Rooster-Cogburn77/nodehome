@@ -1,7 +1,11 @@
+import os
+import tempfile
 import unittest
+from pathlib import Path
 
 from sweeps.send_digest_email import (
     build_email_payload,
+    load_env_file,
     parse_recipients,
     resolve_visible_to_email,
 )
@@ -45,6 +49,41 @@ class SendDigestEmailTests(unittest.TestCase):
             resolve_visible_to_email("bmoore7789@gmail.com", "digest@example.com"),
             "digest@example.com",
         )
+
+    def test_load_env_file_sets_missing_values_without_overriding_existing(self):
+        key_one = "TEST_DIGEST_ENV_ONE"
+        key_two = "TEST_DIGEST_ENV_TWO"
+        original_one = os.environ.get(key_one)
+        original_two = os.environ.get(key_two)
+        try:
+            os.environ[key_one] = "shell-value"
+            os.environ.pop(key_two, None)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / ".env"
+                path.write_text(
+                    "\n".join(
+                        [
+                            "# comment",
+                            f"{key_one}=file-value",
+                            f'{key_two}="quoted file value"',
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(load_env_file(path), 1)
+                self.assertEqual(os.environ[key_one], "shell-value")
+                self.assertEqual(os.environ[key_two], "quoted file value")
+        finally:
+            if original_one is None:
+                os.environ.pop(key_one, None)
+            else:
+                os.environ[key_one] = original_one
+            if original_two is None:
+                os.environ.pop(key_two, None)
+            else:
+                os.environ[key_two] = original_two
 
 
 if __name__ == "__main__":

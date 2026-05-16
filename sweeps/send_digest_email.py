@@ -12,12 +12,37 @@ from pathlib import Path
 
 
 RESEND_API_URL = "https://api.resend.com/emails"
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_env_file(path: Path) -> int:
+    if not path.exists():
+        return 0
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+        loaded += 1
+    return loaded
+
+
+def load_email_env() -> None:
+    load_env_file(ROOT / ".env")
+    load_env_file(ROOT / "sweeps" / ".env")
 
 
 def digest_path(profile: str, run_date: date) -> Path:
-    root = Path(__file__).resolve().parent.parent
     suffix = "" if profile == "core" else f".{profile}"
-    return root / "docs" / "sweeps" / "daily" / f"{run_date.isoformat()}{suffix}.md"
+    return ROOT / "docs" / "sweeps" / "daily" / f"{run_date.isoformat()}{suffix}.md"
 
 
 def markdown_to_text(markdown: str) -> str:
@@ -477,6 +502,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    load_email_env()
     args = parse_args()
     enabled = os.getenv("DIGEST_EMAIL_ENABLED", "false").strip().lower() == "true"
     if not enabled:

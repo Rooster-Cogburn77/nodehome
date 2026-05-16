@@ -33,7 +33,7 @@ Script:
 
 ## Environment
 
-Workflow env is loaded automatically from `.env` and then `sweeps/.env` if those files exist.
+Workflow and direct digest-email env are loaded automatically from `.env` and then `sweeps/.env` if those files exist.
 Already-set shell or Task Scheduler environment variables win over both files, and root `.env` wins over `sweeps/.env`.
 
 Copy `sweeps/email_env.example` to `.env` or `sweeps/.env` and fill in real values locally.
@@ -54,6 +54,7 @@ python sweeps/run_daily.py --profile extended
 python sweeps/run_daily.py --profile all
 python sweeps/build_weekly.py --date 2026-04-07 --profile core
 python sweeps/send_digest_email.py --profile core --date 2026-04-07 --dry-run
+python sweeps/send_digest_email.py --input docs\sweeps\daily\2026-04-07.extended.md --subject "Daily Sweep - 2026-04-07.extended" --dry-run
 python sweeps/run_workflow.py --profile core
 python sweeps/run_workflow.py --profile all --weekly --skip-email
 python sweeps/run_workflow.py --profile all --weekly --send-weekly
