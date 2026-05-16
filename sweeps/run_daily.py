@@ -341,15 +341,18 @@ def read_local_jsonl(source: Source) -> list[dict[str, str]]:
         link = normalize_text(str(raw.get("link", "")))
         if not item_id or not title:
             continue
-        items.append(
-            {
-                "id": item_id,
-                "title": title,
-                "link": link,
-                "published": normalize_text(str(raw.get("published", ""))),
-                "summary": normalize_text(str(raw.get("summary", ""))) or title,
-            }
-        )
+        item = {
+            "id": item_id,
+            "title": title,
+            "link": link,
+            "published": normalize_text(str(raw.get("published", ""))),
+            "summary": normalize_text(str(raw.get("summary", ""))) or title,
+        }
+        for key in ("lane", "source", "confidence", "novelty", "action", "why", "validation_status"):
+            value = normalize_text(str(raw.get(key, "")))
+            if value:
+                item[key] = value
+        items.append(item)
     return items
 
 
@@ -1592,18 +1595,24 @@ def main() -> int:
                             }
                         )
 
-            status = validation_status(source, followup_urls)
+            status = item.get("validation_status") or validation_status(source, followup_urls)
+            entry_lane = item.get("lane") or source.lane
+            entry_source = item.get("source") or source.name
+            entry_confidence = item.get("confidence") or source.confidence
+            entry_novelty = item.get("novelty") or novelty_for_source(source)
+            entry_action = item.get("action") or action_for_lane(entry_lane)
+            entry_why = item.get("why") or infer_specific_why(source, item)
             entries.append(
                 {
-                    "lane": source.lane,
-                    "source": source.name,
+                    "lane": entry_lane,
+                    "source": entry_source,
                     "title": item["title"],
                     "link": item["link"],
                     "published": item["published"],
-                    "confidence": source.confidence,
-                    "novelty": novelty_for_source(source),
-                    "action": action_for_lane(source.lane),
-                    "why": infer_specific_why(source, item),
+                    "confidence": entry_confidence,
+                    "novelty": entry_novelty,
+                    "action": entry_action,
+                    "why": entry_why,
                     "validation_status": status,
                     "followup_urls": followup_urls,
                 }

@@ -658,6 +658,17 @@
       "bluesky_handle": "servethehome.com.web.brid.gy"
     },
     {
+      "id": "manual-stack-articles",
+      "name": "Manual Stack Article Inbox",
+      "lane": "workflow",
+      "kind": "local_jsonl",
+      "url": "docs/sweeps/inbox/manual_stack_articles.jsonl",
+      "confidence": "manual-primary",
+      "profile": "extended",
+      "timeout_seconds": 5,
+      "retries": 1
+    },
+    {
       "id": "x-email-notifications",
       "name": "X Email Notifications",
       "lane": "scene",

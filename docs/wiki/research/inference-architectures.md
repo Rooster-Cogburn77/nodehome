@@ -23,7 +23,7 @@ GPU2 remains excluded from sustained work until the proper SF-1600F14HT cable ar
 - **Confidence:** Primary artifact exists, but performance claims are not locally reproduced.
 - **Novelty:** Dual-view decoding architecture: a frozen autoregressive base model plus a lightweight trainable diffusion view that generates tokens in parallel while sharing the same KV cache. The authors claim strictly lossless generation fidelity, O(1) extra KV-cache overhead, and up to 7.8x speedup.
 - **Available models:** Qwen3-backed Orthrus checkpoints at 1.7B, 4B, and 8B. The repo table lists average speedups around 4.25x, 5.20x, and 5.36x respectively.
-- **Action:** Watch lane. Do not deploy into Nodehome now. Re-evaluate when native vLLM/SGLang support is real and when a checkpoint exists at a size/quality tier that matters to the current stack.
+- **Action:** Watch lane. Do not deploy into Nodehome now. A bounded lab-only benchmark is allowed as evidence gathering, but it must not create a production Nodechat profile or serving change. Re-evaluate production only when native vLLM/SGLang support is real and when a checkpoint exists at a size/quality tier that matters to the current stack.
 
 ### What It Is In Plain Terms
 
@@ -51,16 +51,26 @@ Re-evaluate when one or more of these happens:
 - A 24B/30B/32B-class checkpoint appears, or a recipe proves the method on Qwen2.5/Qwen3 models in Nodehome's quality tier.
 - Independent reproduction confirms lossless outputs and real wall-clock speedup, not just paper/demo benchmarks.
 - The model can run without broad `trust_remote_code=True` risk in the production serving path.
-- A bounded single-GPU local smoke can compare Orthrus-Qwen3-8B against the existing Ollama `qwen3:8b` smoke lane without touching GPU2.
+- A bounded single-GPU local smoke proves the method on this hardware without touching GPU2.
 
-### Possible Future Benchmark
+### Lab-Only Benchmark Gates
 
-If the runtime matures, test it as an isolated experiment:
+Optionality is useful, but this is a lab experiment only. It is not a production migration path and should not touch Nodechat routing unless later revisit triggers land.
 
-- Baseline: existing `qwen3:8b` or another Qwen3 8B lane on one RTX 3090.
-- Candidate: `chiennv/Orthrus-Qwen3-8B` on one RTX 3090.
-- Metrics: tokens/sec, prompt eval speed, peak VRAM, output identity/fidelity against baseline prompts, cold-load time, and whether streaming behavior is acceptable.
-- Gate: no production routing until it is served through a normal OpenAI-compatible endpoint with audited startup/health behavior.
+Hard gates before running:
+
+- Stop `vllm-server` for the experiment window, then restart it afterward and record both actions in the lab log. vLLM holds roughly 22.5 GiB on each of GPUs 0 and 1 under the current 0.85 utilization posture, so Orthrus on those cards will otherwise collide with production serving.
+- Do not use GPU2 while the temporary pigtail rule is active.
+- Prefer a throwaway Docker container over a host venv. The current quickstart requires `trust_remote_code=True`, which runs arbitrary Python from the model repo; container isolation with minimal mounts is the correct trust boundary.
+- Do not mount private project data into the container. Use a disposable lab path such as `/tmp/orthrus-lab` or `~/orthrus-lab`.
+- Do not commit lab artifacts, downloaded weights, raw benchmark output, or dependency scratch files to git. Commit only a concise result note if the experiment produces useful evidence.
+- Time-box dependency setup at 4 hours. If CUDA/PyTorch/flash-attn/Transformers dependency resolution fails, stop and log that the Orthrus install path was not stable on the current CUDA 13.2 / driver 595 stack as of the test date.
+
+Measurement order:
+
+1. Correctness first: compare `chiennv/Orthrus-Qwen3-8B` against vanilla Qwen3-8B through the same Transformers + flash-attn path, deterministic `temperature=0`, at least 10 prompts, and require token-for-token output match before treating speed numbers as meaningful.
+2. Throughput second: only after the correctness gate passes, measure tokens/sec, prompt eval speed, peak VRAM, cold-load time, errors, and streaming behavior.
+3. Scope conclusion: a successful Qwen3-8B Orthrus run validates the watch-lane thesis on Nodehome hardware only. It still does not replace the validated `strong` lane until a 24B/30B/32B-class checkpoint and native vLLM/SGLang/OpenAI-compatible serving path exist.
 
 ### Why It Matters
 

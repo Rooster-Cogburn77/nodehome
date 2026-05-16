@@ -28,6 +28,7 @@ Script:
 - `sweeps/report_status.py`
 - `sweeps/build_wiki.py`
 - `sweeps/build_operator_brief.py`
+- `sweeps/manual_article_inbox.py`
 - `sweeps/email_env.example`
 
 ## Environment
@@ -63,6 +64,8 @@ python -m sweeps.fact_notebook --review <fact_id> --note "checking this"
 python -m sweeps.fact_notebook --done <fact_id> --note "handled"
 python -m sweeps.build_wiki --profile all
 python -m sweeps.build_operator_brief --profile all
+python sweeps/manual_article_inbox.py add --lane infra --title "Orthrus: Memory-Efficient Parallel Token Generation" --url "https://github.com/chiennv2000/orthrus" --summary "Lossless parallel decoding watch item for the afternoon stack digest."
+python sweeps/manual_article_inbox.py list
 ```
 
 The script is intentionally narrow:
@@ -88,6 +91,7 @@ The script is intentionally narrow:
 - follow-up action commands accept unique fact ID prefixes, so the weekly email can use short IDs
 - workflow now rebuilds the generated wiki view under `docs/wiki/generated/` after notebook ingest, and again after weekly rollup generation
 - workflow now also rebuilds a generated operator brief under `docs/sweeps/operator/` after notebook ingest
+- operator-curated morning finds can be queued into `docs/sweeps/inbox/manual_stack_articles.jsonl` with `sweeps/manual_article_inbox.py`; the source is wired to the `extended` profile so a later `extended` or `all` run can include them without a morning `core` run consuming them first
 - pass `--skip-wiki` only if you explicitly want to suppress that refresh
 - pass `--skip-operator` only if you explicitly want to suppress that refresh
 
