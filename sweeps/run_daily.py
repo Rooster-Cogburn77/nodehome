@@ -530,6 +530,33 @@ def has_previous_state(source_id: str) -> bool:
     return state_path(source_id).exists()
 
 
+def is_manual_stack_articles_source(source: Source) -> bool:
+    return source.kind == "local_jsonl" and source.id == "manual-stack-articles"
+
+
+def emits_on_first_snapshot(source: Source) -> bool:
+    return is_manual_stack_articles_source(source)
+
+
+def suppresses_age_filter(source: Source) -> bool:
+    return is_manual_stack_articles_source(source)
+
+
+def diff_items_for_source(
+    source: Source,
+    items: list[dict[str, str]],
+    previous_ids: set[str],
+    had_previous_state: bool,
+    bootstrap_emit: bool,
+    replay_current: bool,
+) -> tuple[list[dict[str, str]], str]:
+    if replay_current:
+        return items, ""
+    if had_previous_state or bootstrap_emit or emits_on_first_snapshot(source):
+        return [item for item in items if item["id"] not in previous_ids], ""
+    return [], f"{source.name}: bootstrapped state from current snapshot, no prior diff available"
+
+
 def save_state(source_id: str, items: list[dict[str, str]]) -> None:
     payload = {
         "saved_at": datetime.now(UTC).isoformat(),
@@ -1552,17 +1579,20 @@ def main() -> int:
         items = result["items"]
         had_previous_state = has_previous_state(source.id)
         previous_ids = load_previous_ids(source.id)
-        if args.replay_current:
-            new_items = items
-        elif had_previous_state or args.bootstrap_emit:
-            new_items = [item for item in items if item["id"] not in previous_ids]
-        else:
-            new_items = []
-            failures.append(f"{source.name}: bootstrapped state from current snapshot, no prior diff available")
+        new_items, bootstrap_notice = diff_items_for_source(
+            source,
+            items,
+            previous_ids,
+            had_previous_state,
+            args.bootstrap_emit,
+            args.replay_current,
+        )
+        if bootstrap_notice:
+            failures.append(bootstrap_notice)
 
         filtered_items: list[dict[str, str]] = []
         for item in new_items:
-            if is_stale_item(run_date, item):
+            if is_stale_item(run_date, item) and not suppresses_age_filter(source):
                 continue
             if "llama.cpp commits" in source.name.lower() and not is_high_signal_commit(item["title"]):
                 continue
