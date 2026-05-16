@@ -969,7 +969,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             original = self._stub_run_live_op(calls)
             try:
                 buf = io.StringIO()
-                with contextlib.redirect_stdout(buf):
+                with mock.patch.object(nodechat.shutil, "which", return_value="/usr/bin/docker"), contextlib.redirect_stdout(buf):
                     nodechat.command_live(config, session, "restart vllm-server")
             finally:
                 nodechat.run_live_op = original
@@ -993,7 +993,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             workspace = pathlib.Path(workspace_raw)
             config = make_config(workspace, workspace / ".sessions")
             session = nodechat.make_session(config)
-            with contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(nodechat.shutil, "which", return_value="/usr/bin/docker"), contextlib.redirect_stdout(io.StringIO()):
                 nodechat.command_live(config, session, "restart webui")
             approvals = session.get("approvals", [])
             self.assertEqual(len(approvals), 1)
@@ -1003,10 +1003,11 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertTrue(queued)
             self.assertEqual(queued[-1]["argv"], ["docker", "restart", "open-webui"])
 
-    def test_live_restart_ollama_queues_sudo_systemctl_argv(self):
+    def test_live_restart_ollama_queues_sudo_systemctl_argv_with_ssh_target(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
             config = make_config(workspace, workspace / ".sessions")
+            config.live_ssh = "bmoore_77@homelab"
             session = nodechat.make_session(config)
             calls: list[dict] = []
             original = self._stub_run_live_op(calls)
@@ -1032,6 +1033,25 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                 for r in rows
             ))
 
+    def test_live_restart_ollama_refuses_windows_local_linux_argv_before_queue(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            buf = io.StringIO()
+            with mock.patch.object(nodechat.os, "name", "nt"), contextlib.redirect_stdout(buf):
+                nodechat.command_live(config, session, "restart ollama")
+            text = buf.getvalue()
+            self.assertIn("LIVE_MUTATION_REFUSED", text)
+            self.assertIn("local Windows session cannot run POSIX-path", text)
+            self.assertEqual(session.get("approvals", []), [])
+            rows = nodechat.read_recent_audit(config, 10)
+            refused = [r for r in rows if r["event_type"] == "live_mutation_refused"]
+            self.assertTrue(refused)
+            self.assertEqual(refused[-1]["op"], "restart ollama")
+            self.assertEqual(refused[-1]["target"], "local")
+            self.assertEqual(refused[-1]["status"], "refused")
+
     def test_live_restart_arbitrary_container_falls_through_to_unknown(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -1048,7 +1068,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             workspace = pathlib.Path(workspace_raw)
             config = make_config(workspace, workspace / ".sessions")
             session = nodechat.make_session(config)
-            with contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(nodechat.shutil, "which", return_value="/usr/bin/docker"), contextlib.redirect_stdout(io.StringIO()):
                 nodechat.command_live(config, session, "restart vllm-server")
             calls: list[dict] = []
             original = self._stub_run_live_op(calls)

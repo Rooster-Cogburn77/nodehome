@@ -2594,6 +2594,26 @@ def run_live_op(config: Config, key: str, spec: dict[str, Any]) -> dict[str, Any
     return _run_live_argv(config, key, target, argv)
 
 
+def local_live_mutation_refusal_reason(config: Config, argv: list[str]) -> str | None:
+    """Refuse local mutation approvals that cannot execute on this host."""
+    if config.live_ssh:
+        return None
+    if not argv:
+        return "empty live mutation argv"
+    if os.name == "nt" and any(part.startswith("/") for part in argv):
+        return (
+            "local Windows session cannot run POSIX-path live mutation argv; "
+            "run Nodechat on the homelab or set --live-ssh to target it"
+        )
+    resolved = shutil.which(argv[0])
+    if not resolved:
+        return (
+            f"local executable not found: {argv[0]}; "
+            "run Nodechat on the target host or set --live-ssh"
+        )
+    return None
+
+
 def parse_live_arg(arg: str) -> tuple[list[str], str]:
     raw = (arg or "").strip()
     if not raw:
@@ -2837,6 +2857,49 @@ def _handle_live_mutation_queue(
 ) -> None:
     """Queue a mutation for /approve. Does not execute."""
     command_str = "/live " + key
+    argv = list(spec["argv"])
+    target = "ssh:" + config.live_ssh if config.live_ssh else "local"
+    refusal = local_live_mutation_refusal_reason(config, argv)
+    if refusal:
+        cwd = workspace_path(config, session)
+        block = "\n".join(
+            [
+                "LIVE_MUTATION_REFUSED",
+                f"timestamp: {utc_now()}",
+                f"cwd: {cwd}",
+                "class: live-mutation",
+                f"command: {command_str}",
+                f"target: {target}",
+                f"argv: {_format_argv(argv)}",
+                f"reason: {refusal}",
+            ]
+        )
+        audit_event(
+            config,
+            session,
+            "live_mutation_refused",
+            status="refused",
+            op=key,
+            target=target,
+            argv=argv,
+            reason=refusal,
+        )
+        add_context(
+            session,
+            command_str,
+            block,
+            source="manual-live-mutation",
+            provenance={
+                "command": "/live",
+                "op": key,
+                "kind": "mutation",
+                "target": target,
+                "status": "refused",
+                "reason": refusal,
+            },
+        )
+        print(block)
+        return
     row = queue_approval(
         session,
         command=command_str,
@@ -2851,8 +2914,8 @@ def _handle_live_mutation_queue(
         status="pending",
         approval_id=row.get("id", ""),
         op=key,
-        target=config.live_ssh or "local",
-        argv=list(spec["argv"]),
+        target=target,
+        argv=argv,
     )
     cwd = workspace_path(config, session)
     block = approval_required_block(row, cwd)

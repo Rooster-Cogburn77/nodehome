@@ -327,11 +327,11 @@ Beyond the fixed checks, `/live` also exposes a small allowlisted surface of rea
 /live restart ollama          # sudo -n /bin/systemctl restart ollama  (queued)
 ```
 
-`/live restart …` does not execute. It queues an approval row (class `live-mutation`) and prints an `APPROVAL_REQUIRED` block. The restart only runs after `/approve <id>`. Audit trail records the queued argv, the executed argv, exit code, executable provenance, and target (`local` or `ssh:user@host`) on separate `live_mutation_queued` and `live_mutation_executed` events.
+`/live restart …` does not execute. It validates the target, then queues an approval row (class `live-mutation`) and prints an `APPROVAL_REQUIRED` block. Invalid local targets are refused before queueing: for example, a Windows-local Nodechat session cannot queue `/live restart ollama` because that argv is Linux-only (`sudo -n /bin/systemctl restart ollama`). Refusal prints `LIVE_MUTATION_REFUSED` and writes `live_mutation_refused`. Valid restarts only run after `/approve <id>`. Audit trail records the queued argv, the executed argv, exit code, executable provenance, and target (`local` or `ssh:user@host`) on separate `live_mutation_queued` and `live_mutation_executed` events.
 
 For chronological log/journal commands (`/live logs …`, `/live journal ollama`), Nodechat preserves the newest tail of output when the live-output cap is hit. For non-log diagnostics, truncation preserves the head.
 
-Hard guardrails: no arbitrary container names, no arbitrary journalctl units, no templated systemd units, no `--follow`, no shell composition, no restart without `/approve`.
+Hard guardrails: no arbitrary container names, no arbitrary journalctl units, no templated systemd units, no `--follow`, no shell composition, no invalid local target, no restart without `/approve`.
 
 By default, live checks run from the current machine. From Windows, point Nodechat at the homelab with:
 

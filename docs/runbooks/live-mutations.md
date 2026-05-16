@@ -28,7 +28,7 @@ Each diag run injects a `LIVE_NODE_STATUS` block with command, target (`local` o
 | `/live restart open-webui`     | `docker restart open-webui`                |
 | `/live restart ollama`         | `sudo -n /bin/systemctl restart ollama`    |
 
-`/live restart …` does **not** execute the restart. It queues an approval row (class `live-mutation`) with the resolved argv, prints an `APPROVAL_REQUIRED` block, and writes a `live_mutation_queued` audit event. The restart only runs after `/approve <id>`, which writes a `live_mutation_executed` (or `live_mutation_blocked`) event with exit code, executable, target, and the SHA256 of the captured output.
+`/live restart …` does **not** execute the restart. It first validates the target environment. If the mutation cannot run locally (for example, a Windows-local session trying to queue the Linux-only `sudo -n /bin/systemctl restart ollama` argv), Nodechat prints `LIVE_MUTATION_REFUSED`, writes `live_mutation_refused`, and creates no approval row. Valid mutations queue an approval row (class `live-mutation`) with the resolved argv, print an `APPROVAL_REQUIRED` block, and write a `live_mutation_queued` audit event. The restart only runs after `/approve <id>`, which writes a `live_mutation_executed` (or `live_mutation_blocked`) event with exit code, executable, target, and the SHA256 of the captured output.
 
 Host prerequisite for Ollama restart: the homelab operator account has a narrow NOPASSWD sudoers entry for exactly `/bin/systemctl restart ollama`. This was validated from the node with `sudo -n /bin/systemctl restart ollama` returning exit code `0`.
 
@@ -39,6 +39,7 @@ Host prerequisite for Ollama restart: the homelab operator account has a narrow 
 - **No `--follow` / `-f`.** The diag allowlist is byte-for-byte fixed argv; no streaming options.
 - **No shell composition.** Argv is passed directly to `subprocess.run` (or wrapped through `ssh -o BatchMode=yes <target> <shell-quoted command>` when `live_ssh` is set). No `&&`, `||`, `;`, `|`, or redirection.
 - **No restart without `/approve`.** `/live restart …` is purely a queue action; the restart runs only when an explicit `/approve <id>` is issued in the same session.
+- **No invalid local target.** Local mutations must be executable on the local host. Run Nodechat on the homelab for local Linux service mutations, or set `NODECHAT_LIVE_SSH` / `--live-ssh user@host` when starting Nodechat from Windows.
 - **Audit queued vs executed separately.** `live_mutation_queued` records the proposed argv at queue time; `live_mutation_executed` (or `live_mutation_blocked`) records the actual outcome at approve time. Both rows include `op`, `argv`, `target`, `approval_id`, and `executable`.
 
 ## Targeting (local vs SSH)
@@ -47,6 +48,8 @@ Both diag and mutation ops use the same target plumbing as the read-only `/live`
 
 - Default: argv runs locally inside the Nodechat workspace.
 - If `NODECHAT_LIVE_SSH` (or `--live-ssh user@host`) is set, the argv is wrapped as `ssh -o BatchMode=yes <user@host> <shell-quoted command>` and executed against the remote node. The `target` field on every audit row records `local` or `ssh:<user@host>` so the trail is unambiguous.
+
+Windows launcher note: the normal Windows Nodechat path talks to the homelab model endpoint, but that does not make live mutations target the homelab. For `/live restart ollama` from Windows, start Nodechat with `--live-ssh bmoore_77@192.168.1.198` or run Nodechat directly on the homelab.
 
 `live_root` is **not** prepended for the new ops — they are system-level commands (`docker`, `journalctl`), not repo-relative scripts. The fixed `health` check still uses `cd ~/nodehome && ./scripts/healthcheck.sh` because it is repo-relative.
 
