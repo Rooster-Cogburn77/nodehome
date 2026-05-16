@@ -75,6 +75,9 @@ MAX_CMD_OUTPUT_CHARS = 20000
 LIVE_OUTPUT_TRUNCATED_HEAD = "...[truncated earlier output for nodechat live output cap]"
 LIVE_OUTPUT_TRUNCATED_TAIL = "...[truncated for nodechat live output cap]"
 MAX_APPROVALS = 50
+MAX_DIRECT_PASTE_LINES = 400
+MAX_DIRECT_PASTE_CHARS = 60000
+DIRECT_PASTE_QUIET_SECONDS = 0.03
 HUNK_RE = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@")
 
 BLOCKED_PATH_PARTS = {
@@ -4642,6 +4645,107 @@ def read_paste() -> str:
     return "\n".join(lines).strip()
 
 
+def _stdin_is_interactive() -> bool:
+    try:
+        return bool(sys.stdin.isatty())
+    except Exception:
+        return False
+
+
+def _read_pending_posix_lines(max_lines: int, max_chars: int, quiet_seconds: float) -> tuple[list[str], bool]:
+    try:
+        import select
+    except Exception:
+        return [], False
+
+    lines: list[str] = []
+    chars = 0
+    truncated = False
+    while len(lines) < max_lines and chars < max_chars:
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], quiet_seconds)
+        except Exception:
+            break
+        if not ready:
+            break
+        line = sys.stdin.readline()
+        if line == "":
+            break
+        line = line.rstrip("\r\n")
+        lines.append(line)
+        chars += len(line) + 1
+    if len(lines) >= max_lines or chars >= max_chars:
+        truncated = True
+    return lines, truncated
+
+
+def _read_pending_windows_lines(max_lines: int, max_chars: int, quiet_seconds: float) -> tuple[list[str], bool]:
+    try:
+        import msvcrt
+    except Exception:
+        return [], False
+
+    lines: list[str] = []
+    current: list[str] = []
+    chars = 0
+    truncated = False
+    deadline = time.monotonic() + quiet_seconds
+    while len(lines) < max_lines and chars < max_chars:
+        if not msvcrt.kbhit():
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.005)
+            continue
+        ch = msvcrt.getwch()
+        deadline = time.monotonic() + quiet_seconds
+        if ch in {"\r", "\n"}:
+            lines.append("".join(current))
+            current = []
+            chars += 1
+            continue
+        current.append(ch)
+        chars += 1
+    if current and len(lines) < max_lines and chars <= max_chars:
+        lines.append("".join(current))
+    if len(lines) >= max_lines or chars >= max_chars:
+        truncated = True
+    return lines, truncated
+
+
+def read_pending_terminal_lines(
+    max_lines: int = MAX_DIRECT_PASTE_LINES,
+    max_chars: int = MAX_DIRECT_PASTE_CHARS,
+    quiet_seconds: float = DIRECT_PASTE_QUIET_SECONDS,
+) -> tuple[list[str], bool]:
+    """Best-effort non-blocking read of already-queued terminal lines."""
+    if not _stdin_is_interactive():
+        return [], False
+    if os.name == "nt":
+        return _read_pending_windows_lines(max_lines, max_chars, quiet_seconds)
+    return _read_pending_posix_lines(max_lines, max_chars, quiet_seconds)
+
+
+def merge_direct_paste_prompt(first_line: str) -> str:
+    extra_lines, truncated = read_pending_terminal_lines()
+    if not extra_lines:
+        return first_line
+    total_lines = len(extra_lines) + 1
+    print(f"direct multi-line paste detected: combined {total_lines} lines into one prompt")
+    if truncated:
+        print("direct paste hit the input cap; use /paste for large multi-line prompts")
+    return "\n".join([first_line, *extra_lines]).strip()
+
+
+def discard_pending_terminal_input(reason: str = "interrupt") -> int:
+    lines, truncated = read_pending_terminal_lines()
+    if not lines:
+        return 0
+    print(f"discarded {len(lines)} queued input line(s) after {reason}; use /paste for multi-line text")
+    if truncated:
+        print("queued input drain hit the input cap; restart nodechat if prompts keep firing")
+    return len(lines)
+
+
 def command_profile(config: Config, session: dict[str, Any], arg: str) -> None:
     profiles = load_model_profiles(config)
     current = active_model_profile(config, session)
@@ -4988,10 +5092,10 @@ def prompt_label(session: dict[str, Any]) -> str:
     return f"nodechat:{short}> "
 
 
-def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> None:
+def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> str:
     if not str(prompt or "").strip():
         print("empty prompt ignored")
-        return
+        return "ignored"
 
     # Per-turn dispatch resolves which (profile, model, endpoint) answers this
     # turn. Configured session profile/model/base_url stay unchanged; we only
@@ -5062,7 +5166,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
             session["model"] = saved_model
             session["base_url"] = saved_base_url
             save_session(config, session)
-            return
+            return "interrupted"
         except Exception as exc:
             cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
             audit_event(
@@ -5091,7 +5195,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
             session["model"] = saved_model
             session["base_url"] = saved_base_url
             save_session(config, session)
-            return
+            return "error"
         cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, len(content))
         record_remote_cost(session, cost_estimate)
         audit_event(
@@ -5120,6 +5224,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
         session["base_url"] = saved_base_url
     session.setdefault("messages", []).append({"role": "assistant", "content": content})
     save_session(config, session)
+    return "ok"
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -5270,10 +5375,15 @@ def main(argv: list[str] | None = None) -> int:
             if action == "exit":
                 return 0
             if action == "prompt" and prompt:
-                send_user_prompt(config, session, prompt)
+                status = send_user_prompt(config, session, prompt)
+                if status == "interrupted":
+                    discard_pending_terminal_input()
             continue
 
-        send_user_prompt(config, session, line)
+        prompt = merge_direct_paste_prompt(line)
+        status = send_user_prompt(config, session, prompt)
+        if status == "interrupted":
+            discard_pending_terminal_input()
 
 
 if __name__ == "__main__":

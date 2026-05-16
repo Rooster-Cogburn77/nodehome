@@ -64,10 +64,108 @@ class NodechatSafetyTests(unittest.TestCase):
             session = nodechat.make_session(config)
 
             with contextlib.redirect_stdout(io.StringIO()) as buf:
-                nodechat.send_user_prompt(config, session, " \n\t ")
+                status = nodechat.send_user_prompt(config, session, " \n\t ")
 
             self.assertIn("empty prompt ignored", buf.getvalue())
+            self.assertEqual(status, "ignored")
             self.assertNotIn({"role": "user", "content": " \n\t "}, session.get("messages", []))
+
+    def test_merge_direct_paste_prompt_combines_pending_terminal_lines(self):
+        original = nodechat.read_pending_terminal_lines
+        try:
+            nodechat.read_pending_terminal_lines = mock.Mock(return_value=(["line two", "line three"], False))
+            with contextlib.redirect_stdout(io.StringIO()) as buf:
+                prompt = nodechat.merge_direct_paste_prompt("line one")
+        finally:
+            nodechat.read_pending_terminal_lines = original
+
+        self.assertEqual(prompt, "line one\nline two\nline three")
+        self.assertIn("combined 3 lines", buf.getvalue())
+
+    def test_main_combines_direct_multiline_paste_into_one_prompt(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            seen: list[str] = []
+            original_input = __builtins__["input"] if isinstance(__builtins__, dict) else __builtins__.input
+            original_pending = nodechat.read_pending_terminal_lines
+            original_send = nodechat.send_user_prompt
+            try:
+                inputs = iter(["line one"])
+
+                def fake_input(prompt=""):
+                    try:
+                        return next(inputs)
+                    except StopIteration:
+                        raise EOFError
+
+                if isinstance(__builtins__, dict):
+                    __builtins__["input"] = fake_input
+                else:
+                    __builtins__.input = fake_input
+                nodechat.read_pending_terminal_lines = mock.Mock(return_value=(["line two"], False))
+
+                def fake_send(config, session, prompt):
+                    seen.append(prompt)
+                    return "ok"
+
+                nodechat.send_user_prompt = fake_send
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = nodechat.main([
+                        "--session-root", str(session_root),
+                        "--workspace", str(workspace),
+                        "--no-stream",
+                    ])
+            finally:
+                if isinstance(__builtins__, dict):
+                    __builtins__["input"] = original_input
+                else:
+                    __builtins__.input = original_input
+                nodechat.read_pending_terminal_lines = original_pending
+                nodechat.send_user_prompt = original_send
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(seen, ["line one\nline two"])
+
+    def test_main_discards_queued_terminal_input_after_interrupted_prompt(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            original_input = __builtins__["input"] if isinstance(__builtins__, dict) else __builtins__.input
+            original_send = nodechat.send_user_prompt
+            original_discard = nodechat.discard_pending_terminal_input
+            discard = mock.Mock(return_value=2)
+            try:
+                inputs = iter(["stop me"])
+
+                def fake_input(prompt=""):
+                    try:
+                        return next(inputs)
+                    except StopIteration:
+                        raise EOFError
+
+                if isinstance(__builtins__, dict):
+                    __builtins__["input"] = fake_input
+                else:
+                    __builtins__.input = fake_input
+                nodechat.send_user_prompt = mock.Mock(return_value="interrupted")
+                nodechat.discard_pending_terminal_input = discard
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = nodechat.main([
+                        "--session-root", str(session_root),
+                        "--workspace", str(workspace),
+                        "--no-stream",
+                    ])
+            finally:
+                if isinstance(__builtins__, dict):
+                    __builtins__["input"] = original_input
+                else:
+                    __builtins__.input = original_input
+                nodechat.send_user_prompt = original_send
+                nodechat.discard_pending_terminal_input = original_discard
+
+            self.assertEqual(rc, 0)
+            discard.assert_called_once()
 
     def test_workspace_confinement_blocks_outside_paths(self):
         with tempfile.TemporaryDirectory() as workspace_raw, tempfile.TemporaryDirectory() as outside_raw:
