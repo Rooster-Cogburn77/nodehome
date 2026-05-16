@@ -57,6 +57,18 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertEqual(path, workspace)
             self.assertIn("could not save nodechat session", buf.getvalue())
 
+    def test_send_user_prompt_ignores_blank_prompt(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            with contextlib.redirect_stdout(io.StringIO()) as buf:
+                nodechat.send_user_prompt(config, session, " \n\t ")
+
+            self.assertIn("empty prompt ignored", buf.getvalue())
+            self.assertNotIn({"role": "user", "content": " \n\t "}, session.get("messages", []))
+
     def test_workspace_confinement_blocks_outside_paths(self):
         with tempfile.TemporaryDirectory() as workspace_raw, tempfile.TemporaryDirectory() as outside_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -1342,6 +1354,29 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(event["endpoint"], "http://127.0.0.1:8000/v1")
             self.assertGreater(event["prompt_chars"], 0)
             self.assertEqual(event["response_chars"], 2)
+
+    def test_send_user_prompt_handles_keyboard_interrupt_without_traceback(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            config.stream = True
+            session = nodechat.make_session(config)
+            session["model_mode"] = "manual"
+            original = nodechat.stream_chat
+            try:
+                nodechat.stream_chat = mock.Mock(side_effect=KeyboardInterrupt)
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, "stop me")
+            finally:
+                nodechat.stream_chat = original
+
+            self.assertIn("CHAT_INTERRUPTED", buf.getvalue())
+            self.assertNotIn({"role": "assistant", "content": ""}, session.get("messages", []))
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "model_dispatched")
+            self.assertEqual(event["status"], "interrupted")
+            self.assertEqual(event["reason"], "keyboard interrupt")
 
     # ---- Model auto-routing (Phase 2) -----------------------------------
 

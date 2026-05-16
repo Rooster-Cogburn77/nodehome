@@ -159,7 +159,7 @@ Inside `nodechat`:
 /paste
 ```
 
-`/paste` starts a multi-line prompt. End it with a single `.` on its own line.
+`/paste` starts a multi-line prompt. End it with a single `.` on its own line. Do not paste multi-line text directly at the `nodechat:...>` prompt; terminal input is line-based, so each pasted line can be handled as a separate turn. Press `Ctrl-C` during a streaming answer to interrupt that answer and return to the prompt.
 
 ## AI History Integration
 

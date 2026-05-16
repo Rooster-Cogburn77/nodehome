@@ -4555,6 +4555,8 @@ def print_help() -> None:
 
             Notes
               AI History, repo files, web context, and live node status auto-route on prompts that clearly call for them.
+              Use /paste for multi-line input; direct multi-line terminal paste is split into separate turns.
+              Ctrl-C interrupts a streaming answer and returns to the prompt.
               The disclosure line above the assistant reply names every routed source.
               /history-mode, /repo-mode, /web-mode, and /live-mode toggle auto-routing; manual slash commands always work.
               Web search results are leads, not proof; fetch/open source text before relying on a claim.
@@ -4987,6 +4989,10 @@ def prompt_label(session: dict[str, Any]) -> str:
 
 
 def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> None:
+    if not str(prompt or "").strip():
+        print("empty prompt ignored")
+        return
+
     # Per-turn dispatch resolves which (profile, model, endpoint) answers this
     # turn. Configured session profile/model/base_url stay unchanged; we only
     # override them inside a try/finally for the duration of the chat call so
@@ -5027,6 +5033,36 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> No
     try:
         try:
             content = stream_chat(config, session) if config.stream else complete_chat(config, session)
+        except KeyboardInterrupt:
+            cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
+            audit_event(
+                config,
+                session,
+                "model_dispatched",
+                status="interrupted",
+                mode=dispatch.get("mode"),
+                profile=dispatch.get("profile"),
+                endpoint=dispatch.get("base_url"),
+                model=dispatch.get("model"),
+                auto_routed=bool(dispatch.get("auto_routed")),
+                fallback=bool(dispatch.get("fallback")),
+                remote=cost_estimate.get("remote"),
+                provider_kind=cost_estimate.get("provider_kind"),
+                prompt_chars=prompt_chars,
+                response_chars=0,
+                estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
+                estimated_output_tokens=cost_estimate.get("estimated_output_tokens"),
+                estimated_cost_usd=cost_estimate.get("estimated_cost_usd"),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                reason="keyboard interrupt",
+            )
+            print()
+            print("CHAT_INTERRUPTED")
+            session["profile"] = saved_profile if saved_profile is not None else ""
+            session["model"] = saved_model
+            session["base_url"] = saved_base_url
+            save_session(config, session)
+            return
         except Exception as exc:
             cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
             audit_event(
