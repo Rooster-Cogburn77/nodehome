@@ -15,6 +15,15 @@ Validated local serving lanes:
 
 GPU2 remains excluded from sustained work until the proper SF-1600F14HT cable arrives and the temporary pigtail rule is retired.
 
+## SubQ / Subquadratic Sparse Attention
+
+- **Source:** Subquadratic vendor materials + Appen benchmark whitepaper surfaced 2026-05-16.
+- **Links:** [SubQ research page](https://subq.ai/research/ssa), [SSA technical note](https://subq.ai/how-ssa-makes-long-context-practical), [Appen whitepaper landing page](https://www.appen.com/whitepapers/benchmarking-subquadratics-latest-model-ssa-kernel)
+- **Status:** Hosted/API long-context architecture watch item, not a local Nodehome serving change.
+- **Current claims:** 12M-token product positioning, OpenAI-compatible API path, content-dependent sparse attention, and third-party/Appen-reported SSA kernel speedups over dense FlashAttention-style processing at very long context. Subquadratic's current public tables report `95.6%` RULER at 128K, `86.2%` MRCR v2 at 1M, and `81.8%` SWE-Bench Verified for SubQ 1M-Preview.
+- **Caution:** This is still closed/private-beta infrastructure. The Appen result is a commissioned third-party evaluation, not public peer review or an independently reproducible open checkpoint. Broader model-card coverage, pricing, safety/general-reasoning benchmarks, and public-leaderboard placement remain watch triggers.
+- **Action:** Keep in the hosted-routing watch lane. Do not replace Nodechat AI History/RAG or the validated local vLLM/Ollama stack. If early access opens, run a small Nodehome eval against real repo/history tasks: prior-decision retrieval, multi-file code reasoning, full-repo summarization, latency, and cost versus Nodechat `strong` plus auto-routed AI History/repo context.
+
 ## Orthrus / arXiv 2605.12825
 
 - **Source:** GitHub repo + arXiv paper + Hugging Face checkpoints.

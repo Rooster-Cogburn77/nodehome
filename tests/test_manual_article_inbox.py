@@ -113,6 +113,37 @@ class ManualArticleInboxTests(unittest.TestCase):
         self.assertTrue(is_stale_item(date(2026, 5, 16), {"published": "2026-05-01"}))
         self.assertTrue(suppresses_age_filter(source))
 
+    def test_manual_stack_articles_emit_current_queue_even_after_state_exists(self):
+        source = Source(
+            id="manual-stack-articles",
+            name="Manual Stack Article Inbox",
+            lane="workflow",
+            kind="local_jsonl",
+            url="docs/sweeps/inbox/manual_stack_articles.jsonl",
+            confidence="manual-primary",
+        )
+        items = [
+            {
+                "id": "manual-stack:test",
+                "title": "delta-mem: Efficient Online Memory for LLMs",
+                "link": "https://arxiv.org/abs/2605.12357",
+                "published": "2026-05-12",
+                "summary": "Memory watch item.",
+            }
+        ]
+
+        new_items, bootstrap_notice = diff_items_for_source(
+            source,
+            items,
+            previous_ids={"manual-stack:test"},
+            had_previous_state=True,
+            bootstrap_emit=False,
+            replay_current=False,
+        )
+
+        self.assertEqual(new_items, items)
+        self.assertEqual(bootstrap_notice, "")
+
     def test_normal_feed_sources_do_not_emit_on_first_snapshot(self):
         source = Source(
             id="example-feed",

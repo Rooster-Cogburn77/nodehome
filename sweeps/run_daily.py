@@ -538,6 +538,10 @@ def emits_on_first_snapshot(source: Source) -> bool:
     return is_manual_stack_articles_source(source)
 
 
+def emits_current_snapshot(source: Source) -> bool:
+    return is_manual_stack_articles_source(source)
+
+
 def suppresses_age_filter(source: Source) -> bool:
     return is_manual_stack_articles_source(source)
 
@@ -551,6 +555,8 @@ def diff_items_for_source(
     replay_current: bool,
 ) -> tuple[list[dict[str, str]], str]:
     if replay_current:
+        return items, ""
+    if emits_current_snapshot(source):
         return items, ""
     if had_previous_state or bootstrap_emit or emits_on_first_snapshot(source):
         return [item for item in items if item["id"] not in previous_ids], ""
