@@ -23,9 +23,10 @@
 | [vllm-300w-power-cap](decisions/vllm-300w-power-cap.md) | 2026-05 | Why 300W + top fan is the sustained 2-GPU vLLM default |
 | [rack-acoustic-treatment](decisions/rack-acoustic-treatment.md) | 2026-05 | Why rack-internal foam is rejected; damping is allowed only for vibration |
 
-## Research (9 articles)
+## Research (10 articles)
 | Topic | Status | Summary |
 |-------|--------|---------|
+| [agent-evaluation-collapse](research/agent-evaluation-collapse.md) | Watch lane | Open scoreboards degrade when frontier agents and unequal token budgets enter the loop |
 | [ai-agent-traps](research/ai-agent-traps.md) | Complete | DeepMind's 6 trap categories mapped to Sovereign Node threat model |
 | [hyperscaler-capex](research/hyperscaler-capex.md) | Logged for deep dive | $600B+/yr 2026, $1.3T over 3 years |
 | [karpathy-dossier](research/karpathy-dossier.md) | Complete | Full research on repos, cognitive core, knowledge base workflow |
