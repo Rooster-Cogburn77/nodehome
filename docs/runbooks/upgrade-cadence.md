@@ -1,6 +1,6 @@
 # Stack Upgrade Cadence and Version Pinning Policy
 
-**Status:** Active policy, last reviewed 2026-05-11 (Session 17).
+**Status:** Active policy, last reviewed 2026-05-16 (Session 24).
 
 Covers the three components on this stack that ship rapidly and require deliberate version management: Ollama, vLLM, and Open WebUI. Plus the underlying llama.cpp which Ollama embeds.
 
@@ -18,7 +18,7 @@ The policy below sets explicit pins where possible and a monthly review cadence 
 |---|---|---|---|
 | Ollama (host systemd service) | `v0.23.2` (install-script auto-latest as of 2026-05-09) | `v0.30.0-rc12` shipping | **Behind, deserves review** |
 | vLLM (Docker container) | `vllm/vllm-openai:v0.19.1` | v0.20.x, v0.21.x on watch list | Behind, hold for now |
-| Open WebUI (Docker container) | `ghcr.io/open-webui/open-webui:main` (rolling, last pulled ~2026-05-09) | `v0.9.5` shipped 2026-05-10 | **Drifting on rolling tag** |
+| Open WebUI (Docker container) | `ghcr.io/open-webui/open-webui:v0.9.5` | `v0.9.5` shipped 2026-05-10 | Pinned |
 | llama.cpp | Whatever ships in Ollama v0.23.2 | b9103 shipping | N/A — managed by Ollama |
 
 ## Policy
@@ -28,7 +28,7 @@ The policy below sets explicit pins where possible and a monthly review cadence 
 For each containerized component, use a specific version tag in the `docker run` / `docker compose` config, not a rolling tag like `:main` or `:latest`. The operator decides when to upgrade; Docker doesn't decide for them on the next image pull.
 
 **Specifically:**
-- Open WebUI: change `ghcr.io/open-webui/open-webui:main` → `ghcr.io/open-webui/open-webui:v0.9.5` (or the current stable at upgrade time).
+- Open WebUI: pinned to `ghcr.io/open-webui/open-webui:v0.9.5` on 2026-05-16. Use the current reviewed stable tag at the next approved upgrade.
 - vLLM: already pinned to `v0.19.1`. Good.
 - Ollama: install script auto-pulls latest at install time. No "pin" concept; instead, track which version was installed and evaluate when to re-run the install script.
 
@@ -81,8 +81,14 @@ Do not upgrade between reviews just because a new version shipped.
 ### 2026-05-09 — Open WebUI pulled `:main`
 - Rolling tag, not version-pinned. Whatever was on `main` at pull time. **Action item: re-pull to `:v0.9.5` and update the tag in the run command** to convert this from drifting-on-rolling-tag to explicitly-pinned.
 
+### 2026-05-16 — Open WebUI pinned to v0.9.5
+- Recreated `open-webui` from `ghcr.io/open-webui/open-webui:v0.9.5` with the existing `open-webui:/app/backend/data` volume, port `3000:8080`, `host.docker.internal:host-gateway`, `OLLAMA_BASE_URL=http://host.docker.internal:11434`, and restart policy `unless-stopped`.
+- Verified `docker ps` showed the v0.9.5 container healthy, local HTTP probe returned `OPENWEBUI_HTTP_OK`, and browser smoke proved both `vllm.Qwen/Qwen2.5-32B-Instruct-AWQ` and `gemma3:27b` chat paths still work.
+- Created post-migration backup at `/home/bmoore_77/open-webui-backups/open-webui-v095-postmigration.tgz` (`979M`). Because v0.9.5 includes database migrations, rollback to the stopped `:main` container should be treated as a recovery action, not a routine flip-back.
+- Kept `AIOHTTP_CLIENT_ALLOW_REDIRECTS` unset so the v0.9.5 redirect-based SSRF protection remains active by default.
+
 ## Open follow-ups
 
-- [ ] Re-pull Open WebUI as `:v0.9.5` (current stable) instead of `:main`. Update the run command in operational notes. Test chat + both Connections survive. **Watch for the `AIOHTTP_CLIENT_ALLOW_REDIRECTS` default change in v0.9.5** — set to `true` if web search workflow breaks.
+- [x] Re-pull Open WebUI as `:v0.9.5` (current stable) instead of `:main`. Update the run command in operational notes. Test chat + both Connections survive. **Watch for the `AIOHTTP_CLIENT_ALLOW_REDIRECTS` default change in v0.9.5**; keep redirects blocked unless a real Open WebUI web-fetch workflow requires an exception.
 - [ ] Review Ollama v0.30.0 release notes when v0.30.0 stable ships (currently rc12). Major version bump from v0.23.2; evaluate before re-running the install script.
 - [ ] Review vLLM v0.20.x / v0.21.x release notes — currently on hold, but worth a fresh look during the next monthly review.

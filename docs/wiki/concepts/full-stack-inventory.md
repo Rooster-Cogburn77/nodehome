@@ -87,7 +87,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 |---|---|---|
 | Ollama v0.23.2 | Single-GPU interactive lane (`mistral-small3.1:24b` daily driver, ~51 tok/s) | shipped (GPU0+1 only, GPU2 excluded by `CUDA_VISIBLE_DEVICES=0,1`) |
 | vLLM v0.19.1 (Docker) | Multi-GPU production (`Qwen2.5-32B-Instruct-AWQ` on TP=2, ~59 tok/s) | shipped (GPU0+1, 300W cap, top fan) |
-| Open WebUI (Docker, currently `:main`, target `:v0.9.5`) | Browser UI for both Ollama + vLLM | shipped (pin re-pull pending) |
+| Open WebUI (Docker, `ghcr.io/open-webui/open-webui:v0.9.5`) | Browser UI for both Ollama + vLLM | shipped (pinned 2026-05-16) |
 | llama.cpp (direct) | Benchmark/watch path only, not production | watch |
 | vLLM TP=3 + 70B-class AWQ (e.g. `Qwen/Qwen2.5-72B-Instruct-AWQ`) | Future 3-GPU production once cable lands | deferred (gated on SF-1600F14HT cable) |
 
@@ -191,7 +191,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 - **vLLM v0.20.x / v0.21.x** — current pin v0.19.1
 - **Ollama v0.23.3 / v0.30.x** — current pin v0.23.2
 - **llama.cpp b9010+** — CUDA multi-GPU fixes
-- **Open WebUI** — current `:main`, target pin `:v0.9.5`
+- **Open WebUI** — pinned to `v0.9.5` on 2026-05-16; post-migration backup is `/home/bmoore_77/open-webui-backups/open-webui-v095-postmigration.tgz`
 
 ### Hosted models / routing
 - **Kimi K2.6** — large hosted model; not practical on 3× 3090
