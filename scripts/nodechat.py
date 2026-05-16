@@ -15,6 +15,7 @@ import argparse
 import datetime as dt
 import hashlib
 import html
+import ipaddress
 import json
 import os
 import pathlib
@@ -24,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -38,6 +40,29 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1"
 DEFAULT_HISTORY_URL = "http://127.0.0.1:8765"
 DEFAULT_SESSION_ROOT = pathlib.Path.home() / ".nodehome" / "nodechat"
 DEFAULT_WORKSPACE = pathlib.Path(os.environ.get("NODECHAT_WORKSPACE", pathlib.Path.cwd()))
+BUILTIN_MODEL_PROFILES: dict[str, dict[str, str]] = {
+    "fast": {
+        "model": "mistral-small3.1:24b",
+        "base_url": "http://localhost:11434/v1",
+        "provider": "Ollama",
+        "speed": "51 tok/s",
+        "description": "single-3090 interactive daily-driver lane",
+    },
+    "strong": {
+        "model": DEFAULT_MODEL,
+        "base_url": DEFAULT_BASE_URL,
+        "provider": "vLLM",
+        "speed": "59 tok/s",
+        "description": "TP=2 validated main quality lane",
+    },
+    "deep": {
+        "model": "llama3.3:70b-instruct-q4_K_M",
+        "base_url": "http://localhost:11434/v1",
+        "provider": "Ollama",
+        "speed": "8-15 tok/s",
+        "description": "slow willing-to-wait deep lane",
+    },
+}
 MAX_CONTEXT_CHARS = 9000
 MAX_READ_BYTES = 160000
 MAX_WEB_BYTES = 512000
@@ -352,6 +377,123 @@ def safe_filename(value: str) -> str:
     return "".join(keep)[:120] or "session"
 
 
+def normalize_model_profile(name: str, raw: Any, source: str) -> dict[str, str] | None:
+    if not isinstance(raw, dict):
+        return None
+    profile_name = str(name or "").strip().lower()
+    model = str(raw.get("model") or "").strip()
+    base_url = str(raw.get("base_url") or raw.get("baseUrl") or raw.get("endpoint") or "").strip().rstrip("/")
+    if not profile_name or not model or not base_url:
+        return None
+    if not is_local_model_endpoint(base_url):
+        return None
+    return {
+        "name": profile_name,
+        "model": model,
+        "base_url": base_url,
+        "provider": str(raw.get("provider") or raw.get("runtime") or "").strip(),
+        "speed": str(raw.get("speed") or "").strip(),
+        "description": str(raw.get("description") or raw.get("notes") or "").strip(),
+        "source": source,
+    }
+
+
+def is_local_model_endpoint(base_url: str) -> bool:
+    parsed = urllib.parse.urlparse(base_url)
+    host = (parsed.hostname or "").strip().lower()
+    if host in {"localhost", "host.docker.internal"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
+def model_profiles_path(config: "Config") -> pathlib.Path:
+    return config.session_root / "profiles.json"
+
+
+def builtin_model_profiles(config: "Config") -> dict[str, dict[str, str]]:
+    profiles = {name: dict(raw) for name, raw in BUILTIN_MODEL_PROFILES.items()}
+    strong_url = os.environ.get("NODECHAT_STRONG_BASE_URL", "").strip().rstrip("/")
+    profiles["strong"]["base_url"] = strong_url or str(config.base_url).rstrip("/")
+    ollama_url = os.environ.get("NODECHAT_OLLAMA_BASE_URL", "").strip().rstrip("/")
+    if ollama_url:
+        profiles["fast"]["base_url"] = ollama_url
+        profiles["deep"]["base_url"] = ollama_url
+    return profiles
+
+
+def load_model_profiles(config: "Config") -> dict[str, dict[str, str]]:
+    profiles: dict[str, dict[str, str]] = {}
+    for name, raw in builtin_model_profiles(config).items():
+        profile = normalize_model_profile(name, raw, "builtin")
+        if profile:
+            profiles[name] = profile
+
+    path = model_profiles_path(config)
+    if not path.exists():
+        return profiles
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return profiles
+    if isinstance(raw, dict) and isinstance(raw.get("profiles"), dict):
+        raw = raw["profiles"]
+    if not isinstance(raw, dict):
+        return profiles
+    for name, value in raw.items():
+        profile = normalize_model_profile(str(name), value, "user")
+        if profile:
+            profiles[profile["name"]] = profile
+    return profiles
+
+
+def infer_model_profile(config: "Config", base_url: str, model: str) -> str:
+    base_url = str(base_url or "").rstrip("/")
+    model = str(model or "")
+    for name, profile in load_model_profiles(config).items():
+        if profile["base_url"].rstrip("/") == base_url and profile["model"] == model:
+            return name
+    return ""
+
+
+def active_model_profile(config: "Config", session: dict[str, Any]) -> str:
+    profile = str(session.get("profile") or "").strip().lower()
+    if profile and profile in load_model_profiles(config):
+        return profile
+    return infer_model_profile(
+        config,
+        str(session.get("base_url") or config.base_url),
+        str(session.get("model") or config.model),
+    )
+
+
+def apply_model_profile(session: dict[str, Any], profile: dict[str, str]) -> None:
+    session["profile"] = profile["name"]
+    session["model"] = profile["model"]
+    session["base_url"] = profile["base_url"].rstrip("/")
+
+
+def model_disclosure(config: "Config", session: dict[str, Any]) -> str:
+    profile = active_model_profile(config, session)
+    if profile:
+        return f"model: {profile}"
+    return f"model: literal {session.get('model') or config.model}"
+
+
+def turn_disclosure(config: "Config", session: dict[str, Any], routed: str | None) -> str:
+    parts = [model_disclosure(config, session)]
+    if routed:
+        text = routed.strip()
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        if text:
+            parts.append(text)
+    return "[" + " | ".join(parts) + "]"
+
+
 def ensure_session_dir(config: Config) -> pathlib.Path:
     path = config.session_root / "sessions"
     path.mkdir(parents=True, exist_ok=True)
@@ -376,6 +518,7 @@ def audit_log_path(config: Config) -> pathlib.Path:
 
 def make_session(config: Config) -> dict[str, Any]:
     sid = session_id()
+    profile = infer_model_profile(config, config.base_url, config.model)
     return {
         "id": sid,
         "created_at": utc_now(),
@@ -383,6 +526,7 @@ def make_session(config: Config) -> dict[str, Any]:
         "cwd": str(config.workspace),
         "base_url": config.base_url,
         "model": config.model,
+        "profile": profile,
         "system": DEFAULT_SYSTEM_PROMPT,
         "messages": [],
         "context_blocks": [],
@@ -686,9 +830,11 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
     web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
     live_mode = session.get("live_mode", DEFAULT_LIVE_MODE)
     live_target = config.live_ssh or "local"
+    profile = active_model_profile(config, session) or "literal"
     return "\n".join(
         [
             "NODECHAT_RUNTIME",
+            f"profile: {profile}",
             f"model: {session.get('model') or config.model}",
             f"endpoint: {session.get('base_url') or config.base_url}",
             "interface: scripts/nodechat.py terminal client",
@@ -3751,7 +3897,8 @@ def print_help() -> None:
               /save                 save current session
               /sessions             list recent sessions
               /resume <id>          load a prior session by id prefix
-              /model [name]         show or set model
+              /profile [name]       list or switch model profile (fast|strong|deep)
+              /model [name]         show or set model/profile
               /endpoint [url]       show or set OpenAI-compatible base URL
               /system [text]        show or replace system prompt
               /history <query>      fetch AI History context and inject it
@@ -3870,6 +4017,62 @@ def read_paste() -> str:
     return "\n".join(lines).strip()
 
 
+def command_profile(config: Config, session: dict[str, Any], arg: str) -> None:
+    profiles = load_model_profiles(config)
+    current = active_model_profile(config, session)
+    if not arg:
+        if not profiles:
+            print(f"No profiles found. Optional config: {model_profiles_path(config)}")
+            return
+        print("profiles:")
+        for name in sorted(profiles):
+            profile = profiles[name]
+            marker = "*" if name == current else " "
+            provider = profile.get("provider") or "OpenAI-compatible"
+            speed = profile.get("speed") or ""
+            source = profile.get("source") or ""
+            suffix = " | ".join(item for item in (provider, speed, source) if item)
+            if suffix:
+                suffix = " | " + suffix
+            print(f"{marker} {name:<8} {profile['model']:<36} {profile['base_url']}{suffix}")
+        print(f"profile config: {model_profiles_path(config)}")
+        return
+
+    name = arg.strip().lower()
+    profile = profiles.get(name)
+    if not profile:
+        print(f"unknown profile: {arg}")
+        print("available: " + ", ".join(sorted(profiles)))
+        return
+    apply_model_profile(session, profile)
+    print(f"profile: {name}")
+    print(f"model: {profile['model']}")
+    print(f"endpoint: {profile['base_url']}")
+
+
+def command_model(config: Config, session: dict[str, Any], arg: str) -> None:
+    if not arg:
+        profile = active_model_profile(config, session)
+        if profile:
+            print(f"profile: {profile}")
+        print(str(session.get("model") or config.model))
+        return
+
+    profiles = load_model_profiles(config)
+    name = arg.strip().lower()
+    profile = profiles.get(name)
+    if profile:
+        apply_model_profile(session, profile)
+        print(f"profile: {name}")
+        print(f"model: {profile['model']}")
+        print(f"endpoint: {profile['base_url']}")
+        return
+
+    session["model"] = arg
+    session["profile"] = ""
+    print(f"model: {arg}")
+
+
 def handle_command(
     line: str,
     config: Config,
@@ -3913,11 +4116,11 @@ def handle_command(
         return "handled", session, None
 
     if command == "model":
-        if not arg:
-            print(str(session.get("model") or config.model))
-            return "handled", session, None
-        session["model"] = arg
-        print(f"model: {arg}")
+        command_model(config, session, arg)
+        return "handled", session, None
+
+    if command == "profile":
+        command_profile(config, session, arg)
         return "handled", session, None
 
     if command == "endpoint":
@@ -3925,6 +4128,7 @@ def handle_command(
             print(str(session.get("base_url") or config.base_url))
             return "handled", session, None
         session["base_url"] = arg.rstrip("/")
+        session["profile"] = infer_model_profile(config, session["base_url"], str(session.get("model") or config.model))
         print(f"endpoint: {session['base_url']}")
         return "handled", session, None
 
@@ -4079,18 +4283,48 @@ def prompt_label(session: dict[str, Any]) -> str:
 
 
 def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> None:
-    disclosure = auto_route_turn(config, session, prompt)
-    if disclosure:
-        print(disclosure)
+    routed_disclosure = auto_route_turn(config, session, prompt)
+    print(turn_disclosure(config, session, routed_disclosure))
     session.setdefault("messages", []).append({"role": "user", "content": prompt})
+    api_messages = build_api_messages(config, session)
+    prompt_chars = sum(len(str(message.get("content") or "")) for message in api_messages)
+    active_profile = active_model_profile(config, session) or "literal"
+    active_model = str(session.get("model") or config.model)
+    active_endpoint = str(session.get("base_url") or config.base_url)
     print()
     print("assistant:")
+    started = time.perf_counter()
     try:
         content = stream_chat(config, session) if config.stream else complete_chat(config, session)
     except Exception as exc:
+        audit_event(
+            config,
+            session,
+            "model_dispatched",
+            status="error",
+            profile=active_profile,
+            endpoint=active_endpoint,
+            model=active_model,
+            prompt_chars=prompt_chars,
+            response_chars=0,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            reason=_short_error(exc),
+        )
         print(f"CHAT_ERROR: {exc}")
         save_session(config, session)
         return
+    audit_event(
+        config,
+        session,
+        "model_dispatched",
+        status="ok",
+        profile=active_profile,
+        endpoint=active_endpoint,
+        model=active_model,
+        prompt_chars=prompt_chars,
+        response_chars=len(content),
+        latency_ms=int((time.perf_counter() - started) * 1000),
+    )
     session.setdefault("messages", []).append({"role": "assistant", "content": content})
     save_session(config, session)
 
@@ -4195,6 +4429,10 @@ def main(argv: list[str] | None = None) -> int:
 
     session.setdefault("base_url", config.base_url)
     session.setdefault("model", config.model)
+    session.setdefault(
+        "profile",
+        infer_model_profile(config, str(session.get("base_url") or config.base_url), str(session.get("model") or config.model)),
+    )
     session.setdefault("cwd", str(config.workspace))
     session.setdefault("system", DEFAULT_SYSTEM_PROMPT)
     session.setdefault("messages", [])
@@ -4208,6 +4446,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print("Nodechat local terminal client")
     print(f"session: {session['id']}")
+    if active_model_profile(config, session):
+        print(f"profile: {active_model_profile(config, session)}")
     print(f"model: {session.get('model')}")
     print(f"endpoint: {session.get('base_url')}")
     print("use /help for commands")

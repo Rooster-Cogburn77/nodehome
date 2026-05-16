@@ -2,25 +2,43 @@
 
 Status: early implementation of the Nodehome local agentic terminal environment. Authoritative scope and product philosophy live in [`nodechat-scope.md`](nodechat-scope.md); this doc covers operational usage, slash commands, env vars, and current safety posture.
 
-`scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint (today: vLLM on the homelab node), keeps sessions, exposes slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
+`scripts/nodechat.py` is the repo-owned terminal client for the local model stack. It runs against any OpenAI-compatible endpoint, keeps sessions, exposes model profiles plus slash-command tooling for context/edits/commands, and writes a persistent audit log of significant tool actions.
 
-Auto-routing is on for AI History, repo files, and fresh public web context. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. When the prompt includes a URL, Nodechat auto-fetches it; when the prompt clearly needs fresh public data (`latest`, releases, versions, CVEs, current pricing/availability, etc.) and names a public object, Nodechat auto-routes a bounded DuckDuckGo HTML search. Vague local-status phrases, vague repo topic phrases, and bare filenames do not auto-route. Every auto-routed turn prints a one-line disclosure above the assistant reply and writes an `auto_route_*` audit event. Slash commands remain the manual override and the visibility surface.
+Auto-routing is on for AI History, repo files, and fresh public web context. When the prompt clearly calls for prior decisions (`what did we …`, `remind me`, `previously`, `history of …`, `prior decision/incident`, etc.) Nodechat auto-injects an AI History block. When the prompt names a concrete repo artifact (`CURRENT_STATE`, `SESSION_LOG`, `CLAUDE.md`, `SCRATCH.md`, `ATTITUDE.md`, a known runbook stem like `nodechat-scope`, or a path token like `docs/...`/`scripts/...`) Nodechat auto-reads the file with the same caps and safety checks as `/read`. When the prompt includes a URL, Nodechat auto-fetches it; when the prompt clearly needs fresh public data (`latest`, releases, versions, CVEs, current pricing/availability, etc.) and names a public object, Nodechat auto-routes a bounded DuckDuckGo HTML search. Vague local-status phrases, vague repo topic phrases, and bare filenames do not auto-route. Every assistant turn prints a one-line model disclosure; routed turns include the routed sources in that same disclosure. Slash commands remain the manual override and the visibility surface.
 
 Live-node auto-routing is also in place for fixed Observe-tier checks. Clear live Nodehome status prompts can inject `LIVE_NODE_STATUS` for GPUs, vLLM/Ollama/Open WebUI/Docker, storage, BMC/IPMI, UPS, or power caps. Use `/live-mode auto|manual|off` to control that lane.
 
 Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
-A small `NODECHAT_RUNTIME` system message is injected on every request so the model answers identity questions from the actual configured model and endpoint instead of inventing one.
+A small `NODECHAT_RUNTIME` system message is injected on every request so the model answers identity questions from the actual configured profile, model, and endpoint instead of inventing one.
 
-## Default Backend
+## Model Profiles
 
-The validated vLLM backend is:
+Nodechat has built-in model profiles for the validated local lanes:
+
+```text
+fast    mistral-small3.1:24b              Ollama   ~51 tok/s
+strong  Qwen/Qwen2.5-32B-Instruct-AWQ     vLLM     ~59 tok/s
+deep    llama3.3:70b-instruct-q4_K_M      Ollama   ~8-15 tok/s
+```
+
+`strong` is the default profile when the configured model/endpoint match the validated vLLM backend:
 
 ```text
 model: Qwen/Qwen2.5-32B-Instruct-AWQ
 endpoint on homelab: http://127.0.0.1:8000/v1
 endpoint from LAN/Windows: http://192.168.1.198:8000/v1
 ```
+
+Use `/profile` to list profiles and `/profile <name>` or `/model <name>` to switch. `/model <literal-model-id>` still works for backward compatibility; profile names resolve first. Optional user profiles can be added at:
+
+```text
+~/.nodehome/nodechat/profiles.json
+```
+
+The built-in `strong` profile follows the active `NODECHAT_BASE_URL` / `--base-url`, so the Windows launcher keeps using the LAN vLLM endpoint. Set `NODECHAT_OLLAMA_BASE_URL` if the `fast` and `deep` Ollama profiles should use a LAN endpoint instead of `http://localhost:11434/v1`.
+
+In this iteration profiles are local/private endpoints only (`localhost`, loopback, LAN/private IPs, or `host.docker.internal`). Public remote model providers are a later gated lane, not part of the Phase 1 profile registry.
 
 Run on the homelab node:
 
@@ -70,6 +88,7 @@ Inside `nodechat`:
 
 ```text
 /help
+/profile [name]
 /model [name]
 /endpoint [url]
 /system [text]

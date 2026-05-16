@@ -1158,6 +1158,118 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                 nodechat.command_forget(session, "all")
             self.assertEqual(session["context_blocks"], [])
 
+    def test_builtin_model_profiles_match_expected_lanes(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            profiles = nodechat.load_model_profiles(config)
+
+            self.assertEqual(profiles["fast"]["model"], "mistral-small3.1:24b")
+            self.assertEqual(profiles["strong"]["model"], nodechat.DEFAULT_MODEL)
+            self.assertEqual(profiles["strong"]["base_url"], config.base_url)
+            self.assertEqual(profiles["deep"]["model"], "llama3.3:70b-instruct-q4_K_M")
+
+    def test_user_model_profiles_extend_builtins(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            session_root.mkdir()
+            (session_root / "profiles.json").write_text(
+                '{"profiles":{"lab":{"model":"local-test","base_url":"http://127.0.0.1:9999/v1","provider":"test"}}}',
+                encoding="utf-8",
+            )
+            config = make_config(workspace, session_root)
+            profiles = nodechat.load_model_profiles(config)
+
+            self.assertIn("fast", profiles)
+            self.assertEqual(profiles["lab"]["model"], "local-test")
+            self.assertEqual(profiles["lab"]["source"], "user")
+
+    def test_user_model_profiles_reject_public_remote_endpoints(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            session_root.mkdir()
+            (session_root / "profiles.json").write_text(
+                '{"profiles":{"remote":{"model":"remote-test","base_url":"https://api.example.com/v1"}}}',
+                encoding="utf-8",
+            )
+            config = make_config(workspace, session_root)
+            profiles = nodechat.load_model_profiles(config)
+
+            self.assertNotIn("remote", profiles)
+
+    def test_profile_command_lists_and_switches_model_endpoint_together(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_profile(config, session, "")
+            self.assertIn("fast", buf.getvalue())
+            self.assertIn("strong", buf.getvalue())
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_profile(config, session, "fast")
+            self.assertEqual(session["profile"], "fast")
+            self.assertEqual(session["model"], "mistral-small3.1:24b")
+            self.assertEqual(session["base_url"], "http://localhost:11434/v1")
+
+    def test_model_command_resolves_profile_before_literal(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_model(config, session, "deep")
+            self.assertEqual(session["profile"], "deep")
+            self.assertEqual(session["model"], "llama3.3:70b-instruct-q4_K_M")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_model(config, session, "custom-model-id")
+            self.assertEqual(session["profile"], "")
+            self.assertEqual(session["model"], "custom-model-id")
+
+    def test_runtime_context_reports_current_profile(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            with contextlib.redirect_stdout(io.StringIO()):
+                nodechat.command_profile(config, session, "fast")
+
+            context = nodechat.runtime_context(config, session)
+            self.assertIn("profile: fast", context)
+            self.assertIn("model: mistral-small3.1:24b", context)
+            self.assertIn("endpoint: http://localhost:11434/v1", context)
+
+    def test_send_user_prompt_audits_model_dispatch(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = lambda config, session: "ok"
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, "hello")
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertIn("[model: strong]", buf.getvalue())
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "model_dispatched")
+            self.assertEqual(event["status"], "ok")
+            self.assertEqual(event["profile"], "strong")
+            self.assertEqual(event["model"], nodechat.DEFAULT_MODEL)
+            self.assertEqual(event["endpoint"], "http://127.0.0.1:8000/v1")
+            self.assertGreater(event["prompt_chars"], 0)
+            self.assertEqual(event["response_chars"], 2)
+
 
 # ---------------------------------------------------------------------------
 # Routing corpus regression suite (Phase A of the auto-routing recall pass).

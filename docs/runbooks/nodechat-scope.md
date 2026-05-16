@@ -66,6 +66,7 @@ Auto-routing should be conservative on day one (high precision, modest recall) a
 Nodechat today is an early, partial implementation of the intended scope. What is in place:
 
 - Local terminal chat against the OpenAI-compatible vLLM endpoint, streaming, sessioned, slash-command UX, runtime identity grounding.
+- **Model profiles — first iteration.** Built-in explicit profiles map capability names to validated local lanes: `fast` -> `mistral-small3.1:24b` on Ollama, `strong` -> `Qwen/Qwen2.5-32B-Instruct-AWQ` on vLLM, and `deep` -> `llama3.3:70b-instruct-q4_K_M` on Ollama. `/profile` lists/switches profiles; `/model <profile>` resolves profile names before falling back to literal model IDs. The active profile/model/endpoint are disclosed before each assistant reply and recorded in `model_dispatched` audit events. User profiles are restricted to local/private endpoints in this iteration; public remote providers stay behind the later remote-profile gate.
 - AI History KB lookup over an SSH tunnel, validated end-to-end (`/history`).
 - Read-only local context tools (`/pwd`, `/tree`, `/read`, `/search-files`, `/git-status`).
 - Web context tools (`/web-search`, `/web-fetch`, `/web-open`) plus conservative auto-routing for fresh public data.
@@ -92,7 +93,7 @@ Nodechat today is an early, partial implementation of the intended scope. What i
 
 What is **not** in place yet (gap between current state and intended scope):
 
-- Model routing across local + remote.
+- Auto model routing and remote model profiles. Model selection is explicit in the current iteration.
 - Additional Mutate-tier ops beyond `docker restart` for `vllm-server` and `open-webui`. Specifically: `systemctl restart ollama` (gated on the sudoers entry), `docker compose up/down`, config edits to `/etc/systemd/system/*.service.d/override.conf`, BMC password rotation, etc. Each new op needs a fixed argv, a runbook entry, and a regression test.
 
 These are the next implementation lanes, not future-maybes.
@@ -103,7 +104,7 @@ In rough order. Each lane should land with audit + tier-correct approval; capabi
 
 1. **Auto-routing recall pass — corpus growth.** Phase B is complete (all routers 1.00 / 1.00 on the 100-prompt corpus). The next iteration is corpus growth: add prompts surfaced by real Nodechat use that don't currently route the way the user expects. This is now a maintenance loop, not a discrete lane.
 2. **Broader operator approvals — additional ops.** First iteration covers `docker restart` for two services. Next-up additions: `systemctl restart ollama` once the sudoers entry is installed, then narrow `docker compose up -d <service>` for restart-equivalent flows. Each new op follows the same pattern: fixed argv in `LIVE_MUTATION_OPS`, runbook entry, regression test that asserts queue + execute + audit.
-3. **Model routing.** Add explicit local/remote model selection only after the current single-model terminal loop remains stable.
+3. **Model routing — next phases.** Add auto model routing only after explicit profiles prove stable; add remote profiles later behind env-var gates and per-session enablement.
 
 ## What Nodechat Is Not
 
