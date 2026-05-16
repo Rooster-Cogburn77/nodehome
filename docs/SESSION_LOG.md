@@ -1,6 +1,20 @@
 # Sovereign Node - Session Log
 <!-- Current month only. Archive previous months under docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-05-16 (Session 24)
+**Focus:** Afternoon sweep send readiness and UPS telemetry.
+**What was done:**
+- **Manual stack article inbox first-run path is fixed on `origin/main`.** Current commit chain includes `ab28a08 Emit manual inbox items on first run` and `3d1f102 Target extended sweep synthesis and direct sends`. The manual `extended` inbox can emit operator-curated rows on its first snapshot without globally enabling bootstrap emission for normal feed sources, and manually queued article rows bypass the stale-age guard because the operator is explicitly curating them.
+- **Extended digest artifact verified without sending email.** The generated `docs/sweeps/daily/2026-05-16.extended.md` artifact includes all three manual rows: `delta-mem: Efficient Online Memory for LLMs`, `Orthrus: Memory-Efficient Parallel Token Generation`, and `The CTF Scene Is Dead`. The real workflow was run with `--skip-email`; no email was sent. `docs/sweeps/state/manual-stack-articles.json` now exists as ignored runtime state, so a later email send for this exact artifact should use `sweeps/send_digest_email.py --input docs\sweeps\daily\2026-05-16.extended.md ...`, not rerun the whole workflow.
+- **LLM synthesis profile targeting fixed.** `sweeps/run_workflow.py` now passes `--profile` through to `sweeps/llm_synthesize.py`, and `llm_synthesize.py` resolves core/extended operator briefs by profile-aware filename. This prevents an `extended` workflow from synthesizing the same-date core operator brief by accident.
+- **Direct digest sender env loading fixed.** `sweeps/send_digest_email.py` now loads `.env` and then `sweeps/.env`, matching workflow behavior. A dry-run against the exact extended digest resolved subject `Daily Sweep - 2026-05-16.extended`, visible `to` `digest@nodehome.ai`, and BCC `bmoore7789@gmail.com` without sending.
+- **UPS comms installed and verified end-to-end.** The APC Back-UPS XS 1500M/BX1500M USB device enumerated as `051d:0002 American Power Conversion Uninterruptible Power Supply`; kernel logs identified `Back-UPS XS 1500M FW:947.d13 .D USB FW:d13`; NUT was configured with `usbhid-ups` and `MODE=standalone`; `upsc ups` returned live telemetry including `battery.charge: 99`, `input.voltage: 122.0`, `ups.status: OL CHRG`, `driver.name: usbhid-ups`, and `ups.realpower.nominal: 900`. Nodechat `/live ups` then executed `upsc ups` with `exit_code: 0`, proving the live-node UPS check is now backed by real telemetry.
+**Validation:**
+- `python -m unittest discover -s tests` passed: `96/96`.
+- `py_compile` passed for the touched sweep scripts.
+- `python -m json.tool sweeps/sources.json` passed.
+- `git diff --check` passed with only expected CRLF warnings.
+
 ## 2026-05-15 (Session 23)
 **Focus:** Re-frame Nodechat scope as full agentic terminal environment, then land Observe-tier auto-routing lanes, rollback, live-node ops, and model routing through env-gated remote profiles.
 **What was done:**
