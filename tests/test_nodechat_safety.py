@@ -1247,10 +1247,16 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("endpoint: http://localhost:11434/v1", context)
 
     def test_send_user_prompt_audits_model_dispatch(self):
+        # In Phase 2 the default model_mode is "auto", which would pick the
+        # fast profile for a short "hello" prompt. This test was written before
+        # auto-routing existed and was validating that the configured profile
+        # gets dispatched + audited correctly. Pin model_mode="manual" to
+        # preserve that intent.
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
             config = make_config(workspace, workspace / ".sessions")
             session = nodechat.make_session(config)
+            session["model_mode"] = "manual"
             original = nodechat.complete_chat
             try:
                 nodechat.complete_chat = lambda config, session: "ok"
@@ -1269,6 +1275,262 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(event["endpoint"], "http://127.0.0.1:8000/v1")
             self.assertGreater(event["prompt_chars"], 0)
             self.assertEqual(event["response_chars"], 2)
+
+    # ---- Model auto-routing (Phase 2) -----------------------------------
+
+    def _stub_chat_and_vllm(self, *, vllm_ok: bool):
+        """Patch complete_chat + vllm_available_cached for deterministic tests.
+
+        Records every (model, base_url) the chat lambda saw via the captured
+        list, and stubs vLLM probe so tests don't hit the network.
+        """
+        seen: list[dict[str, str]] = []
+
+        def fake_complete(config, session):
+            seen.append({
+                "model": str(session.get("model") or config.model),
+                "base_url": str(session.get("base_url") or config.base_url),
+                "profile": str(session.get("profile") or ""),
+            })
+            return "ok"
+
+        def fake_probe(config, session, base_url):
+            return (vllm_ok, 12 if vllm_ok else 3012)
+
+        original_chat = nodechat.complete_chat
+        original_probe = nodechat.vllm_available_cached
+        nodechat.complete_chat = fake_complete
+        nodechat.vllm_available_cached = fake_probe
+        return seen, (original_chat, original_probe)
+
+    def _restore_chat_and_vllm(self, originals):
+        nodechat.complete_chat, nodechat.vllm_available_cached = originals
+
+    def test_model_mode_auto_short_chat_stays_fast(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            self.assertEqual(session.get("model_mode"), "auto")
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, "hi there")
+            finally:
+                self._restore_chat_and_vllm(originals)
+            self.assertIn("[model: fast]", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "fast")
+            self.assertEqual(seen[0]["model"], "mistral-small3.1:24b")
+            # No auto_route_model audit row should fire on default-fast turns.
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertFalse(
+                any(r["event_type"] == "auto_route_model" for r in rows),
+                msg="default-fast turn should not emit auto_route_model",
+            )
+
+    def test_model_mode_auto_long_prompt_routes_strong(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                long_prompt = "Please consider this carefully. " * 40  # > 800 chars
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, long_prompt)
+            finally:
+                self._restore_chat_and_vllm(originals)
+            text = buf.getvalue()
+            self.assertIn("model: strong", text)
+            self.assertIn("auto-routed", text)
+            self.assertIn("long prompt", text)
+            self.assertEqual(seen[0]["profile"], "strong")
+            rows = nodechat.read_recent_audit(config, 10)
+            row = next(r for r in rows if r["event_type"] == "auto_route_model")
+            self.assertEqual(row["status"], "ok")
+            self.assertEqual(row["to_profile"], "strong")
+            self.assertIn("long prompt", row["rationale"])
+            self.assertTrue(row["vllm_available"])
+
+    def test_model_mode_auto_code_keywords_route_strong(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(
+                        config, session,
+                        "what does this function return?\n```python\ndef foo(): return 1\n```",
+                    )
+            finally:
+                self._restore_chat_and_vllm(originals)
+            self.assertIn("model: strong", buf.getvalue())
+            self.assertIn("code markers", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "strong")
+
+    def test_model_mode_auto_does_not_select_deep(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    # Prompt mentioning "deep dive" + "deep analysis" should
+                    # route to strong (analysis verbs), not deep.
+                    nodechat.send_user_prompt(
+                        config, session,
+                        "give me a deep dive analysis of the rdimm dispute we had",
+                    )
+            finally:
+                self._restore_chat_and_vllm(originals)
+            self.assertNotIn("model: deep", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "strong")
+
+    def test_model_mode_manual_does_not_silently_switch(self):
+        # Critical guardrail: in manual mode, even a long code-heavy prompt
+        # must dispatch on the configured profile. No silent auto-switch.
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["model_mode"] = "manual"
+            # Configure profile to fast explicitly to make divergence visible.
+            profiles = nodechat.load_model_profiles(config)
+            nodechat.apply_model_profile(session, profiles["fast"])
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                long_prompt = "Please consider this carefully. " * 40 + " ```def foo(): pass```"
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, long_prompt)
+            finally:
+                self._restore_chat_and_vllm(originals)
+            self.assertIn("[model: fast]", buf.getvalue())
+            self.assertNotIn("auto-routed", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "fast")
+            self.assertEqual(seen[0]["model"], "mistral-small3.1:24b")
+            rows = nodechat.read_recent_audit(config, 10)
+            self.assertFalse(any(r["event_type"] == "auto_route_model" for r in rows))
+
+    def test_model_mode_pinned_strong_overrides_auto_rules(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["model_mode"] = "strong"
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=False)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, "hi")  # short, no triggers
+            finally:
+                self._restore_chat_and_vllm(originals)
+            # Pinned strong: dispatches strong even on a short greeting AND
+            # even when vLLM probe would have failed (pinning skips probe).
+            self.assertIn("[model: strong]", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "strong")
+
+    def test_model_mode_pinned_fast_overrides_auto_rules(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["model_mode"] = "fast"
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                long_prompt = "Please consider this carefully. " * 40
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, long_prompt)
+            finally:
+                self._restore_chat_and_vllm(originals)
+            self.assertIn("[model: fast]", buf.getvalue())
+            self.assertNotIn("auto-routed", buf.getvalue())
+            self.assertEqual(seen[0]["profile"], "fast")
+
+    def test_model_mode_auto_falls_back_to_fast_when_vllm_unreachable(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=False)
+            try:
+                long_prompt = "Please consider this carefully. " * 40
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.send_user_prompt(config, session, long_prompt)
+            finally:
+                self._restore_chat_and_vllm(originals)
+            text = buf.getvalue()
+            self.assertIn("model: fast", text)
+            self.assertIn("strong unavailable", text)
+            self.assertIn("vLLM probe failed", text)
+            self.assertEqual(seen[0]["profile"], "fast")
+            rows = nodechat.read_recent_audit(config, 10)
+            row = next(r for r in rows if r["event_type"] == "auto_route_model")
+            self.assertEqual(row["status"], "fallback")
+            self.assertEqual(row["to_profile"], "fast")
+            self.assertFalse(row["vllm_available"])
+            self.assertGreater(row["vllm_probe_ms"], 0)
+
+    def test_per_turn_dispatch_does_not_mutate_session_profile(self):
+        # Critical: after an auto-routed turn, session.profile / .model /
+        # .base_url must reflect the user's configured choice, not the
+        # per-turn dispatch.
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            profiles = nodechat.load_model_profiles(config)
+            nodechat.apply_model_profile(session, profiles["fast"])
+            configured_profile = session.get("profile")
+            configured_model = session.get("model")
+            configured_base_url = session.get("base_url")
+
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    long_prompt = "Please review this carefully. " * 40
+                    nodechat.send_user_prompt(config, session, long_prompt)
+            finally:
+                self._restore_chat_and_vllm(originals)
+
+            # During the turn, dispatch was strong.
+            self.assertEqual(seen[0]["profile"], "strong")
+            # After the turn, configured state is unchanged.
+            self.assertEqual(session.get("profile"), configured_profile)
+            self.assertEqual(session.get("model"), configured_model)
+            self.assertEqual(session.get("base_url"), configured_base_url)
+
+    def test_command_model_mode_get_set_and_invalid(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_model_mode(session, "")
+            self.assertIn("model-mode: auto", buf.getvalue())
+
+            for mode in ("manual", "fast", "strong", "deep", "auto"):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    nodechat.command_model_mode(session, mode)
+                self.assertEqual(session["model_mode"], mode)
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                nodechat.command_model_mode(session, "off")  # not a model mode
+            self.assertIn("invalid mode", buf.getvalue())
+            self.assertEqual(session["model_mode"], "auto")  # last valid set
 
 
 # ---------------------------------------------------------------------------

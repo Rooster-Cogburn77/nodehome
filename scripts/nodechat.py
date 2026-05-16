@@ -143,6 +143,26 @@ TEXT_EXTENSIONS = {
 
 DEFAULT_HISTORY_MODE = "auto"
 DEFAULT_REPO_MODE = "auto"
+DEFAULT_MODEL_MODE = "auto"
+MODEL_MODES = ("auto", "manual", "fast", "strong", "deep")
+AUTO_STRONG_LENGTH_THRESHOLD = 800
+VLLM_PROBE_TTL_S = 60
+VLLM_PROBE_TIMEOUT_S = 3
+AUTO_STRONG_CODE_RE = re.compile(
+    r"```|"
+    r"\b(def|class|function|import|return|async|await|lambda|"
+    r"traceback|exception|stack[\s-]?trace|stacktrace|segfault)\b|"
+    r"\berror\s*:|"
+    r"^\s*from\s+\w+\s+import\b",
+    re.I | re.MULTILINE,
+)
+AUTO_STRONG_ANALYSIS_RE = re.compile(
+    r"\b(analy[sz]e|review|compare|diagnose|refactor|design|"
+    r"deep\s*dive|walk\s*me\s*through|step[\s-]by[\s-]step|"
+    r"explain\s+(?:in\s+detail|thoroughly|carefully)|"
+    r"audit|architect)\b",
+    re.I,
+)
 DEFAULT_WEB_MODE = "auto"
 DEFAULT_LIVE_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
@@ -483,8 +503,186 @@ def model_disclosure(config: "Config", session: dict[str, Any]) -> str:
     return f"model: literal {session.get('model') or config.model}"
 
 
+def vllm_available_cached(
+    config: "Config",
+    session: dict[str, Any],
+    base_url: str,
+) -> tuple[bool, int]:
+    """Cached vLLM /models reachability probe. TTL: VLLM_PROBE_TTL_S seconds.
+
+    Cache lives in session under "_vllm_probe" keyed by base_url so probes
+    survive within a session but never persist past TTL. Failures cache too,
+    so a long fallback chain doesn't pay the timeout repeatedly.
+    """
+    base_url = (base_url or "").rstrip("/")
+    cache = session.setdefault("_vllm_probe", {})
+    cached = cache.get(base_url)
+    now = time.time()
+    if isinstance(cached, dict) and now - float(cached.get("ts") or 0) < VLLM_PROBE_TTL_S:
+        return bool(cached.get("ok")), int(cached.get("latency_ms") or 0)
+    started = time.time()
+    ok = False
+    try:
+        with urllib.request.urlopen(base_url + "/models", timeout=VLLM_PROBE_TIMEOUT_S) as res:
+            res.read(1)
+            ok = True
+    except Exception:
+        ok = False
+    latency_ms = int((time.time() - started) * 1000)
+    cache[base_url] = {"ok": ok, "latency_ms": latency_ms, "ts": now}
+    return ok, latency_ms
+
+
+def detect_strong_triggers(config: "Config", session: dict[str, Any], prompt: str) -> list[str]:
+    """Return the list of strong-lift trigger reasons that fired on this prompt."""
+    reasons: list[str] = []
+    text = prompt or ""
+    if len(text) > AUTO_STRONG_LENGTH_THRESHOLD:
+        reasons.append(f"long prompt ({len(text)} chars)")
+    if AUTO_STRONG_CODE_RE.search(text):
+        reasons.append("code markers")
+    if AUTO_STRONG_ANALYSIS_RE.search(text):
+        reasons.append("analysis verbs")
+    if detect_history_query(text):
+        reasons.append("history-routing intent")
+    repo_targets = detect_repo_targets(config, session, text)
+    if len(repo_targets) >= 2:
+        reasons.append(f"multi-file repo routing ({len(repo_targets)} files)")
+    return reasons
+
+
+def pick_turn_dispatch(
+    config: "Config",
+    session: dict[str, Any],
+    prompt: str,
+) -> dict[str, Any]:
+    """Resolve the (profile, model, base_url) to dispatch this turn.
+
+    Per-turn only: session.profile / session.model / session.base_url stay
+    unchanged. The user's configured profile is only used as the dispatch
+    target when model_mode == "manual".
+    """
+    profiles = load_model_profiles(config)
+    mode = str(session.get("model_mode") or DEFAULT_MODEL_MODE).strip().lower()
+    if mode not in MODEL_MODES:
+        mode = DEFAULT_MODEL_MODE
+
+    configured_profile_name = active_model_profile(config, session) or ""
+    configured_model = str(session.get("model") or config.model)
+    configured_base_url = str(session.get("base_url") or config.base_url).rstrip("/")
+
+    def resolved(profile_name: str) -> tuple[str, str, str]:
+        profile = profiles.get(profile_name)
+        if profile:
+            return profile_name, profile["model"], profile["base_url"].rstrip("/")
+        # Profile name not found -- fall back to configured.
+        return (configured_profile_name or "literal"), configured_model, configured_base_url
+
+    dispatch: dict[str, Any] = {
+        "mode": mode,
+        "configured_profile": configured_profile_name or "literal",
+        "configured_model": configured_model,
+        "configured_base_url": configured_base_url,
+        "auto_routed": False,
+        "fallback": False,
+        "rationale": "",
+        "vllm_available": None,
+        "vllm_probe_ms": None,
+        "triggers": [],
+    }
+
+    if mode in ("fast", "strong", "deep"):
+        name, model, base_url = resolved(mode)
+        dispatch["profile"] = name
+        dispatch["model"] = model
+        dispatch["base_url"] = base_url
+        return dispatch
+
+    if mode == "manual":
+        # Use the configured profile / model / endpoint as-is.
+        if configured_profile_name and configured_profile_name in profiles:
+            name, model, base_url = resolved(configured_profile_name)
+        else:
+            name, model, base_url = (configured_profile_name or "literal"), configured_model, configured_base_url
+        dispatch["profile"] = name
+        dispatch["model"] = model
+        dispatch["base_url"] = base_url
+        return dispatch
+
+    # mode == "auto"
+    triggers = detect_strong_triggers(config, session, prompt)
+    dispatch["triggers"] = triggers
+
+    if not triggers:
+        # Default to fast.
+        name, model, base_url = resolved("fast")
+        dispatch["profile"] = name
+        dispatch["model"] = model
+        dispatch["base_url"] = base_url
+        return dispatch
+
+    # Want strong -- probe vLLM first.
+    strong_profile = profiles.get("strong")
+    strong_base_url = (strong_profile or {}).get("base_url", "").rstrip("/")
+    if not strong_base_url:
+        # No strong profile available; fall back to fast silently (shouldn't happen with builtins).
+        name, model, base_url = resolved("fast")
+        dispatch["profile"] = name
+        dispatch["model"] = model
+        dispatch["base_url"] = base_url
+        dispatch["fallback"] = True
+        dispatch["rationale"] = "strong unavailable: no strong profile registered"
+        return dispatch
+
+    ok, latency_ms = vllm_available_cached(config, session, strong_base_url)
+    dispatch["vllm_available"] = ok
+    dispatch["vllm_probe_ms"] = latency_ms
+
+    if ok:
+        dispatch["profile"] = "strong"
+        dispatch["model"] = strong_profile["model"]
+        dispatch["base_url"] = strong_base_url
+        dispatch["auto_routed"] = True
+        dispatch["rationale"] = "; ".join(triggers)
+        return dispatch
+
+    # vLLM unhealthy -- fall back to fast and disclose.
+    name, model, base_url = resolved("fast")
+    dispatch["profile"] = name
+    dispatch["model"] = model
+    dispatch["base_url"] = base_url
+    dispatch["fallback"] = True
+    dispatch["rationale"] = f"strong unavailable: vLLM probe failed ({latency_ms}ms)"
+    return dispatch
+
+
 def turn_disclosure(config: "Config", session: dict[str, Any], routed: str | None) -> str:
+    """Compatibility shim: builds the legacy [model: X | routed] line.
+
+    The new send_user_prompt path uses dispatch_disclosure() with a dispatch
+    dict so it can render auto-route rationales. This helper still exists for
+    callers that haven't been updated, and renders without auto-route info.
+    """
     parts = [model_disclosure(config, session)]
+    if routed:
+        text = routed.strip()
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        if text:
+            parts.append(text)
+    return "[" + " | ".join(parts) + "]"
+
+
+def dispatch_disclosure(dispatch: dict[str, Any], routed: str | None) -> str:
+    """Render the per-turn disclosure line from a dispatch dict + context-routing line."""
+    profile = dispatch.get("profile") or "literal"
+    if dispatch.get("fallback"):
+        head = f"model: {profile} <- {dispatch.get('rationale', 'fallback')}"
+    elif dispatch.get("auto_routed"):
+        head = f"model: {profile} <- auto-routed: {dispatch.get('rationale', '')}"
+    else:
+        head = f"model: {profile}"
+    parts = [head]
     if routed:
         text = routed.strip()
         if text.startswith("[") and text.endswith("]"):
@@ -535,6 +733,7 @@ def make_session(config: Config) -> dict[str, Any]:
         "repo_mode": DEFAULT_REPO_MODE,
         "web_mode": DEFAULT_WEB_MODE,
         "live_mode": DEFAULT_LIVE_MODE,
+        "model_mode": DEFAULT_MODEL_MODE,
     }
 
 
@@ -829,6 +1028,7 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
     repo_mode = session.get("repo_mode", DEFAULT_REPO_MODE)
     web_mode = session.get("web_mode", DEFAULT_WEB_MODE)
     live_mode = session.get("live_mode", DEFAULT_LIVE_MODE)
+    model_mode = session.get("model_mode", DEFAULT_MODEL_MODE)
     live_target = config.live_ssh or "local"
     profile = active_model_profile(config, session) or "literal"
     return "\n".join(
@@ -845,6 +1045,7 @@ def runtime_context(config: Config, session: dict[str, Any]) -> str:
             f"repo_mode: {repo_mode}",
             f"web_mode: {web_mode}",
             f"live_mode: {live_mode}",
+            f"model_mode: {model_mode}",
             f"live_target: {live_target}",
         ]
     )
@@ -3544,6 +3745,7 @@ def command_routing_mode(
         "repo_mode": DEFAULT_REPO_MODE,
         "web_mode": DEFAULT_WEB_MODE,
         "live_mode": DEFAULT_LIVE_MODE,
+        "model_mode": DEFAULT_MODEL_MODE,
     }
     default = defaults.get(key, "auto")
     raw = (arg or "").strip().lower()
@@ -3556,6 +3758,32 @@ def command_routing_mode(
         return
     session[key] = raw
     print(f"{label}: {raw}")
+
+
+def command_model_mode(session: dict[str, Any], arg: str) -> None:
+    """Show or set model_mode: auto | manual | fast | strong | deep.
+
+    auto    -- per-turn dispatch picks fast by default and lifts to strong on
+               long prompts, code markers, analysis verbs, history routing,
+               or multi-file repo routing (only if vLLM is reachable).
+    manual  -- always dispatch on the configured /profile.
+    fast    -- pin every turn to the fast profile.
+    strong  -- pin every turn to the strong profile.
+    deep    -- pin every turn to the deep profile.
+
+    Profile changes are still per-turn; session.profile remains the user's
+    configured choice and is only changed by /profile or /model.
+    """
+    raw = (arg or "").strip().lower()
+    if not raw:
+        current = session.get("model_mode", DEFAULT_MODEL_MODE)
+        print(f"model-mode: {current}")
+        return
+    if raw not in MODEL_MODES:
+        print(f"model-mode: invalid mode '{raw}', use one of {'|'.join(MODEL_MODES)}")
+        return
+    session["model_mode"] = raw
+    print(f"model-mode: {raw}")
 
 
 def context_block_chars(block: dict[str, Any]) -> int:
@@ -3935,6 +4163,8 @@ def print_help() -> None:
                                     show or set web auto-routing mode (default auto)
               /live-mode [auto|manual|off]
                                     show or set live-node auto-routing mode (default auto)
+              /model-mode [auto|manual|fast|strong|deep]
+                                    show or set per-turn model dispatch mode (default auto)
               /evidence             group active context blocks by source with provenance
               /forget [n|latest|all] drop a context block (or all)
               /context              show active injected context blocks
@@ -4243,6 +4473,10 @@ def handle_command(
         command_routing_mode(session, "live_mode", "live-mode", arg)
         return "handled", session, None
 
+    if command in {"model-mode", "modelmode"}:
+        command_model_mode(session, arg)
+        return "handled", session, None
+
     if command == "evidence":
         command_evidence(session)
         return "handled", session, None
@@ -4283,48 +4517,85 @@ def prompt_label(session: dict[str, Any]) -> str:
 
 
 def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> None:
+    # Per-turn dispatch resolves which (profile, model, endpoint) answers this
+    # turn. Configured session profile/model/base_url stay unchanged; we only
+    # override them inside a try/finally for the duration of the chat call so
+    # any inspection after the turn (status, audit replay, save_session) sees
+    # the user's configured state.
+    dispatch = pick_turn_dispatch(config, session, prompt)
     routed_disclosure = auto_route_turn(config, session, prompt)
-    print(turn_disclosure(config, session, routed_disclosure))
+    print(dispatch_disclosure(dispatch, routed_disclosure))
+
+    if dispatch.get("auto_routed") or dispatch.get("fallback"):
+        audit_event(
+            config,
+            session,
+            "auto_route_model",
+            status="ok" if dispatch.get("auto_routed") else "fallback",
+            mode=dispatch.get("mode"),
+            from_profile=dispatch.get("configured_profile"),
+            to_profile=dispatch.get("profile"),
+            rationale=dispatch.get("rationale"),
+            triggers=dispatch.get("triggers"),
+            vllm_available=dispatch.get("vllm_available"),
+            vllm_probe_ms=dispatch.get("vllm_probe_ms"),
+        )
+
     session.setdefault("messages", []).append({"role": "user", "content": prompt})
     api_messages = build_api_messages(config, session)
     prompt_chars = sum(len(str(message.get("content") or "")) for message in api_messages)
-    active_profile = active_model_profile(config, session) or "literal"
-    active_model = str(session.get("model") or config.model)
-    active_endpoint = str(session.get("base_url") or config.base_url)
     print()
     print("assistant:")
+
+    saved_profile = session.get("profile")
+    saved_model = session.get("model")
+    saved_base_url = session.get("base_url")
+    session["profile"] = dispatch.get("profile") or saved_profile or ""
+    session["model"] = dispatch.get("model") or saved_model
+    session["base_url"] = dispatch.get("base_url") or saved_base_url
     started = time.perf_counter()
     try:
-        content = stream_chat(config, session) if config.stream else complete_chat(config, session)
-    except Exception as exc:
+        try:
+            content = stream_chat(config, session) if config.stream else complete_chat(config, session)
+        except Exception as exc:
+            audit_event(
+                config,
+                session,
+                "model_dispatched",
+                status="error",
+                mode=dispatch.get("mode"),
+                profile=dispatch.get("profile"),
+                endpoint=dispatch.get("base_url"),
+                model=dispatch.get("model"),
+                auto_routed=bool(dispatch.get("auto_routed")),
+                fallback=bool(dispatch.get("fallback")),
+                prompt_chars=prompt_chars,
+                response_chars=0,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                reason=_short_error(exc),
+            )
+            print(f"CHAT_ERROR: {exc}")
+            save_session(config, session)
+            return
         audit_event(
             config,
             session,
             "model_dispatched",
-            status="error",
-            profile=active_profile,
-            endpoint=active_endpoint,
-            model=active_model,
+            status="ok",
+            mode=dispatch.get("mode"),
+            profile=dispatch.get("profile"),
+            endpoint=dispatch.get("base_url"),
+            model=dispatch.get("model"),
+            auto_routed=bool(dispatch.get("auto_routed")),
+            fallback=bool(dispatch.get("fallback")),
             prompt_chars=prompt_chars,
-            response_chars=0,
+            response_chars=len(content),
             latency_ms=int((time.perf_counter() - started) * 1000),
-            reason=_short_error(exc),
         )
-        print(f"CHAT_ERROR: {exc}")
-        save_session(config, session)
-        return
-    audit_event(
-        config,
-        session,
-        "model_dispatched",
-        status="ok",
-        profile=active_profile,
-        endpoint=active_endpoint,
-        model=active_model,
-        prompt_chars=prompt_chars,
-        response_chars=len(content),
-        latency_ms=int((time.perf_counter() - started) * 1000),
-    )
+    finally:
+        session["profile"] = saved_profile if saved_profile is not None else ""
+        session["model"] = saved_model
+        session["base_url"] = saved_base_url
     session.setdefault("messages", []).append({"role": "assistant", "content": content})
     save_session(config, session)
 
