@@ -66,7 +66,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | NVMe expansion via Hyper M.2 card | Additional NVMe slots | deferred (Tier 4) |
 | Internal CA hardware | TLS for internal services | deferred (Tier 4) |
 | Motherboard standoff screws (final fit-out) | Mechanical follow-on when chassis next opens | deferred (next chassis-open event) |
-| 14TB WD My Book (ramen_scorpion offer) | Asymmetric pool problem, international shipping | declined-pending (waiting on offer expiry) |
+| 14TB WD My Book (ramen_scorpion offer) | Asymmetric pool problem, international shipping; waiting on offer expiry | declined |
 
 ## OS + base infrastructure
 
@@ -168,7 +168,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | Operator brief | Internal triage view (not emailed) | shipped |
 | nodehome.ai static site | Public-facing brand for digest and future blog | partial / in-flight |
 
-**Hard rule from `CLAUDE.md` Rule 8:** No agent (Claude Code, Codex, Nodechat, or future) may send live external communications without explicit per-send authorization naming the exact artifact + subject + recipients + send-type. Default permitted action is dry-run / preview / artifact generation only.
+**Hard rule from `CLAUDE.md` Rule 8:** No agent (Claude Code, Codex, Nodechat, or future) may send live external communications by inference. See Rule 8 for the exact authorization boundary.
 
 ## Watch lane (logged, not installed)
 

@@ -33,6 +33,7 @@ Establish a private, independent AI research lab (The Sovereign Node) centered o
 5. **Hardware Safety:** No intentional pin shorting, no guessed header operations, and no undocumented power-control steps during bring-up.
 6. **Documentation First:** Never make a major technical decision without updating the relevant durable docs and `SCRATCH.md`.
 7. **Never suggest ending the session.** Do not ask "want to call the session?", "or call it a session", "good place to stop?", "ready to wrap?", "if you're done for the night", "if you have time", "fresh head tomorrow", or any variant. Do not frame recommendations around the user's energy, focus, or time of day. State what shipped, list the real next options, and let the user pick. Offering "stop" as an option is banned. The user's pace is the user's call.
+8. **Never send live external communications.** No email, newsletter, post, social update, customer/subscriber message, or other external communication is authorized by default. Inference, broad instructions ("proceed", "recover", "ship", "fix", "continue"), prior-session approvals, or approval for adjacent work do not authorize a send. The default permitted action is dry-run, preview, or artifact generation only. If asking for send approval, name the exact artifact, subject/body, recipients, and send type (first send / correction / resend / addendum). If there is any ambiguity, do not send -- ask.
 
 ## Session Protocol
 1. **Startup:** Read `ATTITUDE.md`, `SCRATCH.md`, `docs/CURRENT_STATE.md`, and the current `docs/SESSION_LOG.md`.
