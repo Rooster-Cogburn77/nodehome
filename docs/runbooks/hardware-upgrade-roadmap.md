@@ -101,7 +101,7 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 
 ### Storage expansion (16TB+ external)
 
-**Current state:** Two 12TB drives are in flight after Walmart canceled the original Drive #1. Replacement Drive #1 is a low-hour WD Easystore 12TB from sv2deals (`54` hours in seller SMART screenshot, serial `5PJHV96C`); Drive #2 is the PayMore WD My Book 12TB. If both validate on arrival, the node has 24 TB total bulk capacity plus 2 TB NVMe, comfortably matching near-term household media + photo + backup workload.
+**Current state:** Two 12TB drives are in the landing/validation phase after Walmart canceled the original Drive #1. Replacement Drive #1 is a low-hour WD Easystore 12TB from sv2deals (`54` hours in seller SMART screenshot, serial `5PJHV96C`) and still needs arrival verification. Drive #2, the PayMore WD My Book 12TB, arrived 2026-05-18 and enumerated as `/dev/sda` / `WDC WD120EDGZ-11CMZA0` / serial `T3G0WU1E`; SMART identifies it as Western Digital Ultrastar (He10/12) family, 12.0 TB, 7200 rpm helium, with clean initial counters (`0` POH, `5` power cycles, zero reallocated/pending/uncorrectable/CRC) and a passed short self-test. Long SMART remains pending before final acceptance. If both drives validate, the node has 24 TB total bulk capacity plus 2 TB NVMe, comfortably matching near-term household media + photo + backup workload.
 
 **Trigger:** Sustained >70% utilization of the 24 TB bulk array, OR a specific workload (Plex 4K library buildout, photo archive expansion past 2 TB) that demands more capacity.
 

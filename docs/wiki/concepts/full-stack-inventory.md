@@ -57,7 +57,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | 1U cantilever shelf (U7) | Storage drive shelf | shipped |
 | APC Back-UPS XS 1500M | Power blip buffer + graceful shutdown signal | shipped |
 | APC USB comms cable | UPS telemetry to host via NUT | shipped |
-| 2× WD 12TB external USB HDDs (sv2deals Easystore + PayMore My Book) | Media library storage | in-flight (arrival window 2026-05-16 to 2026-05-20) |
+| 2× WD 12TB external USB HDDs (sv2deals Easystore + PayMore My Book) | Media library storage | validating (PayMore My Book arrived as `T3G0WU1E` and passed initial + short SMART; long SMART and sv2deals arrival still pending) |
 | SF-1600F14HT PCIe modular cable (lizzieb753 UK eBay) | GPU3 power, retires pigtail rule | in-flight (arrival window 2026-05-23 to 2026-06-10) |
 | 4× 32GB DDR4-2400 ECC RDIMM (additional set) | RAM upgrade if clean opportunity appears at sane price | deferred (price/availability trigger) |
 | APC SMT2200 (used) | Production UPS sized for sustained 2-GPU inference ride-through | deferred (no fixed trigger) |

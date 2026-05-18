@@ -1,6 +1,6 @@
 # Home Media Server — Scope and Plan
 
-**Status:** PROCUREMENT IN PROGRESS — architecture decided; two 12TB external drives ordered; install waits on arrival and SMART validation.
+**Status:** PROCUREMENT / VALIDATION IN PROGRESS — architecture decided; two 12TB external drives ordered; PayMore WD My Book has passed initial + short SMART, install waits on both-drive validation.
 **Authored:** 2026-05-11 (Session 17 planning).
 
 ## Goal
@@ -26,11 +26,11 @@ Drives plug into the AI node via USB and mount as `/mnt/storage` (or similar). T
 | WD Easystore 12TB external USB 3.0 desktop HDD | 2× | Best Buy / Amazon / B&H | $200-220 each (~$420 total) |
 | **Total** | | | **~$420** |
 
-### Procurement state — 2026-05-14
+### Procurement state — updated 2026-05-18
 
 - Walmart order `2000146-01251834` for WD My Book 12TB (`WDBBGB0120HBK-Newm`) was canceled as out of stock; `$269.54` temporary hold should release within 10 business days.
 - Replacement Drive #1 is WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals`, accepted offer `$220` plus `$13.16` listed shipping. Listing SMART screenshot: `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, `54` power-on hours, `15` power cycles, zero reallocated / pending / uncorrectable / UDMA CRC errors. Verify same serial and counters on arrival before formatting.
-- Drive #2 is WD My Book 12TB from PayMore Westport / SPEEKS Technology, eBay order `03-14645-30973`, `$259.79` total with delivery estimated May 16-20 and return window through June 19. Treat as grey-market/no manufacturer warranty until physical seal and SMART checks prove condition.
+- Drive #2 is WD My Book 12TB from PayMore Westport / SPEEKS Technology, eBay order `03-14645-30973`, `$259.79` total with return window through June 19. It arrived 2026-05-18 and enumerated as `1058:25ee Western Digital Technologies, Inc. My Book 25EE`; Linux sees `/dev/sda` as `WDC WD120EDGZ-11CMZA0`, vendor `WD`, serial `T3G0WU1E`, transport `usb`. `smartctl -d sat -a /dev/sda` identified it as Western Digital Ultrastar (He10/12) family, 12.0 TB, 7200 rpm, helium (`Helium_Level` present), SMART `PASSED`, `Power_On_Hours 0`, `Power_Cycle_Count 5`, and zero reallocated / pending / offline uncorrectable / UDMA CRC errors. Short offline self-test completed without error at lifetime hour 0. Long SMART test remains pending before final acceptance/formatting.
 - Known subtotal before any sv2deals tax: `$492.95`; final all-in total depends on eBay tax.
 
 Why **2× 12TB**:
@@ -88,10 +88,11 @@ The 3× 3090s have HDMI/DisplayPort outputs on the back. They are **not used** i
 ## Order of operations once drives arrive
 
 1. Plug both drives into AI node USB 3.x ports. Confirm they enumerate (`lsblk`).
-2. Format as ext4 (or btrfs if you want snapshots). Mount as `/mnt/media1` and `/mnt/media2`. Add to `/etc/fstab`.
-3. Create directory structure per chosen library layout.
-4. Pull `jellyfin/jellyfin` Docker image. Run container with volume mounts to the drives and GPU passthrough for NVENC.
-5. Configure Jellyfin via web UI: add libraries pointing at the mount paths.
-6. Install Jellyfin client app on TVs/phones/laptops; connect to the server's local IP.
-7. Begin ingesting content.
-8. (Optional later) Add Sonarr/Radarr/Jellyseerr/Bazarr automation stack.
+2. Run arrival SMART before formatting. Drive #2 (`/dev/sda`, serial `T3G0WU1E`) has passed initial + short SMART; run/pass long SMART before accepting it. Drive #1 (`5PJHV96C`) still needs arrival verification.
+3. Format as ext4 (or btrfs if you want snapshots). Mount as `/mnt/media1` and `/mnt/media2`. Add to `/etc/fstab`.
+4. Create directory structure per chosen library layout.
+5. Pull `jellyfin/jellyfin` Docker image. Run container with volume mounts to the drives and GPU passthrough for NVENC.
+6. Configure Jellyfin via web UI: add libraries pointing at the mount paths.
+7. Install Jellyfin client app on TVs/phones/laptops; connect to the server's local IP.
+8. Begin ingesting content.
+9. (Optional later) Add Sonarr/Radarr/Jellyseerr/Bazarr automation stack.
