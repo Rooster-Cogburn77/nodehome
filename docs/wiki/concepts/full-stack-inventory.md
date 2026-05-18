@@ -106,7 +106,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 
 | Component | Role | Status |
 |---|---|---|
-| **Nodechat** (`scripts/nodechat.py`) | Local agentic terminal: chat + history/repo/web/live auto-routing, /apply edits, /approve queue for git + live mutations, model profiles + auto-routing + remote profiles (env-gated), persistent JSONL audit | shipped |
+| **Nodechat** (`scripts/nodechat.py`) | Local agentic terminal: chat + history/repo/web/live auto-routing, one-shot slash commands, /apply edits, /approve queue for git + live mutations, model profiles + auto-routing + remote profiles (env-gated), persistent JSONL audit | shipped (homelab `/live journal ollama` one-shot smoke passed 2026-05-18) |
 | **AI History KB** (`scripts/ai_history_kb.py`) | Private SQLite FTS of all Claude/Codex/Claude Code history (~280K items), HTTP API on `:8765` | shipped |
 | **`ai-history-kb.service`** | Persistent host API systemd unit | shipped |
 | **`scripts/healthcheck.sh`** | One-shot stack health view (GPU, storage, services, BMC, audit, kernel-error) | shipped |
@@ -215,7 +215,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | 3-GPU TP=3 thermal/power soak | Gated on SF-1600F14HT cable arrival | deferred |
 | 70B-class AWQ TP=3 benchmark | Gated on SF-1600F14HT cable arrival | deferred |
 | ReBAR A/B (Above 4G Decoding stays on, ReBAR currently off) | Gated on stable 3-GPU baseline | deferred |
-| Routing corpus growth | Maintenance loop for Nodechat auto-routing (currently all 4 routers at 1.000/1.000 on 100-prompt corpus) | ongoing |
+| Routing corpus growth | Maintenance loop for Nodechat auto-routing (currently all 4 routers at 1.000/1.000 on 102-prompt corpus) | ongoing |
 
 ## Rough composition
 
