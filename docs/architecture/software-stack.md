@@ -77,6 +77,12 @@ Current 2026-05-09 install-day decision:
 - The pin therefore moves from `v0.21.2` to `v0.23.2` to match the actual install state, rather than maintaining a stale aspirational pin.
 - Inference smoke-tested end-to-end on `qwen3:8b` across the 2-GPU configuration (third GPU still pending power cable). PCIe Gen 4 x16 confirmed under load with `power.draw = 348 W`, `utilization.gpu = 89%`, `memory.used = 10.9 GiB` on GPU 0.
 
+Current 2026-05-18 coexistence note:
+
+- The running stack deliberately keeps vLLM resident on GPUs 0 and 1 for the production path, while Ollama is also restricted to GPUs 0 and 1 so it cannot violate the GPU 2 temporary pigtail rule.
+- That means Ollama can be service-healthy while large Ollama model loads still hit CUDA OOM, layout backoff, or CPU fallback under vLLM memory pressure.
+- Operational rule: prefer the Open WebUI `vllm.*` model path while vLLM is resident; intentionally stop vLLM only for an Ollama-heavy task. Full note: `docs/runbooks/ollama-vllm-coexistence.md`.
+
 Current 2026-04-29 pressure note:
 
 - `Ollama 0.22.0` and `0.22.1-rc0` immediately put pressure on the `0.21.2` target again.

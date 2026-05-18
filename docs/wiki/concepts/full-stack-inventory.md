@@ -8,6 +8,7 @@
 - Hardware: [`docs/runbooks/hardware-upgrade-roadmap.md`](../../runbooks/hardware-upgrade-roadmap.md)
 - Nodechat: [`docs/runbooks/nodechat-scope.md`](../../runbooks/nodechat-scope.md), [`docs/runbooks/nodechat-terminal.md`](../../runbooks/nodechat-terminal.md)
 - Live operator: [`docs/runbooks/live-mutations.md`](../../runbooks/live-mutations.md)
+- Serving coexistence: [`docs/runbooks/ollama-vllm-coexistence.md`](../../runbooks/ollama-vllm-coexistence.md)
 - AI History KB: [`docs/runbooks/ai-history-knowledge-base.md`](../../runbooks/ai-history-knowledge-base.md)
 - Home media: [`docs/runbooks/home-media-server.md`](../../runbooks/home-media-server.md)
 - IPMI: [`docs/runbooks/ipmi-recovery.md`](../../runbooks/ipmi-recovery.md), [`docs/runbooks/ipmi-hardening.md`](../../runbooks/ipmi-hardening.md)
@@ -85,7 +86,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 
 | Component | Role | Status |
 |---|---|---|
-| Ollama v0.23.2 | Single-GPU interactive lane (`mistral-small3.1:24b` daily driver, ~51 tok/s) | shipped (GPU0+1 only, GPU2 excluded by `CUDA_VISIBLE_DEVICES=0,1`) |
+| Ollama v0.23.2 | Single-GPU interactive lane (`mistral-small3.1:24b` daily driver, ~51 tok/s) | shipped (GPU0+1 only, GPU2 excluded by `CUDA_VISIBLE_DEVICES=0,1`; large-model loads can still hit VRAM pressure while vLLM is resident) |
 | vLLM v0.19.1 (Docker) | Multi-GPU production (`Qwen2.5-32B-Instruct-AWQ` on TP=2, ~59 tok/s) | shipped (GPU0+1, 300W cap, top fan) |
 | Open WebUI (Docker, `ghcr.io/open-webui/open-webui:v0.9.5`) | Browser UI for both Ollama + vLLM | shipped (pinned 2026-05-16) |
 | llama.cpp (direct) | Benchmark/watch path only, not production | watch |
