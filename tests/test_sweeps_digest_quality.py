@@ -1,5 +1,6 @@
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from sweeps.run_daily import (
     Source,
@@ -7,10 +8,13 @@ from sweeps.run_daily import (
     entry_rank,
     heuristic_summary,
     is_consumer_gaming_hardware_noise,
+    openrss_fallback_enabled,
     parse_page,
     select_digest_entries,
+    update_degraded_sources,
     validation_status,
     why_it_matters,
+    x_transport_disabled_reason,
 )
 
 
@@ -196,6 +200,48 @@ class SweepsDigestQualityTests(unittest.TestCase):
         self.assertNotIn("Busy day", summary)
         self.assertNotIn("A few things moved", summary)
         self.assertNotIn("No single breakthrough", summary)
+
+    def test_x_openrss_is_explicit_transport_not_default(self):
+        source = Source(
+            id="x-karpathy",
+            name="X: @karpathy",
+            lane="workflow",
+            kind="x_user",
+            url="https://openrss.org/feed/x.com/karpathy",
+            confidence="social-primary",
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(openrss_fallback_enabled())
+            self.assertIn("X transport disabled", x_transport_disabled_reason(source))
+
+        with patch.dict("os.environ", {"SWEEP_OPENRSS_FALLBACK_ENABLED": "true"}, clear=True):
+            self.assertTrue(openrss_fallback_enabled())
+            self.assertEqual(x_transport_disabled_reason(source), "")
+
+    def test_skipped_x_transport_clears_degraded_failure_state(self):
+        source = Source(
+            id="x-karpathy",
+            name="X: @karpathy",
+            lane="workflow",
+            kind="x_user",
+            url="https://openrss.org/feed/x.com/karpathy",
+            confidence="social-primary",
+        )
+        state = {
+            "x-karpathy": {
+                "source": "X: @karpathy",
+                "failures": 11,
+                "status": "degraded",
+                "last_detail": "cached state from old run",
+            }
+        }
+
+        updated = update_degraded_sources(state, source, "skipped", "X transport disabled")
+
+        self.assertEqual(updated["x-karpathy"]["status"], "skipped")
+        self.assertEqual(updated["x-karpathy"]["failures"], 0)
+        self.assertEqual(updated["x-karpathy"]["last_detail"], "X transport disabled")
 
 
 if __name__ == "__main__":

@@ -418,8 +418,8 @@ X is primary ideation, not guaranteed transport.
 - Treat X-originated posts, replies, quote context, screenshots, and offhand comments as primary source material when captured
 - Use official X API only if a safe token/cost posture exists
 - Use X email notifications as the current automated, low-risk capture path
-- Keep OpenRSS as the automatic fallback when no `X_BEARER_TOKEN` is present, or force it explicitly with `SWEEP_OPENRSS_FALLBACK_ENABLED=true`
-- Use `SWEEP_OPENRSS_FALLBACK_ENABLED=false` only if you want to suppress OpenRSS entirely and accept degraded X coverage
+- Keep OpenRSS as an explicit fallback only: set `SWEEP_OPENRSS_FALLBACK_ENABLED=true` for an intentional OpenRSS pass, or provide a safe `X_BEARER_TOKEN` for first-party API access
+- Leave `SWEEP_OPENRSS_FALLBACK_ENABLED` unset/false for normal scheduled runs so stale bridge failures are recorded as skipped transport, not degraded source failures
 - Add durable fallbacks (blog, YouTube, GitHub, Bluesky) for baseline continuity, not as replacements
 - The quarantine system handles persistent failures automatically (3 consecutive failures = 12h cooldown)
 
@@ -528,7 +528,7 @@ This is deliberately MVP-level:
 - no external dependencies
 - markdown output
 - simple page hashing fallback for sources without feeds
-- concurrent fetches with OpenRSS throttling (semaphore, max 2 concurrent, 2-5s stagger delay)
+- concurrent fetches with OpenRSS throttling when explicitly enabled (semaphore, max 2 concurrent, 2-5s stagger delay)
 - XML sanitizer for feeds with invalid bytes (e.g. terminal control characters in Answer.AI feed)
 - profile split: `core` vs `extended`
 - durable fallback feeds for X-heavy extended sources (blogs, YouTube, newsletters)

@@ -108,15 +108,16 @@ On first real run, the script bootstraps local state from the current snapshot a
 
 Current X approach:
 
-- curated X accounts are ingested via `OpenRSS` feed bridges
-- this supports automatic discovery without building a brittle first-party scraper yet
+- curated X accounts are no longer fetched through OpenRSS by default
+- scheduled runs skip `x_user` sources unless `X_BEARER_TOKEN` is configured or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set
+- this avoids turning stale OpenRSS 403/429/timeout behavior into noisy degraded source state on normal runs
 - X items should still be treated as discovery-first and validated before decisions
 - outbound links in new social items are automatically resolved into a validation queue
 - follow-up links are typed (`github`, `release`, `blog`, `paper`, `video`) and prioritized
 - follow-up links are enriched with resolved domain and fetched page title when available
 - follow-up links also carry a short fetched page description when available
 - high-priority follow-ups can create intake stubs under `docs/wiki/raw/`
-- transient feed failures fall back to cached state and are recorded in the health report
+- transient enabled-feed failures fall back to cached state and are recorded in the health report
 - repeated failures/cached fallbacks accumulate in `degraded_sources.json`
 - sources degraded for repeated runs are quarantined automatically, then retried after a cooldown window
 - local or external inference can optionally synthesize an `AI Summary` section into the digest

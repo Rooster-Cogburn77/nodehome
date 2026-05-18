@@ -63,7 +63,19 @@ def openrss_fallback_enabled() -> bool:
         return True
     if raw in {"0", "false", "no", "off"}:
         return False
-    return not bool(os.getenv("X_BEARER_TOKEN", "").strip())
+    return False
+
+
+def x_bearer_token_configured() -> bool:
+    return bool(os.getenv("X_BEARER_TOKEN", "").strip())
+
+
+def x_transport_disabled_reason(source: Source) -> str:
+    if source.kind != "x_user":
+        return ""
+    if x_bearer_token_configured() or openrss_fallback_enabled():
+        return ""
+    return "X transport disabled; set X_BEARER_TOKEN or SWEEP_OPENRSS_FALLBACK_ENABLED=true"
 
 
 @dataclass
@@ -175,6 +187,18 @@ def fetch_x_user_timeline(source: Source) -> list[dict[str, str]]:
             }
         )
     return items
+
+
+def fetch_openrss_source(source: Source) -> list[dict[str, str]]:
+    if "openrss.org" not in source.url:
+        raise RuntimeError(f"OpenRSS fallback requires an openrss.org URL for {source.name}")
+    _openrss_semaphore.acquire()
+    try:
+        time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
+        body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
+        return parse_feed(body)
+    finally:
+        _openrss_semaphore.release()
 
 
 def bluesky_handle_from_source(source: Source) -> str:
@@ -465,7 +489,12 @@ def fetch_source(source: Source) -> dict[str, Any]:
         time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
     try:
         if source.kind == "x_user":
-            items = fetch_x_user_timeline(source)
+            if x_bearer_token_configured():
+                items = fetch_x_user_timeline(source)
+            elif openrss_fallback_enabled():
+                items = fetch_openrss_source(source)
+            else:
+                raise RuntimeError(x_transport_disabled_reason(source))
         elif source.kind == "bluesky":
             items = fetch_bluesky_author_feed(source)
         elif source.kind == "local_jsonl":
@@ -487,20 +516,11 @@ def fetch_source(source: Source) -> dict[str, Any]:
                     "items": [],
                     "error": f"{exc}; OpenRSS fallback disabled",
                 }
-            fallback_is_openrss = "openrss.org" in source.url
             try:
-                if fallback_is_openrss:
-                    _openrss_semaphore.acquire()
-                    time.sleep(random.uniform(*OPENRSS_DELAY_RANGE))
-                body = fetch_url_with_retry(source.url, timeout_seconds=source.timeout_seconds, attempts=source.retries)
-                if fallback_is_openrss:
-                    items = parse_feed(body)
-                    return {"ok": True, "items": items, "error": ""}
+                items = fetch_openrss_source(source)
+                return {"ok": True, "items": items, "error": ""}
             except Exception as fallback_exc:  # noqa: BLE001
                 return {"ok": False, "items": [], "error": f"{exc}; OpenRSS fallback failed: {fallback_exc}"}
-            finally:
-                if fallback_is_openrss:
-                    _openrss_semaphore.release()
         return {"ok": False, "items": [], "error": str(exc)}
     finally:
         if is_openrss:
@@ -543,6 +563,11 @@ def update_degraded_sources(
     if status in {"failed", "cached"}:
         entry["failures"] = int(entry.get("failures", 0)) + 1
         entry["status"] = "degraded"
+        entry["last_detail"] = detail
+        entry["last_seen"] = now
+    elif status == "skipped":
+        entry["failures"] = 0
+        entry["status"] = "skipped"
         entry["last_detail"] = detail
         entry["last_seen"] = now
     else:
@@ -893,7 +918,7 @@ def write_health_report(profile: str, run_date: date, statuses: list[dict[str, s
     grouped: dict[str, list[dict[str, str]]] = {}
     for item in statuses:
         grouped.setdefault(item["status"], []).append(item)
-    for status_name in ("ok", "cached", "failed", "quarantined"):
+    for status_name in ("ok", "skipped", "cached", "failed", "quarantined"):
         items = grouped.get(status_name, [])
         if not items:
             continue
@@ -1695,6 +1720,17 @@ def main() -> int:
 
     active_sources: list[Source] = []
     for source in sources:
+        disabled_reason = x_transport_disabled_reason(source)
+        if disabled_reason:
+            health_statuses.append(
+                {
+                    "source": source.name,
+                    "status": "skipped",
+                    "detail": disabled_reason,
+                }
+            )
+            degraded_sources = update_degraded_sources(degraded_sources, source, "skipped", disabled_reason)
+            continue
         degraded_entry = degraded_sources.get(source.id, {})
         if quarantine_active(degraded_entry):
             health_statuses.append(

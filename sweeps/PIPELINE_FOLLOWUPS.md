@@ -6,20 +6,21 @@ Tracking items for the daily/extended/weekly sweep pipeline that need attention 
 
 ## Open
 
-### Pre-existing - X/OpenRSS social feed health degraded
-
-**Symptom:** repeatedly across recent sweeps, 6-21 social feed fetches fail per run; cached state used as fallback. The 2026-05-09 extended run logged 21 failures, mostly timeouts; 2026-05-11 core logged 6.
-
-**Probable root cause:** X's API access policy plus OpenRSS fallback reliability. Already known operationally from the Session 14 area.
-
-**Action items:**
-- Keep classifying high-failure social sweeps as lower-confidence evidence.
-- Consider de-emphasizing or temporarily disabling the social-primary lane in synthesis input if source health gets worse.
-- Not directly actionable beyond monitoring; X policy is the rate-limiter, not local pipeline code.
+(none currently)
 
 ---
 
 ## Resolved
+
+### 2026-05-18 - X/OpenRSS social feed degradation
+
+Resolved by making X/OpenRSS an explicit transport instead of an automatic scheduled dependency.
+
+**Original symptom:** recent sweeps repeatedly logged 6-21 X/OpenRSS social feed failures per run. Core X sources retried after cooldown, failed again, and emitted cached-state health rows; extended X sources accumulated long quarantine lists with OpenRSS 403/429/timeouts. This made scheduled health look broken even when durable sources were healthy.
+
+**Fix:** `x_user` sources are now skipped unless `X_BEARER_TOKEN` exists or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set. Skipped X transport clears stale degraded failure counts and appears as `Skipped` in the health report rather than `Cached`, `Failed`, or `Quarantined`. The status reporter excludes intentional `skipped` transport from degraded/non-ok counts.
+
+**Validation:** `tests/test_sweeps_digest_quality.py` covers default OpenRSS-off behavior and verifies skipped X transport clears prior degraded failure state.
 
 ### 2026-05-18 - vLLM blog title-swallow
 
