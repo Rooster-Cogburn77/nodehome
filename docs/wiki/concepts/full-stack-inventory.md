@@ -2,7 +2,7 @@
 
 **Purpose:** Single cross-cutting reference for everything Nodehome is, is becoming, is considering, or is intentionally not building. Use this when you need the bird's-eye view that runbooks and `CURRENT_STATE.md` don't give in one place.
 
-**Last reviewed:** 2026-05-16
+**Last reviewed:** 2026-05-18
 
 **Companion docs (deeper detail per area):**
 - Hardware: [`docs/runbooks/hardware-upgrade-roadmap.md`](../../runbooks/hardware-upgrade-roadmap.md)
@@ -59,7 +59,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | SF-1600F14HT PCIe modular cable (lizzieb753 UK eBay) | GPU3 power, retires pigtail rule | in-flight (arrival window 2026-05-23 to 2026-06-10) |
 | 4× 32GB DDR4-2400 ECC RDIMM (additional set) | RAM upgrade if clean opportunity appears at sane price | deferred (price/availability trigger) |
 | APC SMT2200 (used) | Production UPS sized for sustained 2-GPU inference ride-through | deferred (no fixed trigger) |
-| UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP | Owned network gear, replaces ISP router | planned (gated on BMC Phase 1) |
+| UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP | Owned network gear, bypasses/replaces Spectrum `SAX1V1S` router and provides management VLAN foundation | planned (upstream modem/ONT physical confirmation + spend pending) |
 | Second top fan (AC Infinity MULTIFAN S5) | If TP=3 sustained load exceeds 80°C on GPU0 | deferred (trigger: GPU0 plateau >80°C under TP=3) |
 | PiKVM v4 | Out-of-band KVM hardware | deferred (Tier 4) |
 | 10GbE switch + NIC | Network throughput upgrade beyond 1GbE | deferred (Tier 4) |
@@ -149,7 +149,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | Component | Role | Status |
 |---|---|---|
 | BMC/IPMI Phase 1 | ADMIN password rotation completed 2026-05-17; live credential is in KeePassXC. Cert hygiene remains pending before any LAN patch. | partial (password done; cert hygiene pending) |
-| BMC/IPMI Phase 2 | Management VLAN network plumbing | deferred (gated on UniFi gear) |
+| BMC/IPMI Phase 2 | Management VLAN network plumbing | deferred (gated on UniFi gear and Spectrum router bypass) |
 | BMC/IPMI Phase 3 | Static IP + dedicated NIC patch into LAN | deferred (gated on Phase 2) |
 | BMC/IPMI Phase 4 | Internal CA for trusted BMC certs | deferred (Tier 4) |
 | Healthcheck automation | Narrow sudoers-NOPASSWD systemd timer instead of manual `/live healthcheck` | planned |
