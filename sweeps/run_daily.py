@@ -41,7 +41,6 @@ _openrss_semaphore = threading.Semaphore(OPENRSS_CONCURRENCY)
 QUARANTINE_THRESHOLD = 3
 QUARANTINE_COOLDOWN_HOURS = 12
 MAX_ITEM_AGE_DAYS = 14
-GITHUB_ACTIVITY_COLLAPSE_THRESHOLD = 3
 LLAMACPP_COMMIT_KEYWORDS = (
     "cuda",
     "vulkan",
@@ -700,7 +699,7 @@ def validation_status(source: Source, discovered_urls: list[dict[str, str]]) -> 
     if source.confidence != "social-primary":
         return "n/a"
     if not discovered_urls:
-        return "direct-post"
+        return "n/a"
     return "needs-followup"
 
 
@@ -843,16 +842,25 @@ def markdown_escape(value: str) -> str:
     return value.replace("\n", " ").strip()
 
 
+def normalized_digest_title(title: str) -> str:
+    cleaned = " ".join((title or "").split()).rstrip(".")
+    if cleaned.lower().startswith("blog | "):
+        cleaned = cleaned.split("|", 1)[1].strip()
+    return cleaned
+
+
 def source_priority(entry: dict[str, Any]) -> int:
-    if entry["confidence"] == "social-primary" and entry["validation_status"] == "needs-followup":
-        return 0
-    if entry["lane"] == "infra":
-        return 1
-    if entry["lane"] == "workflow":
-        return 2
-    if entry["lane"] == "hardware":
-        return 3
-    return 4
+    lane_priority = {
+        "infra": 1,
+        "workflow": 2,
+        "hardware": 3,
+        "scene": 4,
+    }.get(entry["lane"], 5)
+    if entry["confidence"] == "social-primary":
+        lane_priority += 5
+        if entry["validation_status"] == "needs-followup" and entry["followup_urls"]:
+            lane_priority -= 2
+    return lane_priority
 
 
 def keyword_bonus(title: str) -> int:
@@ -883,12 +891,69 @@ def keyword_bonus(title: str) -> int:
 def entry_rank(entry: dict[str, Any]) -> tuple[int, float]:
     base = source_priority(entry)
     base += keyword_bonus(entry["title"])
-    if entry["confidence"] == "social-primary":
-        base -= 1
     if entry["followup_urls"]:
         best_followup = min(followup_rank_value(item["priority"]) for item in entry["followup_urls"])
         base += best_followup - 1
     return (base, -sort_stamp(entry["published"]))
+
+
+def github_activity_signature(entry: dict[str, Any]) -> tuple[str, str, str] | None:
+    if "github activity" not in entry["source"].lower():
+        return None
+
+    title = normalized_digest_title(entry["title"])
+    lowered = title.lower()
+    published_date = parse_published(entry.get("published", "")).date().isoformat()
+
+    patterns = (
+        (r"^simonw pushed ([\w.-]+)$", "pushed"),
+        (r"^simonw contributed to ([\w./-]+)$", "contributed"),
+        (r"^simonw opened a pull request in ([\w.-]+)$", "pull-request"),
+        (r"^simonw closed a pull request in ([\w.-]+)$", "closed-pull-request"),
+        (r"^simonw forked .+ from ([\w./-]+)$", "forked"),
+    )
+    for pattern, action in patterns:
+        match = re.match(pattern, lowered)
+        if match:
+            return (action, match.group(1), published_date)
+    if "created a branch" in lowered:
+        return ("branch", "unknown", published_date)
+    if "starred " in lowered:
+        return ("star", "unknown", published_date)
+    if "commented on an issue" in lowered:
+        return ("issue-comment", "unknown", published_date)
+    return ("other", lowered, published_date)
+
+
+def digest_signature(entry: dict[str, Any]) -> tuple[str, str]:
+    github_sig = github_activity_signature(entry)
+    if github_sig:
+        return (entry["source"], "|".join(github_sig))
+
+    source = entry["source"]
+    title = normalized_digest_title(entry["title"])
+    lowered = title.lower()
+    if "llama.cpp releases" in source.lower() and re.fullmatch(r"b\d+", lowered):
+        return (source, "llamacpp-release-series")
+    if "vllm blog" in source.lower() and lowered == "vllm":
+        return (source, "vllm-blog-index")
+    if title.startswith("v0."):
+        return (source, re.sub(r"rc\d+.*$", "", lowered))
+    return (source, lowered)
+
+
+def select_digest_entries(entries: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for entry in sorted(entries, key=entry_rank):
+        signature = digest_signature(entry)
+        if signature in seen:
+            continue
+        selected.append(entry)
+        seen.add(signature)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def parse_published(value: str) -> datetime:
@@ -951,58 +1016,45 @@ def is_low_value_github_activity(title: str) -> bool:
 
 
 def collapse_github_activity(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
     passthrough: list[dict[str, Any]] = []
 
     for entry in entries:
-        if "github activity" not in entry["source"].lower():
+        signature = github_activity_signature(entry)
+        if not signature:
             passthrough.append(entry)
             continue
-        if not is_low_value_github_activity(entry["title"]):
-            passthrough.append(entry)
+        if is_low_value_github_activity(entry["title"]):
             continue
-        key = (entry["lane"], entry["source"])
+        key = (entry["lane"], entry["source"], *signature)
         grouped.setdefault(key, []).append(entry)
 
     collapsed: list[dict[str, Any]] = []
-    for (lane, source), items in grouped.items():
-        if len(items) < GITHUB_ACTIVITY_COLLAPSE_THRESHOLD:
+    for (lane, source, action, target, _published_date), items in grouped.items():
+        if len(items) == 1:
             collapsed.extend(items)
             continue
         actor = source.replace(" GitHub Activity", "")
-        event_counts: dict[str, int] = {}
-        for item in items:
-            lowered = item["title"].lower()
-            if "pushed " in lowered:
-                label = "pushes"
-            elif "created a branch" in lowered:
-                label = "branch creations"
-            elif "starred " in lowered:
-                label = "stars"
-            elif "opened a pull request" in lowered:
-                label = "pull requests"
-            elif "closed a pull request" in lowered:
-                label = "closed pull requests"
-            elif "commented on an issue" in lowered:
-                label = "issue comments"
-            else:
-                label = "events"
-            event_counts[label] = event_counts.get(label, 0) + 1
-        top_types = ", ".join(
-            f"{count} {label}" for label, count in sorted(event_counts.items(), key=lambda item: (-item[1], item[0]))[:3]
-        )
+        action_label = {
+            "pushed": "pushed",
+            "contributed": "contributed to",
+            "pull-request": "opened pull requests in",
+            "closed-pull-request": "closed pull requests in",
+            "forked": "forked from",
+            "other": "logged GitHub activity for",
+        }.get(action, action)
         newest = max(items, key=lambda item: sort_stamp(item["published"]))
         collapsed.append(
             {
                 "lane": lane,
                 "source": source,
-                "title": f"{actor}: {len(items)} GitHub events",
+                "title": f"{actor}: {action_label} {target} ({len(items)} events)",
                 "link": newest["link"],
                 "published": newest["published"],
                 "confidence": newest["confidence"],
                 "novelty": newest["novelty"],
                 "action": "scan",
-                "why": f"Routine GitHub activity compressed for scanability: {top_types}.",
+                "why": "Routine GitHub activity compressed for scanability.",
                 "validation_status": "n/a",
                 "followup_urls": [],
             }
@@ -1071,7 +1123,7 @@ def synthesize_ai_summary(profile: str, run_date: date, entries: list[dict[str, 
     if not model:
         return ""
     endpoint = os.getenv("SWEEP_AI_SUMMARY_URL", "http://127.0.0.1:11434/api/generate").strip()
-    top_entries = sorted(entries, key=entry_rank)[:12]
+    top_entries = select_digest_entries(entries, 12)
     prompt_lines = [
         f"Summarize this AI infrastructure/newsletter sweep for {run_date.isoformat()} ({profile}).",
         "Write a single paragraph of 4-6 sentences for a technical operator.",
@@ -1116,7 +1168,7 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
     if not entries:
         return ""
 
-    top = sorted(entries, key=entry_rank)[:20]
+    top = select_digest_entries(entries, 20)
     lane_counts: dict[str, int] = {}
     for entry in entries:
         lane_counts[entry["lane"]] = lane_counts.get(entry["lane"], 0) + 1
@@ -1140,14 +1192,10 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
         return cleaned
 
     def tidy_title(title: str) -> str:
-        cleaned = " ".join(title.split())
-        return cleaned.rstrip(".")
+        return normalized_digest_title(title)
 
     def normalized_title(title: str) -> str:
-        cleaned = tidy_title(title)
-        if cleaned.lower().startswith("blog | "):
-            cleaned = cleaned.split("|", 1)[1].strip()
-        return cleaned
+        return normalized_digest_title(title)
 
     def actor_prefix(title: str) -> str:
         lowered = title.lower()
@@ -1238,7 +1286,12 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
             score = 0
             if title.lower() in {"vllm", "ollama"}:
                 score += 8
-            if "pushed " in lowered or "contributed to " in lowered or "opened a pull request" in lowered:
+            if (
+                "pushed " in lowered
+                or "contributed to " in lowered
+                or "opened a pull request" in lowered
+                or "forked " in lowered
+            ):
                 score += 5
             if "created a branch" in lowered or "starred " in lowered:
                 score += 6
@@ -1251,7 +1304,7 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
             if "review" in lowered or "benchmark" in lowered:
                 score -= 1
             if item["lane"] == "workflow" and "github activity" in item["source"].lower():
-                score += 2
+                score += 6
             return (score, entry_rank(item))
 
         def signature(item: dict[str, Any]) -> tuple[str, str]:
@@ -1386,10 +1439,7 @@ def write_digest(
 
     if entries:
         lines.extend(["## Top Signals", ""])
-        top_entries = sorted(
-            entries,
-            key=entry_rank,
-        )[:5]
+        top_entries = select_digest_entries(entries, 5)
         for entry in top_entries:
             lines.append(f"- [{entry['lane']}] {markdown_escape(entry['title'])} ({entry['source']})")
         lines.append("")

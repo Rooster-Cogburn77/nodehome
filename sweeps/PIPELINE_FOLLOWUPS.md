@@ -46,16 +46,6 @@ This is two consecutive days where the digest's only vLLM signal was a title-and
 - Check whether other "established primary" sources are exhibiting the same swallowed-title issue and would benefit from the same fix.
 - Until fixed: manually check the vLLM blog at least weekly since the digest can't be trusted to surface posts.
 
-### 2026-05-12 — GitHub activity feed produces duplicate entries
-
-**Symptom:** in the 2026-05-12 core digest, the Simon Willison GitHub activity entry "simonw pushed llm" appears 8+ times as separate rows with identical text. Either the GitHub activity feed is being polled multiple times within the digest window, or each individual push event within a session is being treated as a distinct digest entry without deduplication.
-
-**Probable root cause:** GitHub's activity feed reports each `git push` as a separate event. A single development session with 8 pushes generates 8 events. The sweep ingestor isn't collapsing by repo+date or by event signature.
-
-**Action items:**
-- Add a dedup pass on GitHub activity entries that collapses multiple `pushed <repo>` events on the same date into a single digest entry with a count (e.g., "simonw pushed llm (8 times)").
-- Consider a broader dedup pass at the digest-rendering layer that groups by `(source, entity, action, date)` and shows count+representative-title instead of separate rows.
-
 ### 2026-05-12 — Keyword classifier mis-tags content based on partial term matches
 
 **Symptom:** the keyword classifier is matching on partial term occurrences without enough context, leading to wildly wrong topic tags. Examples from the 2026-05-12 core digest:
@@ -86,4 +76,32 @@ This is a different class of issue from the consumer-gaming mis-classification f
 
 ## Resolved
 
-(none yet)
+### 2026-05-18 — GitHub activity feed duplicate entries
+
+Resolved by digest-quality hardening in `sweeps/run_daily.py`.
+
+**Original symptom:** in the 2026-05-12 core digest, the Simon Willison GitHub activity entry "simonw pushed llm" appeared 8+ times as separate rows with identical text. The 2026-05-18 core digest repeated the same failure mode with `watchfiles` activity.
+
+**Fix:** GitHub activity entries now collapse by source, lane, action, target, and published date. Repeated pushes/contributions/PR activity render as one counted row; low-value branch/star/comment-only activity is dropped from the digest body.
+
+**Validation:** `tests/test_sweeps_digest_quality.py` covers duplicate `simonw pushed watchfiles` entries collapsing to one row and low-value `created a branch` activity being excluded.
+
+### 2026-05-18 — Social direct-post validation noise
+
+Resolved by digest-quality hardening in `sweeps/run_daily.py`.
+
+**Original symptom:** social-primary rows with no discovered follow-up URL rendered repeated `Validation: direct-post` lines in email output even though there was no actionable validation queue item.
+
+**Fix:** social-primary items without discovered follow-up URLs now use `validation_status = n/a`, so the digest body does not render repeated direct-post validation lines. Social-primary sources are also down-ranked behind primary infra/workflow sources unless a follow-up URL exists.
+
+**Validation:** `tests/test_sweeps_digest_quality.py` covers social-primary validation status with no discovered URL and verifies social-primary hardware does not outrank primary infra.
+
+### 2026-05-18 — Top-signal release-series repetition
+
+Resolved by digest-quality hardening in `sweeps/run_daily.py`.
+
+**Original symptom:** consecutive `llama.cpp` release tags could occupy most of Top Signals, producing low-information headers such as `b9209`, `b9208`, `b9204`, and `b9203`.
+
+**Fix:** top-signal and synthesis candidate selection now run through a digest-level signature dedupe pass. `llama.cpp` release tags collapse to one representative release-series signal, while substantive commit entries can still appear separately.
+
+**Validation:** `tests/test_sweeps_digest_quality.py` covers release-series collapse while preserving a distinct llama.cpp CUDA commit row.
