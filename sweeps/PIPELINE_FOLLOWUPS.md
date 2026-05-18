@@ -14,7 +14,9 @@ Tracking items for the daily/extended/weekly sweep pipeline that need attention 
 
 **Current behavior:** normal scheduled runs skip `x_user` sources unless `X_BEARER_TOKEN` exists or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set. Skipped transport clears stale failure counters, but `sweeps/report_status.py` still surfaces skipped sources as non-ok so the coverage gap stays visible.
 
-**Next proof needed:** choose and validate a reliable X capture path: first-party X API token, a durable notification/inbox ingestion path, or a proven replacement bridge. Success requires a sweep that captures fresh curated X signals without stale cached OpenRSS rows and without hiding the source-health gap.
+**2026-05-18 setup state:** `xnotify@nodehome.ai` on Forward Email is the chosen notification inbox for the durable email-ingest path. Repo plumbing already exists (`sweeps/ingest_x_email.py`, `x-email-notifications` in `sweeps/sources.json`, workflow pre-ingest when IMAP env is configured), but no real IMAP dry-run or digest proof has happened yet. Operator began adding/enabling tracked X accounts and hit an X follow/notification rate limit. The earlier tracked list is enabled except `@concat_ai`, which the operator identified as a scam account and removed from tracking. New extended tracked handles added for setup: `@KyleHessling1`, `@UnslothAI`, `@stingning`, and `@AndrewYNg`.
+
+**Next proof needed:** configure local IMAP env for `xnotify@nodehome.ai`, get at least one X notification email into the Forward Email inbox, run `sweeps/ingest_x_email.py --dry-run`, then prove a fresh `x-email-notifications` row can enter a no-send sweep without relying on OpenRSS.
 
 ---
 

@@ -100,11 +100,44 @@
       "retries": 2
     },
     {
-      "id": "x-concat-ai",
-      "name": "X: @concat_ai",
+      "id": "x-kylehessling1",
+      "name": "X: @KyleHessling1",
+      "lane": "scene",
+      "kind": "x_user",
+      "url": "https://openrss.org/feed/x.com/KyleHessling1",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "x-unslothai",
+      "name": "X: @UnslothAI",
       "lane": "infra",
       "kind": "x_user",
-      "url": "https://openrss.org/feed/x.com/concat_ai",
+      "url": "https://openrss.org/feed/x.com/UnslothAI",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "x-stingning",
+      "name": "X: @stingning",
+      "lane": "scene",
+      "kind": "x_user",
+      "url": "https://openrss.org/feed/x.com/stingning",
+      "confidence": "social-primary",
+      "profile": "extended",
+      "timeout_seconds": 20,
+      "retries": 2
+    },
+    {
+      "id": "x-andrewyng",
+      "name": "X: @AndrewYNg",
+      "lane": "workflow",
+      "kind": "x_user",
+      "url": "https://openrss.org/feed/x.com/AndrewYNg",
       "confidence": "social-primary",
       "profile": "extended",
       "timeout_seconds": 20,
