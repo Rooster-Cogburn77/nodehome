@@ -70,6 +70,27 @@ class NodechatSafetyTests(unittest.TestCase):
             self.assertEqual(status, "ignored")
             self.assertNotIn({"role": "user", "content": " \n\t "}, session.get("messages", []))
 
+    def test_once_handles_slash_command_without_model_dispatch(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            original_send = nodechat.send_user_prompt
+            try:
+                nodechat.send_user_prompt = mock.Mock(
+                    side_effect=AssertionError("--once slash command should not chat")
+                )
+                with contextlib.redirect_stdout(io.StringIO()) as buf:
+                    rc = nodechat.main([
+                        "--session-root", str(session_root),
+                        "--workspace", str(workspace),
+                        "--once", "/pwd",
+                    ])
+            finally:
+                nodechat.send_user_prompt = original_send
+
+            self.assertEqual(rc, 0)
+            self.assertIn(str(workspace.resolve()), buf.getvalue())
+
     def test_merge_direct_paste_prompt_combines_pending_terminal_lines(self):
         original = nodechat.read_pending_terminal_lines
         try:

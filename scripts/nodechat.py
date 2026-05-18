@@ -5390,7 +5390,14 @@ def main(argv: list[str] | None = None) -> int:
     print("use /help for commands")
 
     if args.once:
-        send_user_prompt(config, session, str(args.once))
+        line = str(args.once).strip()
+        if line.startswith("/"):
+            action, session, prompt = handle_command(line, config, session)
+            save_session(config, session)
+            if action == "prompt" and prompt:
+                send_user_prompt(config, session, prompt)
+        else:
+            send_user_prompt(config, session, str(args.once))
         return 0
 
     while True:
