@@ -71,7 +71,7 @@ Observed over the USB-NIC web UI tunnel and host-side `ipmitool`; these are live
 - `Configuration -> Network -> SSL Certificates`: current cert validity reports `Sep 4 00:00:00 2024 GMT` through `Sep 4 00:00:00 2034 GMT`. The page exposes upload controls for a cert file and private key file (`.pem` / `.cert`) and no visible CSR or self-signed generator. Final upload should wait for the chosen hostname/static IP and clock/battery cleanup.
 - `Configuration -> Network -> Port`: enabled TCP ports are IKVM `5900`, SSH `22`, Web `80`, Web SSL `443`, and Virtual Media `623`; enabled UDP port is IPMI LAN `623`. SNMP UDP `161` is already disabled.
 - `Configuration -> Network -> IP Access Control`: IP Access Control is `OFF`.
-- `Configuration -> Network -> SSDP`: SSDP is `ON`, port `1900`, time to live `2`, IPv6 scope `Link`. This is the clearest low-risk disable candidate from the current inspection.
+- `Configuration -> Network -> SSDP`: SSDP was initially `ON`, port `1900`, time to live `2`, IPv6 scope `Link`. User disabled SSDP in the same BMC sitting after inventory capture.
 - `Configuration -> Network -> LLDP`: LLDP is `OFF`; transmit is also `OFF`.
 - `Configuration -> BMC Settings -> Dynamic DNS`: Dynamic DNS update is `OFF`, TSIG authentication is `OFF`, and hostname/server fields are blank. The UI warned that system time should be synchronized with NTP before updating the hostname.
 - `Configuration -> BMC Settings -> SMC RAKP`: Current RAKP status is `OFF`.
