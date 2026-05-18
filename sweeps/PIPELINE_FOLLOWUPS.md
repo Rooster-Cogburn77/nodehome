@@ -6,21 +6,29 @@ Tracking items for the daily/extended/weekly sweep pipeline that need attention 
 
 ## Open
 
-(none currently)
+### 2026-05-18 - X social collection transport offline
+
+**Status:** not fixed. Commit `72f0117` only mitigated the stale OpenRSS failure loop by making `x_user` transport explicit opt-in. The actual collection gap remains: scheduled sweeps do not currently collect curated X accounts through a reliable automated transport.
+
+**Observed symptom:** recent sweeps repeatedly logged 6-21 X/OpenRSS social feed failures per run. Core X sources retried after cooldown, failed again, and emitted cached-state health rows; extended X sources accumulated long quarantine lists with OpenRSS 403/429/timeouts.
+
+**Current behavior:** normal scheduled runs skip `x_user` sources unless `X_BEARER_TOKEN` exists or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set. Skipped transport clears stale failure counters, but `sweeps/report_status.py` still surfaces skipped sources as non-ok so the coverage gap stays visible.
+
+**Next proof needed:** choose and validate a reliable X capture path: first-party X API token, a durable notification/inbox ingestion path, or a proven replacement bridge. Success requires a sweep that captures fresh curated X signals without stale cached OpenRSS rows and without hiding the source-health gap.
 
 ---
 
 ## Resolved
 
-### 2026-05-18 - X/OpenRSS social feed degradation
+### 2026-05-18 - X/OpenRSS scheduled-noise mitigation
 
-Resolved by making X/OpenRSS an explicit transport instead of an automatic scheduled dependency.
+Resolved only as a mitigation, not as restored X collection. The open item above tracks the remaining transport gap.
 
-**Original symptom:** recent sweeps repeatedly logged 6-21 X/OpenRSS social feed failures per run. Core X sources retried after cooldown, failed again, and emitted cached-state health rows; extended X sources accumulated long quarantine lists with OpenRSS 403/429/timeouts. This made scheduled health look broken even when durable sources were healthy.
+**Original symptom:** repeated OpenRSS 403/429/timeouts and cached-state rows made scheduled health look like durable sources were broken even when the failure was isolated to the X bridge.
 
-**Fix:** `x_user` sources are now skipped unless `X_BEARER_TOKEN` exists or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set. Skipped X transport clears stale degraded failure counts and appears as `Skipped` in the health report rather than `Cached`, `Failed`, or `Quarantined`. The status reporter excludes intentional `skipped` transport from degraded/non-ok counts.
+**Fix:** `x_user` sources are now skipped unless `X_BEARER_TOKEN` exists or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set. Skipped X transport clears stale degraded failure counts and appears as `Skipped` in the health report rather than `Cached`, `Failed`, or `Quarantined`.
 
-**Validation:** `tests/test_sweeps_digest_quality.py` covers default OpenRSS-off behavior and verifies skipped X transport clears prior degraded failure state.
+**Validation:** `tests/test_sweeps_digest_quality.py` covers default OpenRSS-off behavior, verifies skipped X transport clears prior degraded failure state, and verifies status reporting still surfaces skipped X transport as non-ok.
 
 ### 2026-05-18 - vLLM blog title-swallow
 

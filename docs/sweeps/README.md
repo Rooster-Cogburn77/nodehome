@@ -111,6 +111,7 @@ Current X approach:
 - curated X accounts are no longer fetched through OpenRSS by default
 - scheduled runs skip `x_user` sources unless `X_BEARER_TOKEN` is configured or `SWEEP_OPENRSS_FALLBACK_ENABLED=true` is explicitly set
 - this avoids turning stale OpenRSS 403/429/timeout behavior into noisy degraded source state on normal runs
+- this does not restore reliable X collection; skipped X transport remains a visible non-ok source-health gap until a first-party token or replacement capture path is validated
 - X items should still be treated as discovery-first and validated before decisions
 - outbound links in new social items are automatically resolved into a validation queue
 - follow-up links are typed (`github`, `release`, `blog`, `paper`, `video`) and prioritized

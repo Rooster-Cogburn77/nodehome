@@ -68,7 +68,7 @@ schtasks /Delete /TN SovereignNodeSweepWeekly /F
 - Tasks are created with `/F`, so rerunning the registration script updates them.
 - The workflow runner loads `.env` and `sweeps/.env` automatically, so Task Scheduler does not need secrets embedded in the task command.
 - Already-set environment variables win over `.env` values; root `.env` wins over `sweeps/.env`.
-- X/OpenRSS bridge fetches are skipped by default on scheduled runs. Set `SWEEP_OPENRSS_FALLBACK_ENABLED=true` only for an intentional OpenRSS pass, or configure `X_BEARER_TOKEN` for first-party X API access.
+- X/OpenRSS bridge fetches are skipped by default on scheduled runs. Set `SWEEP_OPENRSS_FALLBACK_ENABLED=true` only for an intentional OpenRSS pass, or configure `X_BEARER_TOKEN` for first-party X API access. A skipped X source is still a visible non-ok coverage gap, not evidence that X collection is fixed.
 - Output files are written under `docs/sweeps/daily/`.
 - The workflow also refreshes the generated wiki view under `docs/wiki/generated/` unless `--skip-wiki` is passed.
 - `core` writes `YYYY-MM-DD.md`.

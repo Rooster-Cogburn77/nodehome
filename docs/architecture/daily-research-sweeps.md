@@ -420,6 +420,7 @@ X is primary ideation, not guaranteed transport.
 - Use X email notifications as the current automated, low-risk capture path
 - Keep OpenRSS as an explicit fallback only: set `SWEEP_OPENRSS_FALLBACK_ENABLED=true` for an intentional OpenRSS pass, or provide a safe `X_BEARER_TOKEN` for first-party API access
 - Leave `SWEEP_OPENRSS_FALLBACK_ENABLED` unset/false for normal scheduled runs so stale bridge failures are recorded as skipped transport, not degraded source failures
+- Treat skipped X transport as a visible coverage gap, not a completed fix; scheduled quality is protected, but curated X collection is still offline until a reliable transport is proven
 - Add durable fallbacks (blog, YouTube, GitHub, Bluesky) for baseline continuity, not as replacements
 - The quarantine system handles persistent failures automatically (3 consecutive failures = 12h cooldown)
 

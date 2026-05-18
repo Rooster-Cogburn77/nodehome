@@ -76,7 +76,7 @@ def degraded_summary(limit: int) -> tuple[int, list[str]]:
     for source_id, record in data.items():
         status = record.get("status", "")
         failures = int(record.get("failures", 0) or 0)
-        if status not in {"ok", "skipped"} or failures:
+        if status != "ok" or failures:
             rows.append((failures, source_id, status, record.get("last_detail", "")))
     rows.sort(reverse=True)
     lines = [f"- {source_id}: {status}, failures={failures}, {detail}" for failures, source_id, status, detail in rows[:limit]]

@@ -1,7 +1,11 @@
+import json
+import tempfile
 import unittest
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
+from sweeps import report_status
 from sweeps.run_daily import (
     Source,
     collapse_github_activity,
@@ -242,6 +246,29 @@ class SweepsDigestQualityTests(unittest.TestCase):
         self.assertEqual(updated["x-karpathy"]["status"], "skipped")
         self.assertEqual(updated["x-karpathy"]["failures"], 0)
         self.assertEqual(updated["x-karpathy"]["last_detail"], "X transport disabled")
+
+    def test_report_status_surfaces_skipped_x_transport_as_non_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "degraded_sources.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "x-karpathy": {
+                            "source": "X: @karpathy",
+                            "failures": 0,
+                            "status": "skipped",
+                            "last_detail": "X transport disabled",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(report_status, "DEGRADED_SOURCES", state_path):
+                count, lines = report_status.degraded_summary(5)
+
+        self.assertEqual(count, 1)
+        self.assertTrue(any("x-karpathy: skipped" in line for line in lines))
 
 
 if __name__ == "__main__":
