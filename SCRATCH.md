@@ -52,6 +52,7 @@ Never suggest ending the session in any form. Banned: "or call the session", "or
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
 - 12TB drives arriving May 16-20 — SMART-verify before format. sv2deals serial `5PJHV96C`; PayMore packaging photo before opening.
 - BMC/IPMI Phase 1 (password rotation + cert hygiene) — next free security task; factory password is in repo git history.
+- Cleanup item: historical `Co-Authored-By: Claude` attribution trailers remain in public Git history. Pasted audit snapshot before local BMC commit `6d2f94c` reported 168 commits total, 57 trailer-contaminated commits (~34%), first `4117058` on 2026-05-09, most recent `415ed9f` on 2026-05-16, and `origin/main` 0 ahead / 0 behind at that time. After `6d2f94c`, the local branch is ahead and total commit count is one higher. Before any rewrite, run a precise trailer-only audit; decision is fix-forward versus `git filter-repo` rewrite + force-push. Do not block BMC/security work on this.
 - Open WebUI re-pin `:main` -> `:v0.9.5` complete; next upgrades go through monthly release review.
 - CFD proof path remains future work: OpenFOAM proof run -> simplified rack/chassis airflow model -> measured probes -> calibrate against idle/load thermal data -> increase mesh/detail. Buy/add the second 128GB RAM set when a sane matching RDIMM opportunity appears or when the proof path shows 128GB is the limiter.
 
