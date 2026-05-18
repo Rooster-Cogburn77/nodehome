@@ -158,6 +158,14 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | Authelia / Authentik SSO | If running >3 web UIs and exposing them | deferred (gated on remote exposure decision) |
 | `live-mutations.md` allowlist | Operator approval queue for selected service restarts (vllm-server, open-webui, ollama via sudoers) | shipped |
 
+## Sidecar / personal tools
+
+These are useful adjacent ideas, but they are not Nodehome core serving, AI research, or sweep/publication work. Keep implementation, secrets, and state outside this repo unless a future decision explicitly changes scope.
+
+| Component | Role | Status |
+|---|---|---|
+| Data-broker opt-out automation (`stephenlthorn/auto-identity-remove` candidate) | Personal privacy automation for people-search/data-broker opt-outs | watch/sidecar (separate repo only; upstream is macOS-oriented and uses CapSolver, which is a third-party privacy leak unless removed/replaced) |
+
 ## Newsletter / publication
 
 | Component | Role | Status |
