@@ -141,6 +141,23 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 
 **Defer:** Single-device certificate authority is over-engineering.
 
+### HDHomeRun OTA tuner (Streams Index in-app HLS source)
+
+**Current state:** Streams Index sidecar was designed end-to-end on 2026-05-18 (see `SCRATCH.md` "Streams Index sidecar design pinned" bullet, `docs/SESSION_LOG.md` 2026-05-18 entry, and `docs/wiki/concepts/full-stack-inventory.md` Sidecar / personal tools section). The design includes an in-app `hls_authorized` playback branch that needs an authorized source. HDHomeRun OTA is the cleanest candidate path for broadcast-network sports content (NFL Sunday afternoon, network playoff coverage, World Series, broadcast college games, local affiliates).
+
+**Trigger:** All of:
+- Streams Index sidecar has shipped (SQLite catalog + FastAPI service + frontend + at least one aggregator scraper live and producing real click-outcome data).
+- Streams Index has accumulated ≥30 days of click-outcome history.
+- Outcome history shows OTA-eligible content (broadcast networks, local affiliates) is ≥25% of actual viewing time.
+
+**Recommendation:** HDHomeRun Connect Duo (~$150, 2 tuners, 1080i max) or HDHomeRun Flex 4K (~$200, 4 tuners, ATSC 3.0 4K-capable) + outdoor or attic OTA antenna sized for local broadcast distance. Connect to LAN on a known IP, configure the Streams Index `services/streams/providers/owned/hdhomerun.py` provider to point at it. Optional: bridge through Jellyfin's live-TV passthrough (`jellyfin_live.py` provider) for cleaner HLS endpoint semantics if HDHomeRun's native HTTP-MPEG-TS doesn't play directly through hls.js.
+
+**Why this tier:** Spend-once durability for the broadcast portion of viewing. Pairs with the Streams Index architecture (`hls_authorized` branch wants an authorized source; HDHomeRun receiving your own OTA broadcasts is the legitimate answer). No legal/operational complexity. Without Streams Index shipping first, the tuner has no consumer service to feed beyond manual VLC playback.
+
+**Defer:** Until Streams Index sidecar ships and outcome data confirms OTA-eligible content is a meaningful share of viewing. Don't buy the tuner speculatively.
+
+**Cost:** $150-200 tuner + $30-100 antenna + cabling.
+
 ### Rack acoustic lining
 
 **Current state:** BMC fan threshold cycling was fixed. Remaining noise concern is fan ramping / fan hunting, not a confirmed rack-panel resonance problem.

@@ -166,6 +166,7 @@ These are useful adjacent ideas, but they are not Nodehome core serving, AI rese
 | Component | Role | Status |
 |---|---|---|
 | Data-broker opt-out automation (`stephenlthorn/auto-identity-remove` candidate) | Personal privacy automation for people-search/data-broker opt-outs | watch/sidecar (separate repo only; upstream is macOS-oriented and uses CapSolver, which is a third-party privacy leak unless removed/replaced) |
+| Streams Index sidecar (event/stream command center, aggregator + authorized HLS) | Single-user, LAN-only catalog of live sports/events with per-provider scrapers, user-validated aggregator outcomes, in-app HLS playback only for authorized sources (future HDHomeRun OTA / Jellyfin live-TV bridge), open-in-isolated-browser-profile for all aggregator URLs. Permanent rules: no server-side stream proxy, no server-side aggregator probing, scraper traffic from residential homelab IP only. | designed end-to-end 2026-05-18, not implemented (see SCRATCH "Streams Index sidecar design pinned" bullet and `docs/SESSION_LOG.md` 2026-05-18) |
 
 ## Newsletter / publication
 
