@@ -1,7 +1,7 @@
 # Inference Architectures Watch
 
 **Status:** Watch lane, not current implementation lane  
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-18
 
 This page tracks serving and decoding architectures that may affect Nodehome's local model stack. The bar for adoption is higher than "interesting paper": it needs a usable runtime path, a model/checkpoint relevant to our size class, and a win against the validated local baseline.
 
@@ -14,6 +14,49 @@ Validated local serving lanes:
 - `deep`: `llama3.3:70b-instruct-q4_K_M` on Ollama layer-split, GPUs 0/1, roughly `8-15 tok/s`.
 
 GPU2 remains excluded from sustained work until the proper SF-1600F14HT cable arrives and the temporary pigtail rule is retired.
+
+## SANA-WM / arXiv 2605.15178
+
+- **Source:** NVIDIA/NVlabs project page, arXiv paper, Hugging Face paper page, and `NVlabs/Sana` repo update surfaced 2026-05.
+- **Links:** [Project](https://nvlabs.github.io/Sana/WM/), [GitHub](https://github.com/NVlabs/Sana), [arXiv](https://arxiv.org/abs/2605.15178), [Hugging Face paper page](https://huggingface.co/papers/2605.15178)
+- **Published:** 2026-05-14
+- **Confidence:** Primary paper and repo announcement exist. Local run path is not yet validated on Nodehome.
+- **What it is:** 2.6B controllable world/video model for 720p minute-scale generation from an input image, text prompt, and 6-DoF camera trajectory. It is useful to track as a future synthetic-scene/video/world-model workload, not as a replacement for the validated LLM serving stack.
+- **Current claims:** Training on about 213K public video clips in 15 days on 64 H100s; stronger one-minute action-following than prior open baselines; comparable visual quality at 36x higher throughput in the authors' benchmark; distilled variant can run on a single RTX 5090 with NVFP4 quantization and denoise a 60s 720p clip in about 34s.
+- **Caution:** "World model" here does not mean a validated physics simulator or robotics environment. It is a generative video/world model with camera control. The strongest consumer-GPU claim depends on RTX 5090-class Blackwell NVFP4 behavior, so it does not transfer cleanly to Nodehome's RTX 3090s. Do not turn social-media claims about autonomous simulation loops into local capability claims without a local run.
+- **Action:** Add to the watch/use-candidate lane. Do not install into the production stack yet. A bounded lab test is allowed only after official SANA-WM weights/docs are clearly runnable, and it must use a disposable container or lab directory, avoid private data mounts, keep GPU2 unused while the temporary pigtail rule is active, and stop/restart any conflicting serving containers deliberately.
+
+### Nodehome Decision
+
+Watch it and preserve an optional lab path. No production service change today.
+
+Reasons:
+
+- The current validated production lanes are Ollama/vLLM LLM serving; SANA-WM is a separate video-generation workload.
+- vLLM/Open WebUI/Nodechat do not get SANA-WM support automatically from the SANA repo existing.
+- Nodehome's RTX 3090s lack Blackwell NVFP4 acceleration, so the RTX 5090 inference claim is a future hardware signal, not proof this will perform well on the current cards.
+- A SANA-WM test would compete with current GPU memory/service allocation and must not touch GPU2 until the pigtail rule is retired.
+
+### Revisit Triggers
+
+Re-evaluate when one or more of these happens:
+
+- Official SANA-WM inference docs and weights are published with a reproducible single-GPU path.
+- Community or upstream reports show successful Ampere/RTX 3090 runs with concrete VRAM, latency, and quality notes.
+- A ComfyUI, Diffusers, or containerized runner lands that does not require broad host-environment changes.
+- Nodehome obtains a Blackwell GPU such as an RTX 5090 and deliberately wants a separate single-GPU world/video lane.
+- A real project use case appears: synthetic scene generation, camera-path video generation, robotics/simulation ideation, or media-pipeline experiments.
+
+### Lab-Only Benchmark Gates
+
+Hard gates before running:
+
+- Stop `vllm-server` only if needed, record the stop/restart, and verify the normal LLM stack recovers afterward.
+- Do not use GPU2 while the temporary pigtail rule is active.
+- Prefer disposable Docker or a dedicated lab directory over modifying the host Python environment.
+- Do not mount private project data, KeePass vaults, credentials, inboxes, or customer/subscriber material into the lab container.
+- Keep downloaded weights, generated videos, benchmark logs, and dependency scratch files out of git.
+- Time-box setup. If CUDA/PyTorch/video dependency resolution becomes unstable, stop and log the blocker rather than churning the production node.
 
 ## SubQ / Subquadratic Sparse Attention
 
