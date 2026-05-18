@@ -168,6 +168,18 @@ CASES: list[dict[str, Any]] = [
      "expected": {"history": False,
                   "repo": ["CLAUDE.md", "SCRATCH.md"],
                   "web": "none", "live": []}},
+    {"id": "r016", "category": "repo-positive",
+     "prompt": "dive deep on our codebase and summarize current progress, stack, completed work, and outstanding work",
+     "expected": {"history": False,
+                  "repo": ["docs/CURRENT_STATE.md",
+                           "docs/wiki/concepts/full-stack-inventory.md"],
+                  "web": "none", "live": []}},
+    {"id": "r017", "category": "repo-positive",
+     "prompt": "give me a project overview of current progress and what is left",
+     "expected": {"history": False,
+                  "repo": ["docs/CURRENT_STATE.md",
+                           "docs/wiki/concepts/full-stack-inventory.md"],
+                  "web": "none", "live": []}},
 
     # --- web positives (URL fetch) ---------------------------------------
     {"id": "w001", "category": "web-positive-url",

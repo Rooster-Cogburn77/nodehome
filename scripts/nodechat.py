@@ -265,6 +265,26 @@ REPO_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_/\\])(?:docs|scripts|sweeps|site|tests|memory)[\\/][A-Za-z0-9_./\\\-]+"
 )
 
+REPO_SUMMARY_DOCS = (
+    "docs/CURRENT_STATE.md",
+    "docs/wiki/concepts/full-stack-inventory.md",
+)
+REPO_SUMMARY_SUBJECT_RE = re.compile(
+    r"\b(codebase|repo(?:sitory)?|project|nodehome|local[_ -]?ai)\b",
+    re.I,
+)
+REPO_SUMMARY_NONLIVE_SUBJECT_RE = re.compile(
+    r"\b(codebase|repo(?:sitory)?|project|local[_ -]?ai)\b",
+    re.I,
+)
+REPO_SUMMARY_INTENT_RE = re.compile(
+    r"\b("
+    r"summari[sz]e|summary|overview|progress|current\s+(?:progress|status)|"
+    r"completed|complete|done|outstanding|left|stack|capabilit(?:y|ies)"
+    r")\b",
+    re.I,
+)
+
 WEB_URL_RE = re.compile(r"https?://[^\s<>\]\"')]+", re.I)
 WEB_EXPLICIT_RE = re.compile(
     r"\b(search|look up|look for|browse|web|internet|online|google|verify online|check online)\b",
@@ -358,6 +378,10 @@ HISTORY_CONTEXT and NODECHAT_TOOL_CONTEXT blocks as evidence with provenance,
 not as general world knowledge. Do not claim to have searched private history,
 read a file, searched/fetched the web, or checked live node state unless the
 corresponding context block is present in this conversation.
+For repo/project state, stack, capability, file, or implementation claims, if
+no repo/history/live/web context block is present, say there is not enough
+loaded evidence and ask for a specific context route instead of inferring repo
+contents from project names or user wording.
 
 Patch proposals created by /propose-edit are proposals only. Do not claim they
 were applied unless the user explicitly applies them.
@@ -1503,8 +1527,9 @@ def detect_repo_targets(
 
     Day-one matches: explicit named files (CURRENT_STATE / SESSION_LOG /
     CLAUDE.md / SCRATCH.md / ATTITUDE.md), known runbook stems, and
-    path-like tokens (docs/x, scripts/x, ...). Bare filenames and topic
-    phrases do not auto-route.
+    path-like tokens (docs/x, scripts/x, ...). High-confidence project summary
+    requests route the two authoritative overview docs. Bare filenames and
+    vague topic phrases do not auto-route.
     """
     if not prompt or not prompt.strip():
         return []
@@ -1513,6 +1538,12 @@ def detect_repo_targets(
     for pattern, rel in REPO_NAMED_FILE_PATTERNS:
         if pattern.search(prompt):
             candidates.append(rel)
+
+    if (
+        REPO_SUMMARY_SUBJECT_RE.search(prompt)
+        and REPO_SUMMARY_INTENT_RE.search(prompt)
+    ):
+        candidates.extend(REPO_SUMMARY_DOCS)
 
     for match in REPO_RUNBOOK_RE.finditer(prompt):
         candidates.append(f"docs/runbooks/{match.group(1).lower()}.md")
@@ -1593,6 +1624,11 @@ def detect_live_targets(prompt: str) -> list[str]:
         return []
     text = prompt.strip()
     lowered = text.lower()
+    if (
+        REPO_SUMMARY_NONLIVE_SUBJECT_RE.search(text)
+        and REPO_SUMMARY_INTENT_RE.search(text)
+    ):
+        return []
     if not LIVE_TRIGGER_RE.search(text) or not LIVE_OBJECT_RE.search(text):
         return []
     if (LIVE_PUBLIC_DEST_RE.search(text) or WEB_EXPLICIT_RE.search(text)) and \

@@ -634,6 +634,30 @@ class NodechatAutoRoutingTests(unittest.TestCase):
                     paths = nodechat.detect_repo_targets(config, session, prompt)
                     self.assertEqual(paths, [])
 
+    def test_repo_summary_intent_routes_authoritative_overview_docs(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            (workspace / "docs" / "wiki" / "concepts").mkdir(parents=True)
+            (workspace / "docs" / "CURRENT_STATE.md").write_text("state", encoding="utf-8")
+            (workspace / "docs" / "wiki" / "concepts" / "full-stack-inventory.md").write_text(
+                "inventory", encoding="utf-8"
+            )
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            expected = [
+                "docs/CURRENT_STATE.md",
+                "docs/wiki/concepts/full-stack-inventory.md",
+            ]
+            for prompt in (
+                "dive deep on our codebase and summarize current progress, stack, completed work, and outstanding work",
+                "give me a project overview of current progress and what is left",
+            ):
+                with self.subTest(prompt=prompt):
+                    paths = nodechat.detect_repo_targets(config, session, prompt)
+                    rels = [nodechat.display_path(config, session, p) for p in paths]
+                    self.assertEqual(rels, expected)
+
     def test_repo_routing_caps_at_two_files(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
@@ -855,6 +879,12 @@ class NodechatAutoRoutingTests(unittest.TestCase):
         self.assertEqual(
             nodechat.detect_live_targets("diagnose the homelab stack"),
             ["health"],
+        )
+        self.assertEqual(
+            nodechat.detect_live_targets(
+                "dive deep on our codebase and summarize current progress, stack, completed work, and outstanding work"
+            ),
+            [],
         )
         self.assertEqual(
             nodechat.detect_live_targets("what did we decide about GPU2?"),
