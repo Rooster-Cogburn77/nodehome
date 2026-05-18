@@ -1,6 +1,15 @@
 # Sovereign Node - Session Log
 <!-- Current month only. Archive previous months under docs/archives/SESSION_LOG_YYYY-MM.md -->
 
+## 2026-05-18 (Session 25)
+**Focus:** House power-blip recovery check.
+**What was done:**
+- After a house power blip, ran the repo healthcheck remotely from the Windows workstation: `ssh bmoore_77@192.168.1.198 "cd ~/nodehome && ./scripts/healthcheck.sh"`. Result: `[HEALTHY] no failures, no warnings`. Interpretation: the node either stayed up or recovered cleanly; no service/GPU/storage/API/BMC/kernel warnings were present at check time.
+- Ran a UPS telemetry spot check with `upsc ups`. Returned `battery.charge: 99`, `input.voltage: 120.0`, `ups.status: OL CHRG`, `ups.load: 0`, and `ups.realpower.nominal: 900`. Interpretation: UPS comms remain normal and the unit is online/charging, but the rack/node AC load is still not inline through the UPS battery-backed outlets; this event does not validate backup-power behavior for the node.
+**Validation:**
+- `./scripts/healthcheck.sh` returned `[HEALTHY] no failures, no warnings`.
+- `upsc ups` returned live telemetry after the event; `ups.load: 0` confirms the existing non-load-bearing UPS posture.
+
 ## 2026-05-16 (Session 24)
 **Focus:** Afternoon sweep send readiness and UPS telemetry.
 **What was done:**
