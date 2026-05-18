@@ -148,7 +148,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 
 | Component | Role | Status |
 |---|---|---|
-| BMC/IPMI Phase 1 | Password rotation + cert hygiene. Factory `SYZIFLTPAK` is in repo git history. | planned (~1h, independent of everything else) |
+| BMC/IPMI Phase 1 | ADMIN password rotation completed 2026-05-17; live credential is in KeePassXC. Cert hygiene remains pending before any LAN patch. | partial (password done; cert hygiene pending) |
 | BMC/IPMI Phase 2 | Management VLAN network plumbing | deferred (gated on UniFi gear) |
 | BMC/IPMI Phase 3 | Static IP + dedicated NIC patch into LAN | deferred (gated on Phase 2) |
 | BMC/IPMI Phase 4 | Internal CA for trusted BMC certs | deferred (Tier 4) |

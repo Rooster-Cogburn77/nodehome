@@ -1,7 +1,7 @@
 # Hardware Upgrade Roadmap
 
 **Status:** Living document. Captures prioritized future hardware spends with concrete triggers, not a fixed plan.
-**Last Updated:** 2026-05-16
+**Last Updated:** 2026-05-17
 
 The build is operationally complete as of Session 19. This roadmap covers what to spend on next, when triggers fire, and what to defer. Ordered by value-per-dollar in the current build state, not by absolute cost.
 
@@ -10,9 +10,9 @@ The build is operationally complete as of Session 19. This roadmap covers what t
 Priority order changed after reviewing RAM price trajectory, local UPS reality, and network segmentation risk:
 
 1. **GPU 3 proper cable remains the mandatory safety unlock.** No sustained 3-GPU/TP=3 load until the pigtail rule is retired.
-2. **BMC/IPMI Phase 1 is the highest-priority security task because it is free.** Rotate the factory ADMIN password and clean up cert hygiene before the dedicated IPMI port is ever patched into LAN.
+2. **BMC/IPMI credential rotation is done; cert hygiene remains the highest-priority free security task.** The ADMIN password was rotated on 2026-05-17 and the live credential now lives in KeePassXC. Clean up cert hygiene before the dedicated IPMI port is ever patched into LAN.
 3. **RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at a sane price.** DDR4 ECC RDIMM has higher run-away-price risk than UPS or basic network gear.
-4. **Network segmentation is important, and the cable-company router should be replaced.** First rotate BMC credentials/cert, then put the ISP box into bridge/modem mode if possible and move routing/VLAN control to owned gear.
+4. **Network segmentation is important, and the cable-company router should be replaced.** Finish BMC cert hygiene, then put the ISP box into bridge/modem mode if possible and move routing/VLAN control to owned gear.
 5. **The current local UPS is acceptable for now as a graceful-shutdown/light-load buffer, not as peak-load ride-through.** Do not plan to run sustained multi-GPU inference through an outage on the BX1500M.
 
 ---
@@ -78,9 +78,9 @@ Priority order changed after reviewing RAM price trajectory, local UPS reality, 
 
 ### Router replacement + managed switch/AP for management VLAN
 
-**Current state:** BMC reachable only via in-band USB-NIC at `169.254.3.1/24`. Dedicated IPMI ethernet port is unpatched. The current router is the standard cable-company router and is not a trustworthy long-term segmentation foundation. `docs/runbooks/ipmi-hardening.md` captures the proactive scope; Phase 1 (password rotation + cert) needs no hardware, Phases 2-3 (management VLAN + static IP + cable patch) need owned routing/switching gear.
+**Current state:** BMC reachable only via in-band USB-NIC at `169.254.3.1/24`. Dedicated IPMI ethernet port is unpatched. The current router is the standard cable-company router and is not a trustworthy long-term segmentation foundation. `docs/runbooks/ipmi-hardening.md` captures the proactive scope; Phase 1 password rotation completed 2026-05-17, cert hygiene still needs no hardware, and Phases 2-3 (management VLAN + static IP + cable patch) need owned routing/switching gear.
 
-**Current decision:** Network segmentation matters, but do not turn it into a vague all-at-once project. Execute Phase 1 first with no new hardware: rotate BMC ADMIN password, store it outside git, and clean up cert hygiene. Then replace the router/gateway layer instead of trying to build VLAN policy on the ISP router.
+**Current decision:** Network segmentation matters, but do not turn it into a vague all-at-once project. Finish the remaining Phase 1 cert hygiene, then replace the router/gateway layer instead of trying to build VLAN policy on the ISP router.
 
 **Trigger:** Any of:
 - Decision to execute IPMI hardening Phase 2/3
@@ -163,7 +163,7 @@ These don't fit the hardware roadmap but are on the same opportunity-cost ledger
 - Persistent NVIDIA power-cap unit for the validated 2-GPU vLLM profile (`docs/runbooks/nvidia-power-cap.md`): apply `300 W` to GPUs 0 and 1 after driver load; leave GPU 2 untouched until the proper cable arrives.
 - Ollama v0.30.0 evaluation when stable ships (currently rc15)
 - vLLM v0.21.0 release notes review (TurboQuant KV-cache quantization)
-- IPMI hardening Phase 1 (BMC password rotation, cert hygiene — runs in-band, no hardware needed)
+- IPMI hardening Phase 1 follow-through (ADMIN password rotation completed 2026-05-17; cert hygiene still pending and runs with no hardware dependency once the BMC is browser-reachable)
 - Healthcheck automation via sudoers NOPASSWD + cron
 - Backup pipeline setup once Drives #1/#2 are mounted
 - Sweep pipeline migration from laptop to AI node (shadow mode first)

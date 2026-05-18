@@ -52,7 +52,7 @@ Never suggest ending the session in any form. Banned: "or call the session", "or
 **Out-of-Nodechat work still open today:**
 - GPU 3 cable arrival window `2026-05-23` → `2026-06-10` (`lizzieb753` UK eBay).
 - 12TB drives arriving May 16-20 — SMART-verify before format. sv2deals serial `5PJHV96C`; PayMore packaging photo before opening.
-- BMC/IPMI Phase 1 (password rotation + cert hygiene) — next free security task; factory password is in repo git history.
+- BMC/IPMI cert hygiene remains the next free security task after the 2026-05-17 ADMIN password rotation; live credential is in KeePassXC, and static IP / management VLAN / LAN patch remain pending.
 - Cleanup item: historical `Co-Authored-By: Claude` attribution trailers remain in public Git history. Pasted audit snapshot before local BMC commit `6d2f94c` reported 168 commits total, 57 trailer-contaminated commits (~34%), first `4117058` on 2026-05-09, most recent `415ed9f` on 2026-05-16, and `origin/main` 0 ahead / 0 behind at that time. After `6d2f94c`, the local branch is ahead and total commit count is one higher. Before any rewrite, run a precise trailer-only audit; decision is fix-forward versus `git filter-repo` rewrite + force-push. Do not block BMC/security work on this.
 - Open WebUI re-pin `:main` -> `:v0.9.5` complete; next upgrades go through monthly release review.
 - CFD proof path remains future work: OpenFOAM proof run -> simplified rack/chassis airflow model -> measured probes -> calibrate against idle/load thermal data -> increase mesh/detail. Buy/add the second 128GB RAM set when a sane matching RDIMM opportunity appears or when the proof path shows 128GB is the limiter.
@@ -87,7 +87,7 @@ Focus carryover: Storage procurement recovery after Walmart canceled Drive #1; r
 
 ## Future hardware spend roadmap
 - Captured in `docs/runbooks/hardware-upgrade-roadmap.md` — prioritized future hardware spends with concrete triggers.
-- Current priority decision (2026-05-15): GPU 3 proper cable remains the safety unlock; BMC/IPMI Phase 1 (password rotation + cert hygiene) is the next free security task; RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at sane price; the cable-company router should be replaced rather than used as the long-term segmentation foundation.
+- Current priority decision (updated after 2026-05-17 BMC rotation): GPU 3 proper cable remains the safety unlock; BMC/IPMI cert hygiene is the next free security task; RAM can jump ahead of UPS as the next spend if a clean matching 4x32GB RDIMM set appears at sane price; the cable-company router should be replaced rather than used as the long-term segmentation foundation.
 - UPS posture revised: current local UPS is acceptable for blips and graceful shutdown at idle/light load. It is not sized for peak multi-GPU ride-through, and the stack should not plan to run sustained inference through an outage on the BX1500M.
 - RAM posture revised: more RAM (4x 32GB DDR4-2400 ECC RDIMM, target Samsung M393A4K40CB1-CRC4Q) is not an emergency capacity gap today, but DDR4 ECC RDIMM has the highest run-away-price risk in the remaining upgrade list.
 - CFD posture added: RAM matters more if rack/chassis CFD becomes real, but the first blockers are geometry cleanup, fan/heat assumptions, boundary conditions, instrumentation, and mesh-convergence validation. GPUs are not assumed to accelerate the first OpenFOAM-class path.
