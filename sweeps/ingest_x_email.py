@@ -23,6 +23,33 @@ URL_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/[^\s<>()\"']+", re.I
 STATUS_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/([^/?#]+)/status/(\d+)", re.IGNORECASE)
 
 
+def load_env_file(path: Path) -> int:
+    if not path.exists():
+        return 0
+    loaded = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+        loaded += 1
+    if loaded:
+        print(f"Loaded {loaded} env values from {path}")
+    return loaded
+
+
+def load_workflow_env() -> None:
+    load_env_file(ROOT / ".env")
+    load_env_file(ROOT / "sweeps" / ".env")
+
+
 def getenv_required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
@@ -180,6 +207,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    load_workflow_env()
     args = parse_args()
     output = Path(args.output)
     if not output.is_absolute():
