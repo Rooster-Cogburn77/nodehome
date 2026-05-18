@@ -1,6 +1,6 @@
 # IPMI / BMC Hardening — Scope and Execution Plan
 
-**Status:** IN PROGRESS — Phase 1 password rotation and recovery-doc update complete; cert hygiene and network phases pending.
+**Status:** IN PROGRESS — Phase 1 password rotation and recovery-doc update complete; cert hygiene, VBAT/clock follow-up, and network phases pending.
 **Authored:** 2026-05-10 (Session 16 close-out)
 **Companion runbook:** `docs/runbooks/ipmi-recovery.md` (the recovery counterpart; this doc is the proactive hardening counterpart).
 
@@ -10,7 +10,7 @@ The BMC on this build (Supermicro H12SSL-i v2.0, ASPEED AST2500, firmware `01.05
 
 - The **factory default ADMIN password** was recorded in `docs/archives/SESSION_LOG_2026-04.md:57` and is therefore **in repo git history forever**. Anyone with read access to the historical repo can recover it. **Rotated out as the live credential on 2026-05-17** (see Phase 1 below); the value in the archive is no longer the live BMC password, but a `git history` rewrite to scrub it would be invasive and is not in scope.
 - The **BMC web UI uses the AST2500 self-signed cert** with a generic CN, so browsers warn on every connect and there's no way to detect a MITM if the BMC ever sat on a network with hostile traffic.
-- The **dedicated IPMI ethernet port is unpatched** (`IP Address: 0.0.0.0`, source `Static Address`). The BMC is currently only reachable via the in-band USB virtual NIC at `169.254.3.1/24`, which is fine for bring-up but not true out-of-band — if the host OS is wedged hard enough, the in-band path can be wedged with it.
+- The **dedicated IPMI ethernet port is unpatched** (`IP Address: 0.0.0.0`; source reported as `DHCP Address` on 2026-05-18). The BMC is currently only reachable via the in-band USB virtual NIC path (host side `169.254.3.1/24`, BMC side `169.254.3.254`), which is fine for bring-up but not true out-of-band — if the host OS is wedged hard enough, the in-band path can be wedged with it.
 
 The rack-mount + final deployment phase is gated on completing this hardening. The temporary pigtail rule on GPU 3 also keeps the box moved-once-permanently, so the BMC patch happens together with the rack-mount as one event, not two.
 
@@ -56,10 +56,22 @@ Steps:
    ```
    `verify_exit=0` plus a real `mc info` response confirms the new password works under authenticated RMCP+. The KCS in-band bypass path cannot fake this — KCS does not validate the IPMI user password, so a successful `mc info` over `-I lanplus -C 3` is real proof, not a free pass.
 5. **[done 2026-05-17]** Update `docs/runbooks/ipmi-recovery.md`: replace the inline factory password value with a pointer to the KeePass entry, date the rotation, and record the rotation method and verification IP. **Do not rewrite git history** — the old factory value was already in earlier revisions and is no longer the live credential, so a history rewrite would be busy-work, not a security fix.
-6. **[pending]** Regenerate the BMC self-signed cert with proper CN/SAN matching the BMC's hostname or future static IP. Stays self-signed but the browser warning becomes "untrusted issuer" rather than "wrong host." Done via web UI → Configuration → SSL Certification. **Requires the BMC to be reachable from a browser; today that means waiting until the dedicated IPMI port is patched into the LAN (Phase 3).** A future option is to drive cert upload via `ipmitool raw` Supermicro OEM commands, but the web UI is the documented, supported route.
+6. **[blocked / inspected 2026-05-18]** Replace the BMC HTTPS certificate with a certificate/private-key pair matching the final BMC hostname or static IP. The web UI is reachable today through the USB-NIC tunnel (`https://169.254.3.254/`), and `Configuration -> Network -> SSL Certificates` exposes upload fields for `New SSL Certificate` and `New Private Key` only; no CSR or self-signed generator was visible. Do not upload yet: the final hostname/static IP is undecided, the BMC clock is wrong, and `VBAT` is failed. Use unencrypted PEM, RSA 2048, when ready.
 7. **Quirk to watch:** AST2500 firmware is picky about cert format — needs unencrypted PEM, RSA 2048 (not 4096; some firmware revs reject ECDSA). If upload fails, regenerate at 2048.
 
-**Cost:** $0. **Time:** steps 1-5 actual = ~30 min (2026-05-17); cert regeneration adds ~15 min once the BMC has a routable IP. **Outcome of steps 1-5 (completed 2026-05-17):** factory password is no longer the live credential; live credential lives only in the KeePassXC vault entry `Nodehome - Supermicro H12SSL-i BMC`; rotation verified by authenticated RMCP+ login (`-I lanplus -C 3`) against `169.254.3.254`. Cert hygiene remains pending.
+**Cost:** $0. **Time:** steps 1-5 actual = ~30 min (2026-05-17); cert upload adds ~15 min after hostname/static-IP and clock/battery posture are settled. **Outcome of steps 1-5 (completed 2026-05-17):** factory password is no longer the live credential; live credential lives only in the KeePassXC vault entry `Nodehome - Supermicro H12SSL-i BMC`; rotation verified by authenticated RMCP+ login (`-I lanplus -C 3`) against `169.254.3.254`. Cert hygiene remains pending.
+
+#### 2026-05-18 BMC UI inspection findings
+
+Observed over the USB-NIC web UI tunnel and host-side `ipmitool`; these are live posture notes, not planned target state:
+
+- Dashboard/web reachability: BMC web UI is reachable over the USB-NIC tunnel. Dashboard showed BMC firmware `01.05.02`, BIOS `3.3`, BMC MAC `90:5A:08:7B:71:6D`, and server IP `0.0.0.0`. `curl -k -I --connect-timeout 5 https://169.254.3.254/` returned `HTTP/1.1 403 Forbidden`, which is enough to prove HTTPS service reachability; HEAD is forbidden but the service is alive.
+- `Configuration -> BMC Settings -> Date and Time`: NTP is off, timezone is UTC, NTP servers are `localhost` and `127.0.0.1`, and the UI displayed `2025-04-01T00:46:16Z`. Treat BMC SEL timestamps as unreliable until the BMC clock and battery state are fixed.
+- `Configuration -> Network -> Network`: IPv4 is on with DHCP selected, but IP and subnet remain `0.0.0.0`; gateway is `192.168.1.1`. IPv6 auto configuration is on. Hostname is blank, VLAN is off, and the LAN interface radio showed `Failover` selected.
+- `Configuration -> Network -> SSL Certificates`: current cert validity reports `Sep 4 00:00:00 2024 GMT` through `Sep 4 00:00:00 2034 GMT`. The page exposes upload controls for a cert file and private key file (`.pem` / `.cert`) and no visible CSR or self-signed generator. Final upload should wait for the chosen hostname/static IP and clock/battery cleanup.
+- `Configuration -> Network -> Port`: enabled TCP ports are IKVM `5900`, SSH `22`, Web `80`, Web SSL `443`, and Virtual Media `623`; enabled UDP port is IPMI LAN `623`. SNMP UDP `161` is already disabled.
+- `Configuration -> Network -> IP Access Control`: IP Access Control is `OFF`.
+- Sensor follow-up: BMC Sensor Readings showed `VBAT` = `Battery Failed`. Host confirmation matched: `sudo ipmitool sensor get VBAT` reported `States Asserted: Battery [Failed]`, and `sudo ipmitool sdr elist | grep -i -E 'VBAT|Battery'` returned `VBAT ... Failed`. Treat this as a likely CMOS/RTC battery replacement candidate before the next chassis-open event.
 
 ### Phase 2 — Network plumbing for management VLAN (gated on decisions #1, #2, #4)
 
@@ -126,7 +138,7 @@ Future Phase 2/3 changes should update `docs/runbooks/ipmi-recovery.md` again wh
 The hardening is "done" when:
 
 1. **[done 2026-05-17]** Factory sticker password is no longer the live ADMIN credential. New credential is in a password manager (KeePassXC vault entry `Nodehome - Supermicro H12SSL-i BMC`), not in git. Verified via authenticated RMCP+ login against `169.254.3.254` using cipher suite 3.
-2. **[pending]** BMC web UI presents a cert that at least correctly identifies the BMC's hostname/IP. Gated on the BMC having a routable IP (Phase 3) so the web UI can be reached.
+2. **[blocked / inspected 2026-05-18]** BMC web UI presents a cert that at least correctly identifies the BMC's hostname/IP. The web UI is reachable today over the USB-NIC tunnel, but final cert upload is gated on the target hostname/static IP and BMC clock/battery cleanup.
 3. **[pending]** Dedicated IPMI port has a static IP on a network the BMC has been deliberately placed on. Gated on Phase 2 (managed switch + management VLAN).
 4. **[pending]** From any host not on the management plane, the BMC is unreachable on all ports. Gated on Phase 2.
 5. **[pending]** From the allowlisted workstation, the BMC is reachable for power control, KVM, and sensor monitoring. Gated on Phase 3.

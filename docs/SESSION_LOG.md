@@ -6,9 +6,15 @@
 **What was done:**
 - After a house power blip, ran the repo healthcheck remotely from the Windows workstation: `ssh bmoore_77@192.168.1.198 "cd ~/nodehome && ./scripts/healthcheck.sh"`. Result: `[HEALTHY] no failures, no warnings`. Interpretation: the node either stayed up or recovered cleanly; no service/GPU/storage/API/BMC/kernel warnings were present at check time.
 - Ran a UPS telemetry spot check with `upsc ups`. Returned `battery.charge: 99`, `input.voltage: 120.0`, `ups.status: OL CHRG`, `ups.load: 0`, and `ups.realpower.nominal: 900`. Interpretation: UPS comms remain normal and the unit is online/charging, but the rack/node AC load is still not inline through the UPS battery-backed outlets; this event does not validate backup-power behavior for the node.
+- During BMC web UI inspection over the USB-NIC tunnel, Sensor Readings showed `VBAT` = `Battery Failed` while temperatures/rails otherwise looked normal (`CPU Temp 32 C`, `System Temp 34 C`, `12V 11.856`, `5VCC 4.96`, `3.3VCC 3.276`, `Chassis Intru Normal`). Confirmed from the host with `sudo ipmitool sensor get VBAT`: `States Asserted: Battery [Failed]`; `sudo ipmitool sdr elist | grep -i -E 'VBAT|Battery'` returned `VBAT | ... | Failed`. Treat as a likely CMOS/RTC battery replacement item before the next chassis-open event. BMC SEL tail still shows old FANA lower-critical assert/deassert churn stamped `04/01/2025`, which is not reliable wall-clock evidence because the BMC clock is wrong.
+- Inspected `Configuration -> Network -> SSL Certificates` in the BMC web UI. Current certificate reports validity `Sep 4 2024 GMT` through `Sep 4 2034 GMT`; page exposes upload controls for `New SSL Certificate` and `New Private Key` (`.pem` / `.cert`) plus an `Upload` button. No CSR/self-signed generator was visible on that page. Durable cert hygiene path appears to be external RSA cert/key generation for the final BMC hostname/static IP, then upload both files once the network target is chosen.
+- Inspected `Configuration -> Network -> Port`: enabled TCP ports are IKVM `5900`, SSH `22`, Web `80`, Web SSL `443`, and Virtual Media `623`; enabled UDP port is IPMI LAN `623`; SNMP UDP `161` is already off. Inspected `Configuration -> Network -> IP Access Control`: currently `OFF`.
 **Validation:**
 - `./scripts/healthcheck.sh` returned `[HEALTHY] no failures, no warnings`.
 - `upsc ups` returned live telemetry after the event; `ups.load: 0` confirms the existing non-load-bearing UPS posture.
+- BMC Sensor Readings UI observed `VBAT` = `Battery Failed`; command-line `ipmitool` confirmation also shows `Battery [Failed]`.
+- BMC SSL page supports cert/private-key upload; final hostname/IP decision still pending before upload.
+- BMC port posture recorded: SSH/HTTP/HTTPS/KVM/virtual-media/IPMI are on; SNMP is off; IP Access Control is off.
 
 ## 2026-05-16 (Session 24)
 **Focus:** Afternoon sweep send readiness and UPS telemetry.
