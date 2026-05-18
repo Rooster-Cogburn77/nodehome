@@ -20,7 +20,7 @@ This is the out-of-band recovery path for the Sovereign Node. When the host OS i
 | BMC IP address (after patch) | **`<TBD — re-run sudo ipmitool lan print 1 after patching the cable, fill in the new IP, ideally also reserve it in the router's DHCP table or set static>`** |
 | BMC web UI URL (after patch) | **`https://<BMC_IP>`** (HTTPS, self-signed cert — accept the warning) |
 | Default username | `ADMIN` (slot 2, ADMINISTRATOR privilege; verified via `ipmitool user list 1`) |
-| Default password | `SYZIFLTPAK` — recovered from `docs/archives/SESSION_LOG_2026-04.md:57` where it was recorded during the 2026-04-07 motherboard inspection from the board's per-unit sticker. **This password is the factory default and must be rotated before the BMC is patched into any non-trusted network.** It is already in the repo's git history, so it should be treated as compromised the moment the BMC has a routable IP |
+| Default password | **Rotated 2026-05-17.** Live ADMIN credential is stored only in the user's **KeePassXC** vault at entry `Nodehome - Supermicro H12SSL-i BMC`. Rotation used in-band `ipmitool` on the IPMI 2.0 extended (20-byte) path — `sudo ipmitool user set password 2 <pw> 20` — and was verified by authenticated RMCP+ login (`-I lanplus -C 3`) against the BMC USB-NIC at `169.254.3.254`. The original factory sticker password still exists in earlier revisions of this file and in `docs/archives/SESSION_LOG_2026-04.md:57`, but is **no longer the live credential**. To recover the BMC, open the KeePass entry locally — never paste the new password into chat, never commit it to the repo, and do not re-rotate without first verifying the current credential still authenticates (BMC `Bad Password Threshold` is `3`, lockout interval 300 s). |
 
 ---
 
@@ -96,7 +96,7 @@ ipmitool -H <BMC_IP> -U ADMIN -P <password> sol activate
 
 These are not required for recovery to work but should happen as part of production posture:
 
-- **Rotate the `ADMIN` password** before the BMC is patched into any LAN. The current value `SYZIFLTPAK` is the factory default from the per-unit sticker; it has been in the repo's git history since `docs/archives/SESSION_LOG_2026-04.md` was committed in April, so it must be treated as compromised. Pick a strong unique replacement, store it offline (password manager, paper in a safe), and update the `Default password` row above to a placeholder like `<rotated, see <password manager>>`. A `git history` rewrite to scrub the old value from the repo would also be valid but is more invasive than just rotating
+- **[done 2026-05-17] Rotate the `ADMIN` password.** Rotated out via in-band `ipmitool` on the IPMI 2.0 20-byte extended path; verified by authenticated RMCP+ login against the BMC USB-NIC at `169.254.3.254` using cipher suite 3. Live credential is now in the user's **KeePassXC** vault at entry `Nodehome - Supermicro H12SSL-i BMC`. The factory sticker value remains in earlier revisions of this file and in `docs/archives/SESSION_LOG_2026-04.md:57` but is no longer the live credential — a `git history` rewrite to scrub the old value would be busy-work, not a security fix. Full procedure (including the `> 20 bytes` failure mode to avoid) is documented in `docs/runbooks/ipmi-hardening.md` Phase 1
 - Replace the self-signed BMC web UI certificate with a private-CA-signed one
 - Set the BMC ethernet to a static IP (or a DHCP reservation) so the address in this runbook stays accurate
 - Disable unused BMC services (Telnet, SNMPv1) via the web UI's Services config
