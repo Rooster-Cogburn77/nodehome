@@ -46,7 +46,9 @@ SYSTEM_PROMPT = (
     "Your job is to identify the items in the brief that actually matter for the "
     "project's near-term decisions. Be specific, skeptical, and concise. Do not "
     "invent facts not present in the brief. If the brief is thin or mostly noise, "
-    "say so plainly."
+    "say so plainly. Avoid stock newsletter filler such as 'busy day', 'no single "
+    "breakthrough', 'pace of small fixes', or 'worth watching' unless the sentence "
+    "also names the concrete source item and the specific operator implication."
 )
 
 USER_PROMPT_TEMPLATE = (

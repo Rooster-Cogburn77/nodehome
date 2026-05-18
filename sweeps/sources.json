@@ -346,7 +346,7 @@
       "name": "vLLM Blog",
       "lane": "infra",
       "kind": "page",
-      "url": "https://blog.vllm.ai/",
+      "url": "https://vllm.ai/blog",
       "confidence": "primary",
       "profile": "core",
       "timeout_seconds": 20,

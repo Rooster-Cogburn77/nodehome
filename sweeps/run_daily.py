@@ -239,6 +239,21 @@ def normalize_text(value: str | None) -> str:
     return value.strip()
 
 
+def has_term(text: str, term: str) -> bool:
+    """Match terms as words/phrases so `powerful` does not trip `power`."""
+    if not term:
+        return False
+    lowered = text.lower()
+    escaped = re.escape(term.lower())
+    if re.fullmatch(r"[\w.+-]+", term):
+        return re.search(rf"(?<![\w.+-]){escaped}(?![\w.+-])", lowered) is not None
+    return term.lower() in lowered
+
+
+def has_any_term(text: str, terms: tuple[str, ...]) -> bool:
+    return any(has_term(text, term) for term in terms)
+
+
 def _sanitize_xml(xml_bytes: bytes) -> bytes:
     """Strip bytes that are invalid in XML 1.0 (control chars except tab/newline/cr)."""
     return bytes(b for b in xml_bytes if b in (0x09, 0x0A, 0x0D) or 0x20 <= b)
@@ -302,8 +317,67 @@ def parse_feed(xml_bytes: bytes) -> list[dict[str, str]]:
     return items
 
 
+VLLM_BLOG_DATE_RE = re.compile(
+    r"\b("
+    r"Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?"
+    r")\s+\d{1,2},\s+\d{4}\b",
+    flags=re.IGNORECASE,
+)
+
+
+def format_blog_date(value: str) -> str:
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        except ValueError:
+            pass
+    return value
+
+
+def parse_vllm_blog_page(html: str, url: str) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    seen_links: set[str] = set()
+    for match in re.finditer(
+        r"<a\b[^>]*href=[\"'](?P<href>[^\"']+)[\"'][^>]*>(?P<body>.*?)</a>",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        href = match.group("href").strip()
+        if "/blog" not in href or "/blog/tags/" in href:
+            continue
+        link = urllib.parse.urljoin(url, href)
+        if link in seen_links:
+            continue
+        card_text = normalize_text(match.group("body"))
+        date_match = VLLM_BLOG_DATE_RE.search(card_text)
+        if not date_match:
+            continue
+        title = normalize_text(card_text[: date_match.start()])
+        title = re.sub(r"^Featured\s+", "", title, flags=re.IGNORECASE)
+        if not title or title.lower() in {"blog", "blog | vllm"}:
+            continue
+        rest = normalize_text(card_text[date_match.end() :])
+        rest = re.sub(r"^[·•\-]?\s*\d+\s+min\s+read\s*", "", rest, flags=re.IGNORECASE).strip()
+        items.append(
+            {
+                "id": link,
+                "title": title,
+                "link": link,
+                "published": format_blog_date(date_match.group(0)),
+                "summary": rest[:280],
+            }
+        )
+        seen_links.add(link)
+    return items
+
+
 def parse_page(html_bytes: bytes, url: str) -> list[dict[str, str]]:
     html = html_bytes.decode("utf-8", errors="ignore")
+    if "vllm.ai/blog" in url or "blog.vllm.ai" in url:
+        vllm_items = parse_vllm_blog_page(html, url)
+        if vllm_items:
+            return vllm_items
     title_match = re.search(r"<title>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
     title = normalize_text(title_match.group(1) if title_match else url)
     text = normalize_text(html)
@@ -589,6 +663,63 @@ def action_for_lane(lane: str) -> str:
     }.get(lane, "watch")
 
 
+CONSUMER_GAMING_TERMS = (
+    "playstation",
+    "ps5",
+    "ps6",
+    "xbox",
+    "nintendo",
+    "switch 2",
+    "steam controller",
+    "steam deck",
+    "gta",
+    "roblox",
+    "007 first light",
+    "msi claw",
+    "rog ally",
+    "legion go",
+    "handheld",
+    "console",
+    "gaming",
+)
+
+STACK_HARDWARE_TERMS = (
+    "memtest",
+    "epyc",
+    "threadripper",
+    "xeon",
+    "supermicro",
+    "h12ssl",
+    "rdimm",
+    "ecc",
+    "bmc",
+    "ipmi",
+    "server",
+    "workstation",
+    "inference",
+    "llm",
+    "vllm",
+    "ollama",
+    "llama.cpp",
+    "cuda",
+    "rocm",
+    "nvlink",
+    "pcie",
+    "nvme",
+    "10gbe",
+)
+
+
+def is_consumer_gaming_hardware_noise(source: Source, item: dict[str, str]) -> bool:
+    lane = item.get("lane") or source.lane
+    if lane != "hardware":
+        return False
+    text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+    if not has_any_term(text, CONSUMER_GAMING_TERMS):
+        return False
+    return not has_any_term(text, STACK_HARDWARE_TERMS)
+
+
 def why_it_matters(source: Source, item: dict[str, str]) -> str:
     """Generate a why-it-matters line from the item title. Tries keyword matching
     for specificity; only falls back to a generic lane phrase as last resort."""
@@ -616,7 +747,9 @@ def why_it_matters(source: Source, item: dict[str, str]) -> str:
         return f"GPU hardware mention — directly relevant to the build or resale market."
     if any(w in t for w in ("epyc", "threadripper", "supermicro", "server board", "ecc")):
         return f"Server platform hardware — directly relevant to the H12SSL-i / EPYC stack."
-    if any(w in t for w in ("power", "watt", "psu", "thermal", "cooling", "temp", "fan")):
+    power_terms = ("watt", "watts", "psu", "thermal", "cooling", "temp", "temperature", "fan", "fans")
+    power_context = ("gpu", "cpu", "server", "rack", "power supply", "inference", "rtx", "nvidia", "amd")
+    if has_any_term(t, power_terms) or (has_term(t, "power") and has_any_term(t, power_context)):
         return f"Power or thermal topic — relevant to the 1600W PSU and blower cooling config."
     if any(w in t for w in ("release", "released", "v0.", "v1.", "v2.", "v3.", "v4.")):
         return f"New release — check changelog for breaking changes or features that affect the local stack."
@@ -630,7 +763,7 @@ def why_it_matters(source: Source, item: dict[str, str]) -> str:
         return f"Cloud/closed-model news — context for the local-first value proposition."
     if any(w in t for w in ("open source", "open-source", "license", "apache", "mit ")):
         return f"Open-source licensing or release — affects what can run on owned hardware."
-    if any(w in t for w in ("10gbe", "10g", "switch", "network", "ethernet", "infiniband")):
+    if has_any_term(t, ("10gbe", "10g", "switch", "network", "ethernet", "infiniband")):
         return f"Networking hardware — relevant if scaling beyond single-node."
 
     # ── social-primary fallback (X feeds) ──
@@ -1126,10 +1259,12 @@ def synthesize_ai_summary(profile: str, run_date: date, entries: list[dict[str, 
     top_entries = select_digest_entries(entries, 12)
     prompt_lines = [
         f"Summarize this AI infrastructure/newsletter sweep for {run_date.isoformat()} ({profile}).",
-        "Write a single paragraph of 4-6 sentences for a technical operator.",
+        "Write a single paragraph of 2-4 sentences for a technical operator.",
         "Do NOT use bullet points. Write fluent, direct prose.",
         "Prioritize concrete developments that matter for local inference, multi-GPU rigs, workflows, and builder signal.",
         "Ignore routine GitHub churn. Mention uncertainty if sources were degraded.",
+        "Avoid canned phrases such as 'busy day', 'a few things moved', 'no single breakthrough', and 'pace of small fixes'.",
+        "Every sentence must name a specific source item or a specific fetch/degradation condition.",
         "",
         "Top items:",
     ]
@@ -1169,12 +1304,7 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
         return ""
 
     top = select_digest_entries(entries, 20)
-    lane_counts: dict[str, int] = {}
-    for entry in entries:
-        lane_counts[entry["lane"]] = lane_counts.get(entry["lane"], 0) + 1
-
     total = len(entries)
-    active_lanes = [lane for lane, _count in sorted(lane_counts.items(), key=lambda item: (-item[1], item[0]))]
     x_failures = sum(1 for failure in failures if failure.startswith("X:"))
 
     def strip_source_noise(source: str) -> str:
@@ -1258,7 +1388,7 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
         if "split-mode tensor" in lowered:
             return "another sign that multi-GPU inference is still in active flux"
         if "cuda" in lowered:
-            return "small CUDA changes can compound quickly in local inference stacks"
+            return "check whether it changes CUDA serving behavior on the 3090 stack"
         if "vulkan" in lowered:
             return "part of the slow spread of local inference beyond the CUDA-only path"
         if "10gbe" in lowered or "10gbe" in source_name.lower():
@@ -1269,7 +1399,7 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
             return "another marker of how fast the local serving layer is moving"
         if title.startswith("v0.") or "release" in lowered:
             if lane == "infra":
-                return "the local serving layer keeps moving fast"
+                return "read release notes before changing local serving pins"
             return "worth reading for practical changes, not just version churn"
         if lane == "hardware":
             return "useful signal for people building real machines, not just reading model cards"
@@ -1297,6 +1427,8 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
                 score += 6
             if re.fullmatch(r"b\d+", title):
                 score += 4
+            if item["source"].lower() == "vllm blog":
+                score -= 6
             if "tensor parallel" in lowered or "split-mode tensor" in lowered or "cuda" in lowered:
                 score -= 5
             if title.startswith("v0."):
@@ -1346,56 +1478,33 @@ def heuristic_summary(profile: str, run_date: date, entries: list[dict[str, Any]
 
     sentences: list[str] = []
 
-    if total == 1:
-        sentences.append("Quiet day.")
-    elif total <= 3:
-        sentences.append("Light day, but not empty.")
-    elif len(active_lanes) >= 3:
-        sentences.append("Busy day across multiple parts of the stack.")
-    elif active_lanes and active_lanes[0] == "infra":
-        sentences.append("Infra led the day.")
-    else:
-        sentences.append("A few things moved today.")
-
     lead = summary_items[0]
     sentences.append(f"{describe_item(lead)} — {contextualize_item(lead)}.")
 
-    for item in summary_items[1:4]:
+    for item in summary_items[1:3]:
         lane = item["lane"]
         if lane == lead["lane"] and total <= 2:
             continue
         if lane == lead["lane"] and lead["source"] == item["source"] and total <= 4:
             continue
         sentences.append(f"{describe_item(item)} — {contextualize_item(item)}.")
-        if len(sentences) >= 4:
+        if len(sentences) >= 3:
             break
 
-    if failures and len(sentences) < 5:
-        if total == 1 and x_failures == len(failures) and x_failures > 5:
-            sentences.append("Not a lot broke through, but the signal was clean enough to read.")
-        elif len(failures) > 3 and x_failures < len(failures):
-            sentences.append("The field looked thinner than usual, so treat this as a partial read.")
+    if failures and len(sentences) < 4:
+        if x_failures == len(failures) and x_failures > 0:
+            sentences.append(f"Fetch issues were limited to X/OpenRSS cached-state fallback ({x_failures} failures).")
+        elif len(failures) > 3:
+            sentences.append(f"Fetch issues affected {len(failures)} sources, so treat the sweep as a partial read.")
 
     emerging = [item for item in top if item.get("novelty") == "emerging"]
-    if emerging and len(sentences) < 5:
+    if emerging and len(sentences) < 4:
         if len(emerging) == 1:
             sentences.append(f"One thing to keep an eye on: {normalized_title(emerging[0]['title'])}.")
         else:
             sentences.append(
                 f"Early-signal items worth watching include {normalized_title(emerging[0]['title'])} and {normalized_title(emerging[1]['title'])}."
             )
-
-    while len(sentences) < 4:
-        if total == 1:
-            sentences.append("That was the only new item in the sweep.")
-        elif total <= 3:
-            sentences.append("Short issue, easy to scan.")
-        else:
-            filler = "No single breakthrough, but the pace of small serving-layer fixes is the story."
-            if filler in sentences:
-                sentences.append("Most of the remaining items are smaller release and commit updates.")
-            else:
-                sentences.append(filler)
 
     return " ".join(sentences[:6]).replace("â€”", "-").replace("—", "-")
 
@@ -1649,6 +1758,8 @@ def main() -> int:
         filtered_items: list[dict[str, str]] = []
         for item in new_items:
             if is_stale_item(run_date, item) and not suppresses_age_filter(source):
+                continue
+            if is_consumer_gaming_hardware_noise(source, item):
                 continue
             if "llama.cpp commits" in source.name.lower() and not is_high_signal_commit(item["title"]):
                 continue
