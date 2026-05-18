@@ -59,7 +59,7 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | SF-1600F14HT PCIe modular cable (lizzieb753 UK eBay) | GPU3 power, retires pigtail rule | in-flight (arrival window 2026-05-23 to 2026-06-10) |
 | 4× 32GB DDR4-2400 ECC RDIMM (additional set) | RAM upgrade if clean opportunity appears at sane price | deferred (price/availability trigger) |
 | APC SMT2200 (used) | Production UPS sized for sustained 2-GPU inference ride-through | deferred (no fixed trigger) |
-| UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP | Owned network gear, bypasses/replaces Spectrum `SAX1V1S` router and provides management VLAN foundation | planned (upstream modem/ONT physical confirmation + spend pending) |
+| UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP | Owned network gear, bypasses/replaces Spectrum `SAX1V1S` router and provides management VLAN foundation | planned (separate Spectrum modem confirmed; spend pending) |
 | Second top fan (AC Infinity MULTIFAN S5) | If TP=3 sustained load exceeds 80°C on GPU0 | deferred (trigger: GPU0 plateau >80°C under TP=3) |
 | PiKVM v4 | Out-of-band KVM hardware | deferred (Tier 4) |
 | 10GbE switch + NIC | Network throughput upgrade beyond 1GbE | deferred (Tier 4) |

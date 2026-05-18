@@ -18,10 +18,10 @@ The rack-mount + final deployment phase is gated on completing this hardening. T
 
 The remaining open decisions mainly affect Phases 2 and 3. The password-manager decision for Phase 1 is resolved, but it stays listed here so the recovery dependency is visible.
 
-1. **Home network gear.** Direction resolved 2026-05-18: do not build BMC VLAN/security policy on the current Spectrum/Sagemcom `SAX1V1S` Advanced WiFi router. Preferred path is owned routing/switching gear (currently UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP), with the Spectrum router bypassed/returned after the separate Spectrum modem/ONT upstream is physically confirmed.
+1. **Home network gear.** Direction resolved 2026-05-18: do not build BMC VLAN/security policy on the current Spectrum/Sagemcom `SAX1V1S` Advanced WiFi router. Preferred path is owned routing/switching gear (currently UniFi Cloud Gateway Ultra + Switch Lite 8 PoE + U7 Lite AP), with the Spectrum router bypassed/returned. User physically confirmed a separate Spectrum modem feeds the router over ethernet.
 2. **Managed switch.** Already own one? If not, the standard cheap-and-good answer is a TP-Link TL-SG108E v6 (~$35-50, 8-port smart-managed gigabit, 802.1Q VLANs, web UI). Anything that supports tagged 802.1Q VLANs works.
 3. **Where the new BMC ADMIN credential will live.** **Resolved 2026-05-17: KeePassXC vault entry `Nodehome - Supermicro H12SSL-i BMC`.** Recovery doc references the entry, not the secret.
-4. **Fallback posture if the upstream Spectrum path is not a separate modem/ONT.** Ask Spectrum for modem-only or bridge-capable equipment before spending time on BMC LAN exposure. Temporary double NAT is acceptable during a router transition, but it is not the final BMC management posture. If owned routing/VLANs cannot land yet, keep the BMC on the in-band USB-NIC path with Phase 1 hardening as the only security boundary and skip Phases 2 and 3 for now.
+4. **Fallback posture if owned routing/VLANs cannot land yet.** Temporary double NAT is acceptable during a router transition, but it is not the final BMC management posture. Keep the BMC on the in-band USB-NIC path with Phase 1 hardening as the only security boundary and skip Phases 2 and 3 until owned gateway/switch/AP gear is installed.
 
 ## Phases
 
@@ -84,16 +84,15 @@ Observed over the USB-NIC web UI tunnel and host-side `ipmitool`; these are live
 
 #### 2026-05-18 ISP router capability finding
 
-The home gateway was checked before buying network gear. Local default gateway `192.168.1.1` is a Spectrum/Sagemcom `SAX1V1S` Advanced WiFi router. The router info page exposed model/firmware details; the public WAN IP and serial were intentionally not recorded in repo.
+The home gateway was checked before buying network gear. Local default gateway `192.168.1.1` is a Spectrum/Sagemcom `SAX1V1S` Advanced WiFi router. The router info page exposed model/firmware details; the public WAN IP and serial were intentionally not recorded in repo. User physically confirmed a separate Spectrum modem feeds the router over ethernet.
 
 Decision: do not depend on the `SAX1V1S` for IPMI segmentation, VLANs, or a durable bridge-mode posture. Spectrum's current separate-equipment guidance is to connect an owned router directly to the Spectrum modem instead of their router. Treat the next network phase as:
 
-1. Physically confirm the upstream Spectrum modem/ONT feeding the `SAX1V1S`.
-2. Buy/install the owned gateway/switch/AP stack.
-3. Connect the owned gateway WAN directly to the Spectrum modem/ONT and power-cycle the modem/ONT so it learns the new WAN MAC.
-4. Remove/return the Spectrum router if it is no longer needed for service.
+1. Buy/install the owned gateway/switch/AP stack.
+2. Connect the owned gateway WAN directly to the Spectrum modem and power-cycle the modem so it learns the new WAN MAC.
+3. Remove/return the Spectrum router if it is no longer needed for service.
 
-If there is no separate modem/ONT, ask Spectrum for modem-only or bridge-capable equipment. Do not patch the BMC dedicated NIC into the flat LAN while this is unresolved.
+Do not patch the BMC dedicated NIC into the flat LAN before the owned management network exists.
 
 ### Phase 2 — Network plumbing for management VLAN (gated on decisions #1, #2, #4)
 
