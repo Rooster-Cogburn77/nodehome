@@ -71,6 +71,15 @@ Observed over the USB-NIC web UI tunnel and host-side `ipmitool`; these are live
 - `Configuration -> Network -> SSL Certificates`: current cert validity reports `Sep 4 00:00:00 2024 GMT` through `Sep 4 00:00:00 2034 GMT`. The page exposes upload controls for a cert file and private key file (`.pem` / `.cert`) and no visible CSR or self-signed generator. Final upload should wait for the chosen hostname/static IP and clock/battery cleanup.
 - `Configuration -> Network -> Port`: enabled TCP ports are IKVM `5900`, SSH `22`, Web `80`, Web SSL `443`, and Virtual Media `623`; enabled UDP port is IPMI LAN `623`. SNMP UDP `161` is already disabled.
 - `Configuration -> Network -> IP Access Control`: IP Access Control is `OFF`.
+- `Configuration -> Network -> SSDP`: SSDP is `ON`, port `1900`, time to live `2`, IPv6 scope `Link`. This is the clearest low-risk disable candidate from the current inspection.
+- `Configuration -> Network -> LLDP`: LLDP is `OFF`; transmit is also `OFF`.
+- `Configuration -> BMC Settings -> Dynamic DNS`: Dynamic DNS update is `OFF`, TSIG authentication is `OFF`, and hostname/server fields are blank. The UI warned that system time should be synchronized with NTP before updating the hostname.
+- `Configuration -> BMC Settings -> SMC RAKP`: Current RAKP status is `OFF`.
+- `Configuration -> BMC Settings -> KCS Control`: KCS is set to `Administrator`. Leave this alone until dedicated BMC network access is proven; it is part of the current in-band recovery/admin path.
+- `Configuration -> BMC Settings -> IPMI Configuration`: page exposes current configuration `Download` plus reload-from-file controls; no hardening toggles were visible.
+- `Configuration -> BMC Settings -> Host Interface`: host interface is `ON`, host IP `169.254.3.1`, service IP `169.254.3.254`, USB mode `RNDIS Connection`. Leave this enabled while the BMC is managed through the USB-NIC path.
+- `Configuration -> BMC Settings -> System Lockdown`: unavailable without an `SFT-DCMS-SINGLE` license; do not activate for this hardening pass.
+- `Configuration -> BMC Settings -> Web Session`: session timeout is `30` minutes; UI range is `0-30`, with `0` meaning never timeout. Current value is sane.
 - Sensor follow-up: BMC Sensor Readings showed `VBAT` = `Battery Failed`. Host confirmation matched: `sudo ipmitool sensor get VBAT` reported `States Asserted: Battery [Failed]`, and `sudo ipmitool sdr elist | grep -i -E 'VBAT|Battery'` returned `VBAT ... Failed`. Treat this as a likely CMOS/RTC battery replacement candidate before the next chassis-open event.
 
 ### Phase 2 — Network plumbing for management VLAN (gated on decisions #1, #2, #4)
