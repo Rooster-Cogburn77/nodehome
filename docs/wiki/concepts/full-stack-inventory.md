@@ -15,6 +15,7 @@
 - Power cap: [`docs/runbooks/nvidia-power-cap.md`](../../runbooks/nvidia-power-cap.md)
 - BMC fan: [`docs/runbooks/bmc-fan-thresholds.md`](../../runbooks/bmc-fan-thresholds.md)
 - Sweep upgrade cadence: [`docs/runbooks/upgrade-cadence.md`](../../runbooks/upgrade-cadence.md)
+- CAD generation watch: [`docs/wiki/research/cad-generation.md`](../research/cad-generation.md)
 
 ## Status legend
 
@@ -187,6 +188,9 @@ These are useful adjacent ideas, but they are not Nodehome core serving, AI rese
 ### Serving / inference acceleration
 - **Orthrus** (`chiennv2000/orthrus`, arXiv 2605.12825) — lossless 4-5× parallel decoding via dual-view (AR + diffusion). Watch until Qwen3-14B+/32B Orthrus weights ship, vLLM/SGLang integration lands, or independent reimplementation. Optional lab-only benchmark allowed under gates (stop vllm-server, no GPU2, Docker over venv, correctness before speed, 4h timebox; see `docs/wiki/research/inference-architectures.md`).
 - **SANA-WM** (`NVlabs/Sana`, arXiv 2605.15178) — 2.6B controllable 720p minute-scale world/video model from image + prompt + 6-DoF camera trajectory. Watch/use-candidate only; strongest local claim is RTX 5090 + NVFP4, so current 3× RTX 3090 stack needs a bounded lab test before any capability claim. See `docs/wiki/research/inference-architectures.md`.
+
+### Domain-specific generative models
+- **GenCAD** (`ferdous-alam/GenCAD`, arXiv 2409.16294) — image-conditioned parametric CAD command generation. Watch/lab-smoke only: likely runnable locally with Docker + single 3090 + `xvfb-run`, but output is biased toward DeepCAD-style simple sketch/extrude primitives and is not production CAD or CFD geometry. See `docs/wiki/research/cad-generation.md`.
 
 ### Long-context architectures
 - **SubQ** (Appen/SSA) — hosted 12M-token long-context system. Watch only; waitlist requested.
