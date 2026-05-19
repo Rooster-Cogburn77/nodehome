@@ -45,6 +45,19 @@
 - Streams Index sidecar status: design only, no code. Logged in SCRATCH, `docs/CURRENT_STATE.md`, `docs/wiki/concepts/full-stack-inventory.md` Sidecar section, and `docs/runbooks/hardware-upgrade-roadmap.md` HDHomeRun row. Docs-only change; `services/streams/` directory not yet created.
 - PayMore WD My Book validation: `/dev/sda` / `WDC WD120EDGZ-11CMZA0` / serial `T3G0WU1E` passed initial SMART and short offline self-test. Long SMART test still pending before final acceptance, formatting, or mount creation.
 
+## 2026-05-19 (Session 26)
+**Focus:** PayMore WD My Book final SMART acceptance and persistent mount.
+**What was done:**
+- Completed the PayMore WD My Book 12TB acceptance path. The long SMART test finished successfully: self-test log shows `# 1 Extended offline Completed without error 00% 17 -` and `# 2 Short offline Completed without error 00% 0 -`.
+- Saved the final SMART artifact at `~/drive-check-mybook-T3G0WU1E-final.txt`. Final SMART state: `WDC WD120EDGZ-11CMZA0`, serial `T3G0WU1E`, 12.0 TB, 7200 rpm, Western Digital Ultrastar (He10/12) family, SMART overall `PASSED`, `Power_On_Hours 19`, `Power_Cycle_Count 6`, no reallocated / pending / offline uncorrectable / UDMA CRC errors, no logged errors, current temp `49 C`, max `55 C` during the long surface scan.
+- Confirmed the factory partition was exFAT labelled `My Book`, not mounted. Replaced it with GPT + one ext4 partition labelled `mybook12tb`. Created mountpoint `/mnt/media/mybook12tb` and mounted `/dev/sda1` there.
+- Added `/etc/fstab` entry: `UUID=75589f25-4dad-42da-b0ef-31187e14eaa3 /mnt/media/mybook12tb ext4 defaults,nofail,x-systemd.device-timeout=30 0 2`; ran `systemctl daemon-reload`, unmounted, `mount -a`, and verified the persistent mount.
+**Validation:**
+- `findmnt /mnt/media/mybook12tb` returned `/dev/sda1 ext4 rw,relatime`.
+- `df -h /mnt/media/mybook12tb` returned size `11T`, used `2.1M`, available `11T`, use `1%`.
+- `blkid /dev/sda1` returned label `mybook12tb`, UUID `75589f25-4dad-42da-b0ef-31187e14eaa3`, type `ext4`, PARTUUID `96370e7c-8014-40a5-9df3-b000bd3b3a0e`.
+- Drive #2 is accepted and mounted. Drive #1 (`sv2deals` Easystore serial `5PJHV96C`) still needs arrival verification before the media server install can proceed as a two-drive setup.
+
 ## 2026-05-16 (Session 24)
 **Focus:** Afternoon sweep send readiness and UPS telemetry.
 **What was done:**

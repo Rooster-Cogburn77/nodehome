@@ -1,6 +1,6 @@
 # Home Media Server — Scope and Plan
 
-**Status:** PROCUREMENT / VALIDATION IN PROGRESS — architecture decided; two 12TB external drives ordered; PayMore WD My Book has passed initial + short SMART, install waits on both-drive validation.
+**Status:** PROCUREMENT / VALIDATION IN PROGRESS — architecture decided; two 12TB external drives ordered; PayMore WD My Book is accepted, ext4-formatted, mounted, and fstab-verified; install waits on the second drive.
 **Authored:** 2026-05-11 (Session 17 planning).
 
 ## Goal
@@ -30,7 +30,7 @@ Drives plug into the AI node via USB and mount as `/mnt/storage` (or similar). T
 
 - Walmart order `2000146-01251834` for WD My Book 12TB (`WDBBGB0120HBK-Newm`) was canceled as out of stock; `$269.54` temporary hold should release within 10 business days.
 - Replacement Drive #1 is WD Easystore 12TB (`WDBAMA0120HBK`) from eBay seller `sv2deals`, accepted offer `$220` plus `$13.16` listed shipping. Listing SMART screenshot: `WDC WD120EDAZ-11F3RA0`, serial `5PJHV96C`, `54` power-on hours, `15` power cycles, zero reallocated / pending / uncorrectable / UDMA CRC errors. Verify same serial and counters on arrival before formatting.
-- Drive #2 is WD My Book 12TB from PayMore Westport / SPEEKS Technology, eBay order `03-14645-30973`, `$259.79` total with return window through June 19. It arrived 2026-05-18 and enumerated as `1058:25ee Western Digital Technologies, Inc. My Book 25EE`; Linux sees `/dev/sda` as `WDC WD120EDGZ-11CMZA0`, vendor `WD`, serial `T3G0WU1E`, transport `usb`. `smartctl -d sat -a /dev/sda` identified it as Western Digital Ultrastar (He10/12) family, 12.0 TB, 7200 rpm, helium (`Helium_Level` present), SMART `PASSED`, `Power_On_Hours 0`, `Power_Cycle_Count 5`, and zero reallocated / pending / offline uncorrectable / UDMA CRC errors. Short offline self-test completed without error at lifetime hour 0. Long SMART test remains pending before final acceptance/formatting.
+- Drive #2 is WD My Book 12TB from PayMore Westport / SPEEKS Technology, eBay order `03-14645-30973`, `$259.79` total with return window through June 19. It arrived 2026-05-18 and enumerated as `1058:25ee Western Digital Technologies, Inc. My Book 25EE`; Linux sees `/dev/sda` as `WDC WD120EDGZ-11CMZA0`, vendor `WD`, serial `T3G0WU1E`, transport `usb`. `smartctl -d sat -a /dev/sda` identified it as Western Digital Ultrastar (He10/12) family, 12.0 TB, 7200 rpm, helium (`Helium_Level` present), SMART `PASSED`, and zero reallocated / pending / offline uncorrectable / UDMA CRC errors. Short offline self-test completed without error at lifetime hour 0; extended offline self-test completed without error at lifetime hour 17; final saved artifact is `~/drive-check-mybook-T3G0WU1E-final.txt` with `Power_On_Hours 19`, `Power_Cycle_Count 6`, clean error log, current temp `49 C`, max `55 C`. The factory exFAT partition was replaced with GPT + one ext4 partition labelled `mybook12tb`; UUID `75589f25-4dad-42da-b0ef-31187e14eaa3`; mounted at `/mnt/media/mybook12tb`; `/etc/fstab` uses `defaults,nofail,x-systemd.device-timeout=30`; `mount -a`, `findmnt`, and `df -h` verified the persistent mount.
 - Known subtotal before any sv2deals tax: `$492.95`; final all-in total depends on eBay tax.
 
 Why **2× 12TB**:
@@ -88,8 +88,8 @@ The 3× 3090s have HDMI/DisplayPort outputs on the back. They are **not used** i
 ## Order of operations once drives arrive
 
 1. Plug both drives into AI node USB 3.x ports. Confirm they enumerate (`lsblk`).
-2. Run arrival SMART before formatting. Drive #2 (`/dev/sda`, serial `T3G0WU1E`) has passed initial + short SMART; run/pass long SMART before accepting it. Drive #1 (`5PJHV96C`) still needs arrival verification.
-3. Format as ext4 (or btrfs if you want snapshots). Mount as `/mnt/media1` and `/mnt/media2`. Add to `/etc/fstab`.
+2. Run arrival SMART before formatting. Drive #2 (`/dev/sda`, serial `T3G0WU1E`) has passed initial + short + long SMART and is already ext4-formatted/mounted at `/mnt/media/mybook12tb`. Drive #1 (`5PJHV96C`) still needs arrival verification.
+3. Format Drive #1 as ext4 (or btrfs if you want snapshots). Mount it next to `/mnt/media/mybook12tb` and add it to `/etc/fstab`.
 4. Create directory structure per chosen library layout.
 5. Pull `jellyfin/jellyfin` Docker image. Run container with volume mounts to the drives and GPU passthrough for NVENC.
 6. Configure Jellyfin via web UI: add libraries pointing at the mount paths.
