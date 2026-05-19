@@ -1535,13 +1535,15 @@ class NodechatAutoRoutingTests(unittest.TestCase):
         Records every (model, base_url) the chat lambda saw via the captured
         list, and stubs vLLM probe so tests don't hit the network.
         """
-        seen: list[dict[str, str]] = []
+        seen: list[dict[str, object]] = []
 
         def fake_complete(config, session):
             seen.append({
                 "model": str(session.get("model") or config.model),
                 "base_url": str(session.get("base_url") or config.base_url),
                 "profile": str(session.get("profile") or ""),
+                "temperature": float(config.temperature),
+                "max_tokens": int(config.max_tokens),
             })
             return "ok"
 
@@ -1573,6 +1575,8 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("[model: fast]", buf.getvalue())
             self.assertEqual(seen[0]["profile"], "fast")
             self.assertEqual(seen[0]["model"], "mistral-small3.1:24b")
+            self.assertEqual(seen[0]["temperature"], 0.1)
+            self.assertEqual(seen[0]["max_tokens"], 0)
             # No auto_route_model audit row should fire on default-fast turns.
             rows = nodechat.read_recent_audit(config, 10)
             self.assertFalse(
@@ -1598,6 +1602,8 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("auto-routed", text)
             self.assertIn("long prompt", text)
             self.assertEqual(seen[0]["profile"], "strong")
+            self.assertEqual(seen[0]["temperature"], 0.1)
+            self.assertEqual(seen[0]["max_tokens"], 3072)
             rows = nodechat.read_recent_audit(config, 10)
             row = next(r for r in rows if r["event_type"] == "auto_route_model")
             self.assertEqual(row["status"], "ok")
@@ -1623,6 +1629,41 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("model: strong", buf.getvalue())
             self.assertIn("code markers", buf.getvalue())
             self.assertEqual(seen[0]["profile"], "strong")
+            self.assertEqual(seen[0]["temperature"], 0.0)
+            self.assertEqual(seen[0]["max_tokens"], 4096)
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "model_dispatched")
+            self.assertEqual(event["generation_policy"], "code_patch")
+            self.assertEqual(event["temperature"], 0.0)
+            self.assertEqual(event["max_tokens"], 4096)
+            self.assertIn("auto-route trigger: code markers", event["generation_reasons"])
+
+    def test_loaded_repo_evidence_uses_grounded_generation_policy(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            config.temperature = 0.2
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "/read docs/CURRENT_STATE.md",
+                nodechat.context_block("file_read", "docs/CURRENT_STATE.md", "fake current state"),
+                source="manual-read",
+                provenance={"path": "docs/CURRENT_STATE.md", "chars": 18},
+            )
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.send_user_prompt(config, session, "summarize this")
+            finally:
+                self._restore_chat_and_vllm(originals)
+
+            self.assertEqual(seen[0]["temperature"], 0.1)
+            self.assertEqual(seen[0]["max_tokens"], 3072)
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "model_dispatched")
+            self.assertEqual(event["generation_policy"], "grounded_analysis")
+            self.assertIn("repo evidence loaded", event["generation_reasons"])
 
     def test_model_mode_auto_does_not_select_deep(self):
         with tempfile.TemporaryDirectory() as workspace_raw:

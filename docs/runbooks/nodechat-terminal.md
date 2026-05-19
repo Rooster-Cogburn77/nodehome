@@ -74,6 +74,8 @@ NODECHAT_ANTHROPIC_OUTPUT_PER_MTOK       optional, for cost estimate
 
 Remote cost tracking is a session estimate. Until provider usage accounting is wired in, Nodechat estimates tokens as `chars / 4`, multiplies by the optional per-million-token env vars above, records the estimate in `model_dispatched`, and rolls it up in `/costs`.
 
+Generation policy is per turn. Nodechat keeps the configured session model/profile stable, but it can pass route-aware generation parameters to the request. Code/patch turns use deterministic decoding and a larger output budget; grounded analysis turns with repo/history/web/live evidence use low temperature and a moderate output budget. The actual `generation_policy`, `temperature`, `max_tokens`, and `generation_reasons` are recorded in the `model_dispatched` audit row.
+
 Run on the homelab node:
 
 ```bash

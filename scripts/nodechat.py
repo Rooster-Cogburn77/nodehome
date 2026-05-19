@@ -29,7 +29,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import Any
@@ -171,6 +171,16 @@ AUTO_STRONG_ANALYSIS_RE = re.compile(
     r"audit|architect)\b",
     re.I,
 )
+GENERATION_POLICY_DEFAULT = "default"
+GENERATION_POLICY_LONG_CONTEXT = "long_context"
+GENERATION_POLICY_GROUNDED_ANALYSIS = "grounded_analysis"
+GENERATION_POLICY_CODE_PATCH = "code_patch"
+GENERATION_POLICY_LIMITS = {
+    GENERATION_POLICY_DEFAULT: {"temperature": None, "max_tokens": 0},
+    GENERATION_POLICY_LONG_CONTEXT: {"temperature": 0.2, "max_tokens": 3072},
+    GENERATION_POLICY_GROUNDED_ANALYSIS: {"temperature": 0.1, "max_tokens": 3072},
+    GENERATION_POLICY_CODE_PATCH: {"temperature": 0.0, "max_tokens": 4096},
+}
 DEFAULT_WEB_MODE = "auto"
 DEFAULT_LIVE_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
@@ -757,6 +767,8 @@ def pick_turn_dispatch(
         "vllm_probe_ms": None,
         "triggers": [],
     }
+    triggers = detect_strong_triggers(config, session, prompt)
+    dispatch["triggers"] = triggers
 
     if mode in profiles:
         if remote_disabled_fallback(mode):
@@ -779,9 +791,6 @@ def pick_turn_dispatch(
         return dispatch
 
     # mode == "auto"
-    triggers = detect_strong_triggers(config, session, prompt)
-    dispatch["triggers"] = triggers
-
     if not triggers:
         # Default to fast.
         set_from_profile("fast")
@@ -812,6 +821,71 @@ def pick_turn_dispatch(
     dispatch["fallback"] = True
     dispatch["rationale"] = f"strong unavailable: vLLM probe failed ({latency_ms}ms)"
     return dispatch
+
+
+def context_source_names(session: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    for block in session.get("context_blocks", []):
+        source = str(block.get("source") or "manual-legacy")
+        if source not in names:
+            names.append(source)
+    return names
+
+
+def resolve_generation_policy(
+    config: Config,
+    session: dict[str, Any],
+    dispatch: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve per-turn generation params from existing route signals.
+
+    This consumes model-router triggers and active context source labels. It
+    intentionally does not introduce another prompt classifier.
+    """
+    triggers = [str(item) for item in (dispatch.get("triggers") or [])]
+    sources = context_source_names(session)
+    reasons: list[str] = []
+    policy = GENERATION_POLICY_DEFAULT
+
+    if any(item == "code markers" for item in triggers):
+        policy = GENERATION_POLICY_CODE_PATCH
+        reasons.append("auto-route trigger: code markers")
+    elif any(item == "analysis verbs" for item in triggers):
+        policy = GENERATION_POLICY_GROUNDED_ANALYSIS
+        reasons.append("auto-route trigger: analysis verbs")
+    elif any(source.startswith(("auto-repo", "manual-read", "manual-search", "manual-git-status")) for source in sources):
+        policy = GENERATION_POLICY_GROUNDED_ANALYSIS
+        reasons.append("repo evidence loaded")
+    elif any(source.startswith(("auto-history", "manual-history")) for source in sources):
+        policy = GENERATION_POLICY_GROUNDED_ANALYSIS
+        reasons.append("history evidence loaded")
+    elif any(source.startswith(("auto-web", "manual-web")) for source in sources):
+        policy = GENERATION_POLICY_GROUNDED_ANALYSIS
+        reasons.append("web evidence loaded")
+    elif any(source.startswith(("auto-live", "manual-live")) for source in sources):
+        policy = GENERATION_POLICY_GROUNDED_ANALYSIS
+        reasons.append("live evidence loaded")
+    elif any(str(item).startswith("long prompt") for item in triggers):
+        policy = GENERATION_POLICY_LONG_CONTEXT
+        reasons.append("auto-route trigger: long prompt")
+
+    limits = GENERATION_POLICY_LIMITS[policy]
+    policy_temperature = limits["temperature"]
+    if policy_temperature is None:
+        temperature = float(config.temperature)
+    else:
+        temperature = min(float(config.temperature), float(policy_temperature))
+
+    policy_max_tokens = int(limits["max_tokens"])
+    max_tokens = max(int(config.max_tokens), policy_max_tokens)
+
+    return {
+        "name": policy,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "reasons": reasons,
+        "context_sources": sources,
+    }
 
 
 def turn_disclosure(config: "Config", session: dict[str, Any], routed: str | None) -> str:
@@ -5140,6 +5214,12 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
     # the user's configured state.
     dispatch = pick_turn_dispatch(config, session, prompt)
     routed_disclosure = auto_route_turn(config, session, prompt)
+    generation_policy = resolve_generation_policy(config, session, dispatch)
+    turn_config = replace(
+        config,
+        temperature=float(generation_policy["temperature"]),
+        max_tokens=int(generation_policy["max_tokens"]),
+    )
     print(dispatch_disclosure(dispatch, routed_disclosure))
 
     if dispatch.get("auto_routed") or dispatch.get("fallback"):
@@ -5158,7 +5238,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
         )
 
     session.setdefault("messages", []).append({"role": "user", "content": prompt})
-    api_messages = build_api_messages(config, session)
+    api_messages = build_api_messages(turn_config, session)
     prompt_chars = sum(len(str(message.get("content") or "")) for message in api_messages)
     print()
     print("assistant:")
@@ -5172,11 +5252,11 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
     started = time.perf_counter()
     try:
         try:
-            content = stream_chat(config, session) if config.stream else complete_chat(config, session)
+            content = stream_chat(turn_config, session) if turn_config.stream else complete_chat(turn_config, session)
         except KeyboardInterrupt:
-            cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
+            cost_estimate = remote_cost_estimate(turn_config, dispatch, prompt_chars, 0)
             audit_event(
-                config,
+                turn_config,
                 session,
                 "model_dispatched",
                 status="interrupted",
@@ -5188,6 +5268,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
                 fallback=bool(dispatch.get("fallback")),
                 remote=cost_estimate.get("remote"),
                 provider_kind=cost_estimate.get("provider_kind"),
+                generation_policy=generation_policy.get("name"),
+                temperature=generation_policy.get("temperature"),
+                max_tokens=generation_policy.get("max_tokens"),
+                generation_reasons=generation_policy.get("reasons"),
                 prompt_chars=prompt_chars,
                 response_chars=0,
                 estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
@@ -5204,9 +5288,9 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             save_session(config, session)
             return "interrupted"
         except Exception as exc:
-            cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, 0)
+            cost_estimate = remote_cost_estimate(turn_config, dispatch, prompt_chars, 0)
             audit_event(
-                config,
+                turn_config,
                 session,
                 "model_dispatched",
                 status="error",
@@ -5218,6 +5302,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
                 fallback=bool(dispatch.get("fallback")),
                 remote=cost_estimate.get("remote"),
                 provider_kind=cost_estimate.get("provider_kind"),
+                generation_policy=generation_policy.get("name"),
+                temperature=generation_policy.get("temperature"),
+                max_tokens=generation_policy.get("max_tokens"),
+                generation_reasons=generation_policy.get("reasons"),
                 prompt_chars=prompt_chars,
                 response_chars=0,
                 estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
@@ -5232,10 +5320,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             session["base_url"] = saved_base_url
             save_session(config, session)
             return "error"
-        cost_estimate = remote_cost_estimate(config, dispatch, prompt_chars, len(content))
+        cost_estimate = remote_cost_estimate(turn_config, dispatch, prompt_chars, len(content))
         record_remote_cost(session, cost_estimate)
         audit_event(
-            config,
+            turn_config,
             session,
             "model_dispatched",
             status="ok",
@@ -5247,6 +5335,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             fallback=bool(dispatch.get("fallback")),
             remote=cost_estimate.get("remote"),
             provider_kind=cost_estimate.get("provider_kind"),
+            generation_policy=generation_policy.get("name"),
+            temperature=generation_policy.get("temperature"),
+            max_tokens=generation_policy.get("max_tokens"),
+            generation_reasons=generation_policy.get("reasons"),
             prompt_chars=prompt_chars,
             response_chars=len(content),
             estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
