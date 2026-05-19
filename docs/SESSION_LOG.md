@@ -46,7 +46,7 @@
 - PayMore WD My Book validation: `/dev/sda` / `WDC WD120EDGZ-11CMZA0` / serial `T3G0WU1E` passed initial SMART and short offline self-test. Long SMART test still pending before final acceptance, formatting, or mount creation.
 
 ## 2026-05-19 (Session 26)
-**Focus:** PayMore WD My Book final SMART acceptance and persistent mount.
+**Focus:** PayMore WD My Book final SMART acceptance, BMC NTP, stale follow-on cleanup, and Nodechat hallucination-friction controls.
 **What was done:**
 - Completed the PayMore WD My Book 12TB acceptance path. The long SMART test finished successfully: self-test log shows `# 1 Extended offline Completed without error 00% 17 -` and `# 2 Short offline Completed without error 00% 0 -`.
 - Saved the final SMART artifact at `~/drive-check-mybook-T3G0WU1E-final.txt`. Final SMART state: `WDC WD120EDGZ-11CMZA0`, serial `T3G0WU1E`, 12.0 TB, 7200 rpm, Western Digital Ultrastar (He10/12) family, SMART overall `PASSED`, `Power_On_Hours 19`, `Power_Cycle_Count 6`, no reallocated / pending / offline uncorrectable / UDMA CRC errors, no logged errors, current temp `49 C`, max `55 C` during the long surface scan.
@@ -55,11 +55,13 @@
 - Configured the BMC NTP path over the host USB-NIC link. Host Chrony already existed at `/usr/sbin/chronyd`; added `/etc/chrony/conf.d/nodehome-bmc-ntp.conf` with `bindaddress 169.254.3.1` and `allow 169.254.3.0/24`, restarted Chrony, verified `169.254.3.1:123` was listening, waited for `chronyc tracking` to reach `Leap status: Normal`, then set BMC Date/Time to NTP server `169.254.3.1` with timezone UTC. Verified `host_utc=2026-05-19T17:24:08Z` and BMC SEL time `05/19/2026 05:24:12 PM UTC`.
 - Corrected stale mechanical/front-panel follow-ons. Operator clarified on 2026-05-19 that the remaining motherboard standoff screws and JF1 pinout capture are complete; added `docs/runbooks/h12ssl-i-front-panel.md` from the official Supermicro H12SSL-i/C/CT/NT `MNL-2314` front-control-panel figure and updated `CURRENT_STATE` / full-stack inventory so those items no longer appear open.
 - Closed the SCW RAM return follow-on as an active task. Operator confirmed the return-side work is done and the $454.65 refund is now processing; remaining action is passive refund-posting watch only.
+- Implemented the Nodechat hallucination-friction lane as a measured control layer. Commit series added: a reproducible eval corpus/harness with hardcoded context expectations and high-severity/project-fact taxonomy; route-aware generation policy driven by existing route signals, not a new classifier; per-turn `NODECHAT_EVIDENCE_STATE` with source labels; a downstream answerability gate for zero-evidence project-specific prompts with `answer anyway:` and `--force-answer` overrides; and detection-only unsupported-claim review logging to gitignored runtime JSONL. Audit now records actual generation params and evidence state for each dispatch. This is documented as friction/review, not hallucination prevention.
 **Validation:**
 - `findmnt /mnt/media/mybook12tb` returned `/dev/sda1 ext4 rw,relatime`.
 - `df -h /mnt/media/mybook12tb` returned size `11T`, used `2.1M`, available `11T`, use `1%`.
 - `blkid /dev/sda1` returned label `mybook12tb`, UUID `75589f25-4dad-42da-b0ef-31187e14eaa3`, type `ext4`, PARTUUID `96370e7c-8014-40a5-9df3-b000bd3b3a0e`.
 - Drive #2 is accepted and mounted. Drive #1 (`sv2deals` Easystore serial `5PJHV96C`) still needs arrival verification before the media server install can proceed as a two-drive setup.
+- Nodechat validation: full stdlib test discovery passed `125/125`; `tests/test_nodechat_safety.py` now covers `98` safety cases. `git diff --check` was clean except existing CRLF warnings on touched files. No live homelab eval baseline has been run yet; that remains the next proof before claiming measured output-quality improvement.
 
 ## 2026-05-16 (Session 24)
 **Focus:** Afternoon sweep send readiness and UPS telemetry.
