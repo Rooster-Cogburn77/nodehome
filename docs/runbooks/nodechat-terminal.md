@@ -16,6 +16,8 @@ Small dynamic system messages are injected on every request after the static sys
 
 The answerability gate runs after auto-routing. If a prompt is project-specific and no evidence block was loaded, Nodechat returns a deterministic escalation instead of asking the model to improvise. The response includes the next command to run, such as `/read docs/CURRENT_STATE.md` or `/search-files "..."`. Override deliberately with an interactive `answer anyway:` prefix, or with `--force-answer` for `--once`; overrides are audited and inject a caveat instruction into the model request.
 
+Unsupported-claim review is detection-only. After a model answer, Nodechat can flag project-claim-looking text that does not reference loaded evidence. It writes review rows to gitignored `runtime/nodechat/evals/unsupported-claim-flags.jsonl` and emits an `unsupported_claim_review` audit event. The flagger does not block or rewrite answers.
+
 ## Model Profiles
 
 Nodechat has built-in model profiles for the validated local lanes:

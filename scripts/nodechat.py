@@ -191,6 +191,9 @@ PROJECT_SPECIFIC_PROMPT_RE = re.compile(
     r")\b",
     re.I,
 )
+PATHLIKE_CLAIM_RE = re.compile(r"\b(?:[\w.-]+/)+[\w.-]+\b|\b[\w.-]+\.(?:py|md|json|jsonl|yaml|yml|toml|sh|ps1|cmd)\b", re.I)
+FUNCTIONLIKE_CLAIM_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]{2,}\(\)")
+COMMITLIKE_CLAIM_RE = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
 DEFAULT_WEB_MODE = "auto"
 DEFAULT_LIVE_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
@@ -4483,6 +4486,104 @@ def answerability_gate_decision(
     }
 
 
+def evidence_markers(evidence_state: dict[str, Any]) -> list[str]:
+    markers: list[str] = []
+    for item in evidence_state.get("sources") or []:
+        for key in ("source", "ref"):
+            raw = str(item.get(key) or "").strip()
+            if raw and raw not in markers:
+                markers.append(raw)
+            for token in re.split(r"[\s=,;|\[\]\(\)]+", raw):
+                token = token.strip().strip('"')
+                if len(token) < 5:
+                    continue
+                if token not in markers:
+                    markers.append(token)
+                name = pathlib.PurePath(token.replace("\\", "/")).name
+                if len(name) >= 5 and name not in markers:
+                    markers.append(name)
+    return markers
+
+
+def detect_unsupported_claim_flags(response: str, evidence_state: dict[str, Any]) -> list[dict[str, Any]]:
+    text = str(response or "")
+    if not text.strip() or "Unknown - not loaded" in text:
+        return []
+    if not PROJECT_SPECIFIC_PROMPT_RE.search(text) and not PATHLIKE_CLAIM_RE.search(text):
+        return []
+
+    markers = evidence_markers(evidence_state)
+    if markers and any(marker in text for marker in markers):
+        return []
+
+    flags: list[dict[str, Any]] = []
+    chunks = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", text) if part.strip()]
+    for chunk in chunks:
+        projectish = bool(PROJECT_SPECIFIC_PROMPT_RE.search(chunk) or PATHLIKE_CLAIM_RE.search(chunk))
+        if not projectish:
+            continue
+        severity = "project-fact"
+        if PATHLIKE_CLAIM_RE.search(chunk) or FUNCTIONLIKE_CLAIM_RE.search(chunk) or COMMITLIKE_CLAIM_RE.search(chunk):
+            severity = "high-severity"
+        flags.append(
+            {
+                "severity": severity,
+                "reason": "project claim lacks loaded-evidence marker",
+                "excerpt": _trunc(chunk, 240),
+            }
+        )
+        if len(flags) >= 5:
+            break
+    return flags
+
+
+def unsupported_claim_review_path(config: Config, session: dict[str, Any]) -> pathlib.Path:
+    return workspace_path(config, session) / "runtime" / "nodechat" / "evals" / "unsupported-claim-flags.jsonl"
+
+
+def log_unsupported_claim_review(
+    config: Config,
+    session: dict[str, Any],
+    *,
+    prompt: str,
+    response: str,
+    flags: list[dict[str, Any]],
+    evidence_state: dict[str, Any],
+    dispatch: dict[str, Any],
+) -> None:
+    if not flags:
+        return
+    row = {
+        "created_at": utc_now(),
+        "session_id": session.get("id", ""),
+        "prompt_sha256": text_sha256(prompt),
+        "response_sha256": text_sha256(response),
+        "flags": flags,
+        "evidence_state": evidence_state,
+        "mode": dispatch.get("mode"),
+        "profile": dispatch.get("profile"),
+        "model": dispatch.get("model"),
+    }
+    try:
+        path = unsupported_claim_review_path(config, session)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        return
+    audit_event(
+        config,
+        session,
+        "unsupported_claim_review",
+        status="flagged",
+        flag_count=len(flags),
+        high_severity_count=sum(1 for flag in flags if flag.get("severity") == "high-severity"),
+        review_path=str(path),
+        prompt_sha256=row["prompt_sha256"],
+        response_sha256=row["response_sha256"],
+    )
+
+
 def command_evidence(session: dict[str, Any]) -> None:
     blocks = session.get("context_blocks", [])
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
@@ -5559,6 +5660,16 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str, *, fo
             estimated_output_tokens=cost_estimate.get("estimated_output_tokens"),
             estimated_cost_usd=cost_estimate.get("estimated_cost_usd"),
             latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        unsupported_flags = detect_unsupported_claim_flags(content, evidence_state)
+        log_unsupported_claim_review(
+            turn_config,
+            session,
+            prompt=prompt,
+            response=content,
+            flags=unsupported_flags,
+            evidence_state=evidence_state,
+            dispatch=dispatch,
         )
     finally:
         session["profile"] = saved_profile if saved_profile is not None else ""

@@ -1784,6 +1784,43 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(captured, [("is there a runbook for the X email ingestion path?", True)])
 
+    def test_unsupported_claim_detection_flags_project_artifacts_without_sources(self):
+        flags = nodechat.detect_unsupported_claim_flags(
+            "Nodechat has skills/torrentleech/skill.py and calls run_torrentleech().",
+            {"block_count": 0, "sources": [], "categories": {}},
+        )
+        self.assertTrue(flags)
+        self.assertEqual(flags[0]["severity"], "high-severity")
+
+    def test_unsupported_claim_review_logs_detection_without_blocking(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            def fake_complete(config, session):
+                return "Nodechat includes skills/torrentleech/skill.py and run_torrentleech()."
+
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = fake_complete
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = nodechat.send_user_prompt(
+                        config,
+                        session,
+                        "answer anyway: what is torrentleech in this repo?",
+                    )
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertEqual(status, "ok")
+            review_path = workspace / "runtime" / "nodechat" / "evals" / "unsupported-claim-flags.jsonl"
+            self.assertTrue(review_path.exists())
+            rows = nodechat.read_recent_audit(config, 20)
+            event = next(row for row in rows if row["event_type"] == "unsupported_claim_review")
+            self.assertEqual(event["status"], "flagged")
+            self.assertGreaterEqual(event["high_severity_count"], 1)
+
     def test_model_mode_auto_does_not_select_deep(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
