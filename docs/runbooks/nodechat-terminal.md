@@ -425,12 +425,31 @@ Persistent audit:
 - Logged events include queued approvals, rejected approvals, approved command execution/blocking, refused commands, read-only command execution, `/apply --check`, `/apply --confirm`, `/undo-apply --check`, and `/undo-apply`.
 - Audit rows store command/proposal metadata, session id, workspace, status, executable, backup path where relevant, and output digest/size. They intentionally do not duplicate full command output.
 
+## Hallucination Eval
+
+Nodechat's project-fact hallucination work is measured by a small homelab-only eval harness before behavior changes are treated as improvements. The corpus lives in `tests/nodechat_eval_corpus.py`; live and dry-run records are written under gitignored `runtime/nodechat/evals/`.
+
+Dry-run the corpus without a model endpoint:
+
+```powershell
+py -3 scripts\nodechat_eval.py --dry-run
+```
+
+Run a live baseline against the configured local model lane:
+
+```powershell
+py -3 scripts\nodechat_eval.py --case all --context all
+```
+
+The rubric scores claims against loaded evidence, not answer fluency. High-severity unsupported claims are zero-tolerance: invented paths, functions, commands, commit diffs/messages, runbook contents, env vars, ports, model versions, or configuration values. Softer unsupported project-fact claims target `<5%` across the corpus. Re-run the corpus after any model/profile swap.
+
 ## Safety Tests
 
 The Nodechat safety boundary has focused stdlib unit tests:
 
 ```powershell
 py -3 -m unittest tests\test_nodechat_safety.py
+py -3 -m unittest tests\test_nodechat_eval.py
 ```
 
 Current coverage:

@@ -11,6 +11,7 @@ docs/sweeps/notebook/*.sqlite
 docs/sweeps/notebook/*.sqlite-*
 node-private/
 chat-exports/
+runtime/
 docs/sweeps/daily/*.md
 !docs/sweeps/daily/.gitkeep
 docs/sweeps/health/*.md
