@@ -1188,6 +1188,7 @@ def build_api_messages(config: Config, session: dict[str, Any]) -> list[dict[str
             "content": runtime_context(config, session),
         }
     )
+    messages.append({"role": "system", "content": evidence_state_context(session, limit=5)})
 
     for block in session.get("context_blocks", [])[-5:]:
         content = str(block.get("content") or "").strip()
@@ -1476,6 +1477,7 @@ def tool_messages(
 ) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": str(session.get("system") or DEFAULT_SYSTEM_PROMPT)}]
     messages.append({"role": "system", "content": runtime_context(config, session)})
+    messages.append({"role": "system", "content": evidence_state_context(session, limit=3)})
     for block in session.get("context_blocks", [])[-3:]:
         content = str(block.get("content") or "").strip()
         if content:
@@ -4322,6 +4324,58 @@ def evidence_provenance_pairs(block: dict[str, Any]) -> list[str]:
     return pairs
 
 
+def evidence_category(source: str) -> str:
+    if source.startswith(("auto-repo", "manual-read", "manual-search", "manual-git-status")):
+        return "repo"
+    if source.startswith(("auto-history", "manual-history")):
+        return "history"
+    if source.startswith(("auto-web", "manual-web")):
+        return "web"
+    if source.startswith(("auto-live", "manual-live")):
+        return "live"
+    if source.startswith(("manual-cmd", "manual-approve")):
+        return "cmd"
+    return "other"
+
+
+def evidence_state_summary(session: dict[str, Any], *, limit: int = 5) -> dict[str, Any]:
+    blocks = list(session.get("context_blocks", [])[-max(1, limit) :])
+    categories: dict[str, dict[str, Any]] = {}
+    sources: list[dict[str, str]] = []
+    for block in blocks:
+        source = str(block.get("source") or "manual-legacy")
+        category = evidence_category(source)
+        ref = evidence_ref(block)
+        sources.append({"category": category, "source": source, "ref": ref})
+        row = categories.setdefault(category, {"count": 0, "sources": []})
+        row["count"] += 1
+        row["sources"].append(f"{source} {ref}")
+    return {
+        "block_count": len(blocks),
+        "categories": categories,
+        "sources": sources,
+    }
+
+
+def evidence_state_context(session: dict[str, Any], *, limit: int = 5) -> str:
+    summary = evidence_state_summary(session, limit=limit)
+    lines = [
+        "NODECHAT_EVIDENCE_STATE",
+        "scope: active loaded context blocks for this turn",
+        "rule: project-specific claims must be supported by the loaded blocks below; if the needed evidence is absent, say Unknown - not loaded.",
+    ]
+    if not summary["block_count"]:
+        lines.append("loaded_context: none")
+        return "\n".join(lines)
+
+    for category in ("repo", "history", "live", "web", "cmd", "other"):
+        row = summary["categories"].get(category)
+        if not row:
+            continue
+        lines.append(f"{category}: count={row['count']}; sources=[" + " | ".join(row["sources"]) + "]")
+    return "\n".join(lines)
+
+
 def command_evidence(session: dict[str, Any]) -> None:
     blocks = session.get("context_blocks", [])
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
@@ -5215,6 +5269,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
     dispatch = pick_turn_dispatch(config, session, prompt)
     routed_disclosure = auto_route_turn(config, session, prompt)
     generation_policy = resolve_generation_policy(config, session, dispatch)
+    evidence_state = evidence_state_summary(session, limit=5)
     turn_config = replace(
         config,
         temperature=float(generation_policy["temperature"]),
@@ -5272,6 +5327,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
                 temperature=generation_policy.get("temperature"),
                 max_tokens=generation_policy.get("max_tokens"),
                 generation_reasons=generation_policy.get("reasons"),
+                evidence_state=evidence_state,
                 prompt_chars=prompt_chars,
                 response_chars=0,
                 estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
@@ -5306,6 +5362,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
                 temperature=generation_policy.get("temperature"),
                 max_tokens=generation_policy.get("max_tokens"),
                 generation_reasons=generation_policy.get("reasons"),
+                evidence_state=evidence_state,
                 prompt_chars=prompt_chars,
                 response_chars=0,
                 estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),
@@ -5339,6 +5396,7 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             temperature=generation_policy.get("temperature"),
             max_tokens=generation_policy.get("max_tokens"),
             generation_reasons=generation_policy.get("reasons"),
+            evidence_state=evidence_state,
             prompt_chars=prompt_chars,
             response_chars=len(content),
             estimated_input_tokens=cost_estimate.get("estimated_input_tokens"),

@@ -12,7 +12,7 @@ Live-node auto-routing is also in place for fixed Observe-tier checks. Clear liv
 
 Mutations are tier-gated. Patch application is approval-confirmed with an on-disk backup. Selected Git network/update commands queue for explicit `/approve`. Destructive, privileged, package-manager, and arbitrary-network commands are refused today and will move into a multi-step approval tier as the safety model matures. All local file/command paths are confined to the configured Nodechat workspace (`C:\Users\bmoor\Local_AI` under the Windows launcher).
 
-A small `NODECHAT_RUNTIME` system message is injected on every request so the model answers identity questions from the actual configured profile, model, and endpoint instead of inventing one.
+Small dynamic system messages are injected on every request after the static system prompt. `NODECHAT_RUNTIME` tells the model the actual configured profile, model, and endpoint so identity answers do not drift. `NODECHAT_EVIDENCE_STATE` lists the active loaded context blocks by category and source label, and tells the model to answer `Unknown - not loaded` when a project-specific claim is not supported by those blocks.
 
 ## Model Profiles
 

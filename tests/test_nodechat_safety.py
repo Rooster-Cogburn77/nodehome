@@ -1474,6 +1474,39 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertIn("model: mistral-small3.1:24b", context)
             self.assertIn("endpoint: http://localhost:11434/v1", context)
 
+    def test_api_messages_include_evidence_state_with_source_labels(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "/read docs/CURRENT_STATE.md",
+                nodechat.context_block("file_read", "docs/CURRENT_STATE.md", "fake current state"),
+                source="manual-read",
+                provenance={"path": "docs/CURRENT_STATE.md", "chars": 18},
+            )
+            session.setdefault("messages", []).append({"role": "user", "content": "summarize"})
+
+            messages = nodechat.build_api_messages(config, session)
+            self.assertEqual(messages[0]["role"], "system")
+            self.assertIn("NODECHAT_RUNTIME", messages[1]["content"])
+            self.assertIn("NODECHAT_EVIDENCE_STATE", messages[2]["content"])
+            self.assertIn("repo: count=1", messages[2]["content"])
+            self.assertIn("docs/CURRENT_STATE.md", messages[2]["content"])
+            self.assertIn("NODECHAT_TOOL_CONTEXT", messages[3]["content"])
+
+    def test_api_messages_report_no_loaded_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session.setdefault("messages", []).append({"role": "user", "content": "what is this repo"})
+
+            messages = nodechat.build_api_messages(config, session)
+            self.assertIn("NODECHAT_EVIDENCE_STATE", messages[2]["content"])
+            self.assertIn("loaded_context: none", messages[2]["content"])
+
     def test_send_user_prompt_audits_model_dispatch(self):
         # In Phase 2 the default model_mode is "auto", which would pick the
         # fast profile for a short "hello" prompt. This test was written before
@@ -1664,6 +1697,8 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             event = next(row for row in rows if row["event_type"] == "model_dispatched")
             self.assertEqual(event["generation_policy"], "grounded_analysis")
             self.assertIn("repo evidence loaded", event["generation_reasons"])
+            self.assertEqual(event["evidence_state"]["block_count"], 1)
+            self.assertEqual(event["evidence_state"]["sources"][0]["category"], "repo")
 
     def test_model_mode_auto_does_not_select_deep(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
