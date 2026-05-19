@@ -93,7 +93,7 @@
 | 3x RTX 3090 Gigabyte Turbo | $3,442 | Purchased, eBay #227287677142. **All 3 installed and link-validated** (`81:00.0`, `C1:00.0`, `C2:00.0`, all at PCIe Gen 4 x16). GPU #1 also validated under sustained TDP load. GPU #2 validated under multi-GPU layer-split inference. GPU #3 currently operates under the temporary pigtail rule; sustained load on GPU #3 is gated on installation of the proper PCIe modular cable for the SF-1600F14HT. |
 | EPYC 7302P + H12SSL-i v2.0 | $985 | Arrived 2026-04-07 |
 | PSU 1600W Titanium | $241 | Purchased |
-| RAM 128GB DDR4-2133 ECC | $454.65 | Purchased 2026-04-04 from SCW Computers (eBay), arrived as 32GB 4DRx4 LRDIMM (`M386A4G40DM0-CPB2Q`) instead of the listed RDIMM. **Resolved 2026-05-13 via eBay-forced refund** after escalating past auto-close through human review. eBay sent prepaid return label; LRDIMM kit returns to seller. Full $454.65 refund issued. Net cost: $0 (refunded). See Session 19 for the dispute escalation story; saved as a procedural memory at `feedback_ebay_dispute_escalation.md`. |
+| RAM 128GB DDR4-2133 ECC | $454.65 | Purchased 2026-04-04 from SCW Computers (eBay), arrived as 32GB 4DRx4 LRDIMM (`M386A4G40DM0-CPB2Q`) instead of the listed RDIMM. **Resolved via eBay-forced refund path** after escalating past auto-close through human review. Return is complete on the operator side and refund is processing. Net expected cost: $0 once refund posts. See Session 19 for the dispute escalation story; saved as a procedural memory at `feedback_ebay_dispute_escalation.md`. |
 | RAM 128GB DDR4-2400 ECC RDIMM | $428.67 | Replacement set installed and validated: all four `Samsung M393A4K40CB1-CRC4Q` sticks train, BIOS reports `Total Memory: 128 GB`. Order #26-14569-05057. |
 | SSD Acer GM7 2TB | $291 | Purchased |
 | SilverStone RM400 chassis | ~$260 | Purchased |
@@ -104,7 +104,7 @@
 ## Budget
 - **Spent (incl tax):** ~$6,339
 - **Over original $5,600 budget by:** ~$739 (cooler upgrade from Arctic $70 -> Noctua $161, rack, plus replacement RDIMM purchase)
-- **All components purchased and primary stack hardware now validated through POST.** The previously-open LRDIMM mis-shipment is resolved as of 2026-05-13: eBay-forced full refund ($454.65) after escalating the dispute past the 30-day auto-close window through human review. LRDIMM kit being returned to seller via prepaid label.
+- **All components purchased and primary stack hardware now validated through POST.** The previously-open LRDIMM mis-shipment is resolved: eBay-forced full refund path ($454.65) after escalating the dispute past the 30-day auto-close window through human review. Return is complete on the operator side; refund is processing.
 
 ## Blocking Issues
 - The only remaining purchase is the one PCIe modular cable for the SF-1600F14HT to retire the temporary pigtail rule on GPU #3. Cable order `05-14624-65956` placed `2026-05-09` with eBay seller `lizzieb753` UK, landed cost `$49.85`. **Realistic arrival window: `2026-05-23 to 2026-06-10`** per the seller's posted estimate; UK Royal Mail / eBay International to US is realistically 2-4 weeks. Continuing to look for a faster legitimate source in parallel (CableMod Rush+Express in 5-10 days at ~$70 from a US warehouse, or r/hardwareswap local pickup); the eBay UK order is the floor. Until the cable arrives and is installed, GPU #3 stays out of sustained workload rotation.

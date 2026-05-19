@@ -54,6 +54,7 @@
 - Added `/etc/fstab` entry: `UUID=75589f25-4dad-42da-b0ef-31187e14eaa3 /mnt/media/mybook12tb ext4 defaults,nofail,x-systemd.device-timeout=30 0 2`; ran `systemctl daemon-reload`, unmounted, `mount -a`, and verified the persistent mount.
 - Configured the BMC NTP path over the host USB-NIC link. Host Chrony already existed at `/usr/sbin/chronyd`; added `/etc/chrony/conf.d/nodehome-bmc-ntp.conf` with `bindaddress 169.254.3.1` and `allow 169.254.3.0/24`, restarted Chrony, verified `169.254.3.1:123` was listening, waited for `chronyc tracking` to reach `Leap status: Normal`, then set BMC Date/Time to NTP server `169.254.3.1` with timezone UTC. Verified `host_utc=2026-05-19T17:24:08Z` and BMC SEL time `05/19/2026 05:24:12 PM UTC`.
 - Corrected stale mechanical/front-panel follow-ons. Operator clarified on 2026-05-19 that the remaining motherboard standoff screws and JF1 pinout capture are complete; added `docs/runbooks/h12ssl-i-front-panel.md` from the official Supermicro H12SSL-i/C/CT/NT `MNL-2314` front-control-panel figure and updated `CURRENT_STATE` / full-stack inventory so those items no longer appear open.
+- Closed the SCW RAM return follow-on as an active task. Operator confirmed the return-side work is done and the $454.65 refund is now processing; remaining action is passive refund-posting watch only.
 **Validation:**
 - `findmnt /mnt/media/mybook12tb` returned `/dev/sda1 ext4 rw,relatime`.
 - `df -h /mnt/media/mybook12tb` returned size `11T`, used `2.1M`, available `11T`, use `1%`.
