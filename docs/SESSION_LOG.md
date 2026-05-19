@@ -52,6 +52,7 @@
 - Saved the final SMART artifact at `~/drive-check-mybook-T3G0WU1E-final.txt`. Final SMART state: `WDC WD120EDGZ-11CMZA0`, serial `T3G0WU1E`, 12.0 TB, 7200 rpm, Western Digital Ultrastar (He10/12) family, SMART overall `PASSED`, `Power_On_Hours 19`, `Power_Cycle_Count 6`, no reallocated / pending / offline uncorrectable / UDMA CRC errors, no logged errors, current temp `49 C`, max `55 C` during the long surface scan.
 - Confirmed the factory partition was exFAT labelled `My Book`, not mounted. Replaced it with GPT + one ext4 partition labelled `mybook12tb`. Created mountpoint `/mnt/media/mybook12tb` and mounted `/dev/sda1` there.
 - Added `/etc/fstab` entry: `UUID=75589f25-4dad-42da-b0ef-31187e14eaa3 /mnt/media/mybook12tb ext4 defaults,nofail,x-systemd.device-timeout=30 0 2`; ran `systemctl daemon-reload`, unmounted, `mount -a`, and verified the persistent mount.
+- Configured the BMC NTP path over the host USB-NIC link. Host Chrony already existed at `/usr/sbin/chronyd`; added `/etc/chrony/conf.d/nodehome-bmc-ntp.conf` with `bindaddress 169.254.3.1` and `allow 169.254.3.0/24`, restarted Chrony, verified `169.254.3.1:123` was listening, waited for `chronyc tracking` to reach `Leap status: Normal`, then set BMC Date/Time to NTP server `169.254.3.1` with timezone UTC. Verified `host_utc=2026-05-19T17:24:08Z` and BMC SEL time `05/19/2026 05:24:12 PM UTC`.
 **Validation:**
 - `findmnt /mnt/media/mybook12tb` returned `/dev/sda1 ext4 rw,relatime`.
 - `df -h /mnt/media/mybook12tb` returned size `11T`, used `2.1M`, available `11T`, use `1%`.
