@@ -181,6 +181,16 @@ GENERATION_POLICY_LIMITS = {
     GENERATION_POLICY_GROUNDED_ANALYSIS: {"temperature": 0.1, "max_tokens": 3072},
     GENERATION_POLICY_CODE_PATCH: {"temperature": 0.0, "max_tokens": 4096},
 }
+FORCE_ANSWER_PREFIX_RE = re.compile(r"^\s*answer\s+anyway\s*:\s*", re.I)
+PROJECT_SPECIFIC_PROMPT_RE = re.compile(
+    r"\b("
+    r"repo|repository|codebase|project|nodechat|nodehome|homelab|sovereign|"
+    r"sweeps?|runbook|current_state|session_log|scratch|bmc|ipmi|gpu\d?|"
+    r"vllm|ollama|open\s*webui|jellyfin|x\s+email|ingest_x_email|"
+    r"commit|diff|branch|working\s+tree|git\s+status"
+    r")\b",
+    re.I,
+)
 DEFAULT_WEB_MODE = "auto"
 DEFAULT_LIVE_MODE = "auto"
 ROUTING_MODES = ("auto", "manual", "off")
@@ -1189,6 +1199,13 @@ def build_api_messages(config: Config, session: dict[str, Any]) -> list[dict[str
         }
     )
     messages.append({"role": "system", "content": evidence_state_context(session, limit=5)})
+    if session.get("_force_answer_override"):
+        messages.append(
+            {
+                "role": "system",
+                "content": "NODECHAT_FORCE_ANSWER_OVERRIDE\nThe operator explicitly bypassed the answerability gate. Start with a caveat if the answer is not fully supported by loaded evidence.",
+            }
+        )
 
     for block in session.get("context_blocks", [])[-5:]:
         content = str(block.get("content") or "").strip()
@@ -1478,6 +1495,13 @@ def tool_messages(
     messages = [{"role": "system", "content": str(session.get("system") or DEFAULT_SYSTEM_PROMPT)}]
     messages.append({"role": "system", "content": runtime_context(config, session)})
     messages.append({"role": "system", "content": evidence_state_context(session, limit=3)})
+    if session.get("_force_answer_override"):
+        messages.append(
+            {
+                "role": "system",
+                "content": "NODECHAT_FORCE_ANSWER_OVERRIDE\nThe operator explicitly bypassed the answerability gate. Start with a caveat if the answer is not fully supported by loaded evidence.",
+            }
+        )
     for block in session.get("context_blocks", [])[-3:]:
         content = str(block.get("content") or "").strip()
         if content:
@@ -4376,6 +4400,89 @@ def evidence_state_context(session: dict[str, Any], *, limit: int = 5) -> str:
     return "\n".join(lines)
 
 
+def split_force_answer_prompt(prompt: str) -> tuple[bool, str]:
+    text = str(prompt or "")
+    match = FORCE_ANSWER_PREFIX_RE.match(text)
+    if not match:
+        return False, text
+    return True, text[match.end() :].lstrip()
+
+
+def is_project_specific_prompt(prompt: str, dispatch: dict[str, Any]) -> bool:
+    text = str(prompt or "")
+    triggers = [str(item) for item in (dispatch.get("triggers") or [])]
+    if any(
+        item == "history-routing intent"
+        or item.startswith("multi-file repo routing")
+        for item in triggers
+    ):
+        return True
+    if PROJECT_SPECIFIC_PROMPT_RE.search(text):
+        return True
+    if REPO_SUMMARY_SUBJECT_RE.search(text) and REPO_SUMMARY_INTENT_RE.search(text):
+        return True
+    return False
+
+
+def suggested_context_command(config: Config, session: dict[str, Any], prompt: str) -> str:
+    text = " ".join(str(prompt or "").strip().split())
+    if detect_history_query(prompt):
+        return "/history " + _trunc(text, 160)
+    live_targets = detect_live_targets(prompt)
+    if live_targets:
+        return "/live " + ",".join(live_targets)
+    if re.search(r"\b(current\s+state|status|where\s+do\s+we\s+stand|what\s+is\s+left|what'?s\s+left)\b", prompt, re.I):
+        return "/read docs/CURRENT_STATE.md"
+    if re.search(r"\b(runbook|docs?|documentation)\b", prompt, re.I):
+        return '/search-files "' + _trunc(text, 120).replace('"', "'") + '" docs/runbooks'
+    if re.search(r"\b(commit|diff)\b", prompt, re.I):
+        return "/cmd git show <commit>"
+    return '/search-files "' + _trunc(text, 120).replace('"', "'") + '"'
+
+
+def answerability_gate_decision(
+    config: Config,
+    session: dict[str, Any],
+    prompt: str,
+    dispatch: dict[str, Any],
+    evidence_state: dict[str, Any],
+    *,
+    force_answer: bool = False,
+) -> dict[str, Any]:
+    project_specific = is_project_specific_prompt(prompt, dispatch)
+    suggested = suggested_context_command(config, session, prompt) if project_specific else ""
+    override_status = "forced" if force_answer else "none"
+    if force_answer:
+        return {
+            "action": "pass",
+            "override_status": override_status,
+            "project_specific": project_specific,
+            "suggested_command": suggested,
+            "message": "",
+        }
+    if project_specific and int(evidence_state.get("block_count") or 0) == 0:
+        return {
+            "action": "escalate",
+            "override_status": override_status,
+            "project_specific": project_specific,
+            "suggested_command": suggested,
+            "message": (
+                "Unknown - not loaded. Auto-routing did not load evidence for that "
+                "project-specific question.\n"
+                f"Suggested next command: {suggested}\n"
+                "Override only if you intentionally want an ungrounded answer: prefix "
+                "`answer anyway:` or run one-shot with `--force-answer`."
+            ),
+        }
+    return {
+        "action": "pass",
+        "override_status": override_status,
+        "project_specific": project_specific,
+        "suggested_command": suggested,
+        "message": "",
+    }
+
+
 def command_evidence(session: dict[str, Any]) -> None:
     blocks = session.get("context_blocks", [])
     history_mode = session.get("history_mode", DEFAULT_HISTORY_MODE)
@@ -5256,7 +5363,13 @@ def prompt_label(session: dict[str, Any]) -> str:
     return f"nodechat:{short}> "
 
 
-def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> str:
+def send_user_prompt(config: Config, session: dict[str, Any], prompt: str, *, force_answer: bool = False) -> str:
+    if not str(prompt or "").strip():
+        print("empty prompt ignored")
+        return "ignored"
+    prefix_forced, clean_prompt = split_force_answer_prompt(prompt)
+    force_answer = bool(force_answer or prefix_forced)
+    prompt = clean_prompt
     if not str(prompt or "").strip():
         print("empty prompt ignored")
         return "ignored"
@@ -5270,12 +5383,44 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
     routed_disclosure = auto_route_turn(config, session, prompt)
     generation_policy = resolve_generation_policy(config, session, dispatch)
     evidence_state = evidence_state_summary(session, limit=5)
+    gate = answerability_gate_decision(
+        config,
+        session,
+        prompt,
+        dispatch,
+        evidence_state,
+        force_answer=force_answer,
+    )
     turn_config = replace(
         config,
         temperature=float(generation_policy["temperature"]),
         max_tokens=int(generation_policy["max_tokens"]),
     )
     print(dispatch_disclosure(dispatch, routed_disclosure))
+
+    audit_event(
+        turn_config,
+        session,
+        "gate_decision_audit",
+        route_signal=dispatch.get("triggers"),
+        evidence_state=evidence_state,
+        project_specific=gate.get("project_specific"),
+        action=gate.get("action"),
+        override_status=gate.get("override_status"),
+        suggested_command=gate.get("suggested_command"),
+        mode=dispatch.get("mode"),
+        profile=dispatch.get("profile"),
+    )
+
+    if gate.get("action") == "escalate":
+        message = str(gate.get("message") or "Unknown - not loaded.")
+        session.setdefault("messages", []).append({"role": "user", "content": prompt})
+        print()
+        print("assistant:")
+        print(message)
+        session.setdefault("messages", []).append({"role": "assistant", "content": message})
+        save_session(config, session)
+        return "gated"
 
     if dispatch.get("auto_routed") or dispatch.get("fallback"):
         audit_event(
@@ -5301,9 +5446,12 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
     saved_profile = session.get("profile")
     saved_model = session.get("model")
     saved_base_url = session.get("base_url")
+    saved_force_answer = session.get("_force_answer_override")
     session["profile"] = dispatch.get("profile") or saved_profile or ""
     session["model"] = dispatch.get("model") or saved_model
     session["base_url"] = dispatch.get("base_url") or saved_base_url
+    if force_answer:
+        session["_force_answer_override"] = True
     started = time.perf_counter()
     try:
         try:
@@ -5341,6 +5489,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             session["profile"] = saved_profile if saved_profile is not None else ""
             session["model"] = saved_model
             session["base_url"] = saved_base_url
+            if saved_force_answer is None:
+                session.pop("_force_answer_override", None)
+            else:
+                session["_force_answer_override"] = saved_force_answer
             save_session(config, session)
             return "interrupted"
         except Exception as exc:
@@ -5375,6 +5527,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
             session["profile"] = saved_profile if saved_profile is not None else ""
             session["model"] = saved_model
             session["base_url"] = saved_base_url
+            if saved_force_answer is None:
+                session.pop("_force_answer_override", None)
+            else:
+                session["_force_answer_override"] = saved_force_answer
             save_session(config, session)
             return "error"
         cost_estimate = remote_cost_estimate(turn_config, dispatch, prompt_chars, len(content))
@@ -5408,6 +5564,10 @@ def send_user_prompt(config: Config, session: dict[str, Any], prompt: str) -> st
         session["profile"] = saved_profile if saved_profile is not None else ""
         session["model"] = saved_model
         session["base_url"] = saved_base_url
+        if saved_force_answer is None:
+            session.pop("_force_answer_override", None)
+        else:
+            session["_force_answer_override"] = saved_force_answer
     session.setdefault("messages", []).append({"role": "assistant", "content": content})
     save_session(config, session)
     return "ok"
@@ -5448,6 +5608,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--resume", help="resume session by id prefix or path")
     parser.add_argument("--list-sessions", action="store_true", help="list saved sessions and exit")
     parser.add_argument("--once", help="send one prompt and exit")
+    parser.add_argument("--force-answer", action="store_true", help="bypass the answerability gate for --once prompts")
     parser.add_argument(
         "--history-url",
         default=os.environ.get("NODECHAT_HISTORY_URL", DEFAULT_HISTORY_URL),
@@ -5545,9 +5706,9 @@ def main(argv: list[str] | None = None) -> int:
             action, session, prompt = handle_command(line, config, session)
             save_session(config, session)
             if action == "prompt" and prompt:
-                send_user_prompt(config, session, prompt)
+                send_user_prompt(config, session, prompt, force_answer=bool(args.force_answer))
         else:
-            send_user_prompt(config, session, str(args.once))
+            send_user_prompt(config, session, str(args.once), force_answer=bool(args.force_answer))
         return 0
 
     while True:

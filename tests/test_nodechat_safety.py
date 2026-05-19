@@ -1700,6 +1700,90 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(event["evidence_state"]["block_count"], 1)
             self.assertEqual(event["evidence_state"]["sources"][0]["category"], "repo")
 
+    def test_answerability_gate_escalates_project_prompt_without_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = mock.Mock(side_effect=AssertionError("model should not be called"))
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    status = nodechat.send_user_prompt(config, session, "is there a runbook for the X email ingestion path?")
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertEqual(status, "gated")
+            self.assertIn("Unknown - not loaded", buf.getvalue())
+            self.assertIn("/search-files", buf.getvalue())
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "gate_decision_audit")
+            self.assertEqual(event["action"], "escalate")
+            self.assertEqual(event["override_status"], "none")
+            self.assertTrue(event["project_specific"])
+
+    def test_answerability_gate_force_prefix_bypasses_with_audit(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            seen = []
+
+            def fake_complete(config, session):
+                seen.append(nodechat.build_api_messages(config, session))
+                return "forced ok"
+
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = fake_complete
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = nodechat.send_user_prompt(
+                        config,
+                        session,
+                        "answer anyway: is there a runbook for the X email ingestion path?",
+                    )
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertEqual(status, "ok")
+            self.assertTrue(seen)
+            self.assertTrue(any("NODECHAT_FORCE_ANSWER_OVERRIDE" in msg["content"] for msg in seen[0]))
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "gate_decision_audit")
+            self.assertEqual(event["action"], "pass")
+            self.assertEqual(event["override_status"], "forced")
+
+    def test_once_force_answer_passes_override_to_prompt(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            session_root = workspace / ".sessions"
+            captured = []
+            original = nodechat.send_user_prompt
+            try:
+                def fake_send(config, session, prompt, *, force_answer=False):
+                    captured.append((prompt, force_answer))
+                    return "ok"
+
+                nodechat.send_user_prompt = fake_send
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = nodechat.main([
+                        "--session-root",
+                        str(session_root),
+                        "--workspace",
+                        str(workspace),
+                        "--no-stream",
+                        "--force-answer",
+                        "--once",
+                        "is there a runbook for the X email ingestion path?",
+                    ])
+            finally:
+                nodechat.send_user_prompt = original
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(captured, [("is there a runbook for the X email ingestion path?", True)])
+
     def test_model_mode_auto_does_not_select_deep(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)

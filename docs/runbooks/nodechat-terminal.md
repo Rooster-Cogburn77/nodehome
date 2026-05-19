@@ -14,6 +14,8 @@ Mutations are tier-gated. Patch application is approval-confirmed with an on-dis
 
 Small dynamic system messages are injected on every request after the static system prompt. `NODECHAT_RUNTIME` tells the model the actual configured profile, model, and endpoint so identity answers do not drift. `NODECHAT_EVIDENCE_STATE` lists the active loaded context blocks by category and source label, and tells the model to answer `Unknown - not loaded` when a project-specific claim is not supported by those blocks.
 
+The answerability gate runs after auto-routing. If a prompt is project-specific and no evidence block was loaded, Nodechat returns a deterministic escalation instead of asking the model to improvise. The response includes the next command to run, such as `/read docs/CURRENT_STATE.md` or `/search-files "..."`. Override deliberately with an interactive `answer anyway:` prefix, or with `--force-answer` for `--once`; overrides are audited and inject a caveat instruction into the model request.
+
 ## Model Profiles
 
 Nodechat has built-in model profiles for the validated local lanes:
