@@ -1200,7 +1200,7 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             config = make_config(workspace, workspace / ".sessions")
             session = nodechat.make_session(config)
             buf = io.StringIO()
-            with mock.patch.object(nodechat.os, "name", "nt"), contextlib.redirect_stdout(buf):
+            with mock.patch.object(nodechat, "is_windows_host", return_value=True), contextlib.redirect_stdout(buf):
                 nodechat.command_live(config, session, "restart ollama")
             text = buf.getvalue()
             self.assertIn("LIVE_MUTATION_REFUSED", text)

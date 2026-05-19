@@ -2736,13 +2736,17 @@ def run_live_op(config: Config, key: str, spec: dict[str, Any]) -> dict[str, Any
     return _run_live_argv(config, key, target, argv)
 
 
+def is_windows_host() -> bool:
+    return os.name == "nt"
+
+
 def local_live_mutation_refusal_reason(config: Config, argv: list[str]) -> str | None:
     """Refuse local mutation approvals that cannot execute on this host."""
     if config.live_ssh:
         return None
     if not argv:
         return "empty live mutation argv"
-    if os.name == "nt" and any(part.startswith("/") for part in argv):
+    if is_windows_host() and any(part.startswith("/") for part in argv):
         return (
             "local Windows session cannot run POSIX-path live mutation argv; "
             "run Nodechat on the homelab or set --live-ssh to target it"
