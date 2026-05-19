@@ -67,7 +67,8 @@ This is NOT the source of truth for any individual area — runbooks are. This i
 | 10GbE switch + NIC | Network throughput upgrade beyond 1GbE | deferred (Tier 4) |
 | NVMe expansion via Hyper M.2 card | Additional NVMe slots | deferred (Tier 4) |
 | Internal CA hardware | TLS for internal services | deferred (Tier 4) |
-| Motherboard standoff screws (final fit-out) | Mechanical follow-on when chassis next opens | deferred (next chassis-open event) |
+| Motherboard standoff screws (final fit-out) | Final motherboard tray fit-out | shipped (operator-closed 2026-05-19) |
+| H12SSL-i JF1 front-panel pinout runbook | Serviceability reference for RM400 front-panel wiring | shipped (`docs/runbooks/h12ssl-i-front-panel.md`) |
 | 14TB WD My Book (ramen_scorpion offer) | Asymmetric pool problem, international shipping; waiting on offer expiry | declined |
 
 ## OS + base infrastructure

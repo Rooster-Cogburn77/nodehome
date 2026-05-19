@@ -53,6 +53,7 @@
 - Confirmed the factory partition was exFAT labelled `My Book`, not mounted. Replaced it with GPT + one ext4 partition labelled `mybook12tb`. Created mountpoint `/mnt/media/mybook12tb` and mounted `/dev/sda1` there.
 - Added `/etc/fstab` entry: `UUID=75589f25-4dad-42da-b0ef-31187e14eaa3 /mnt/media/mybook12tb ext4 defaults,nofail,x-systemd.device-timeout=30 0 2`; ran `systemctl daemon-reload`, unmounted, `mount -a`, and verified the persistent mount.
 - Configured the BMC NTP path over the host USB-NIC link. Host Chrony already existed at `/usr/sbin/chronyd`; added `/etc/chrony/conf.d/nodehome-bmc-ntp.conf` with `bindaddress 169.254.3.1` and `allow 169.254.3.0/24`, restarted Chrony, verified `169.254.3.1:123` was listening, waited for `chronyc tracking` to reach `Leap status: Normal`, then set BMC Date/Time to NTP server `169.254.3.1` with timezone UTC. Verified `host_utc=2026-05-19T17:24:08Z` and BMC SEL time `05/19/2026 05:24:12 PM UTC`.
+- Corrected stale mechanical/front-panel follow-ons. Operator clarified on 2026-05-19 that the remaining motherboard standoff screws and JF1 pinout capture are complete; added `docs/runbooks/h12ssl-i-front-panel.md` from the official Supermicro H12SSL-i/C/CT/NT `MNL-2314` front-control-panel figure and updated `CURRENT_STATE` / full-stack inventory so those items no longer appear open.
 **Validation:**
 - `findmnt /mnt/media/mybook12tb` returned `/dev/sda1 ext4 rw,relatime`.
 - `df -h /mnt/media/mybook12tb` returned size `11T`, used `2.1M`, available `11T`, use `1%`.
@@ -319,7 +320,7 @@
 **Focus:** Permanent in-chassis install — drive cage removal, front-panel header wiring, internal cable cleanup, GPU reinstall, power-on validation
 **What was done:**
 - Removed all three left-side internal drive cage sections from the SilverStone RM400. Build is NVMe-only, so the cages were dead weight blocking cable routing and access to the GPU/PCIe area. With all three cleared, the left-side bay area is fully open for cable management.
-- Wired the front-panel header (JF1) on the H12SSL-i to the chassis FP leads. The H12SSL-i has an on-board power button so the chassis FP power button is redundant for bring-up — wired anyway because the build target is permanent install, not minimum-viable. The JF1 pinout used for this wiring was not captured into a repo runbook; that's a follow-on (action: photograph the JF1 silkscreen or pull the page from the Supermicro `MNL-2314.pdf` and write `docs/runbooks/h12ssl-i-front-panel.md`).
+- Wired the front-panel header (JF1) on the H12SSL-i to the chassis FP leads. The H12SSL-i has an on-board power button so the chassis FP power button is redundant for bring-up — wired anyway because the build target is permanent install, not minimum-viable. The JF1 pinout used for this wiring was not captured into a repo runbook at the time; superseded 2026-05-19 by `docs/runbooks/h12ssl-i-front-panel.md`.
 - Connected both chassis fans (front + rear) to motherboard fan headers.
 - Top GPU was removed during chassis work to access the FP header / cable routing zone, then reinstalled. All 3 GPUs back in their original slots after wiring cleanup.
 - Tidied internal wiring for the permanent install: front-panel wires routed against the chassis edge, USB 3 cable kept clear of the GPU/fan zone, fan leads secured. Confirmed nothing under tension and no thin signal wires running across PCIe slot faces.
@@ -332,7 +333,7 @@
 - Side fix: Qwen claimed it was "hosted by Alibaba Cloud" on first chat — that's just the model's pretraining identity (DAMO trained it). Set a per-model System Prompt in Open WebUI Workspace → Models that grounds it in this hardware (3x RTX 3090, EPYC 7302P, vLLM v0.19.1 container, no Alibaba Cloud connection). Same fix is available for the Ollama models when/if it matters.
 - Saved a feedback memory: "don't suggest the easy/shortcut route." Default to the proper path; offering "you don't strictly need this" alternatives reads as me trying to reduce my own work or hedging on the user's standards.
 **Commits:** `c64d5e0` (chassis + power-on smoke checkpoint); this commit closes Option C and post-rebuild verification.
-**Next:** Run `./scripts/healthcheck.sh` for the post-rebuild + post-Option-C baseline. Capture the JF1 front-panel header pinout into `docs/runbooks/h12ssl-i-front-panel.md` before the next chassis-open event. The next physical phase (rack-mount on Tedgetal shelf + dedicated IPMI patch + permanent location move) is gated only on the GPU 3 cable arriving and the temporary pigtail being retired.
+**Next:** Run `./scripts/healthcheck.sh` for the post-rebuild + post-Option-C baseline. The JF1 front-panel header pinout follow-on was later closed on 2026-05-19 in `docs/runbooks/h12ssl-i-front-panel.md`. The next physical phase (rack-mount on Tedgetal shelf + dedicated IPMI patch + permanent location move) is gated only on the GPU 3 cable arriving and the temporary pigtail being retired.
 
 ## 2026-05-10 (Session 15)
 **Focus:** Operational hardening — service persistence, reboot validation, health-check tooling, IPMI runbook, system-enforced pigtail rule
