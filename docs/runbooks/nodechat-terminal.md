@@ -449,6 +449,8 @@ py -3 scripts\nodechat_eval.py --case all --context all
 
 The rubric scores claims against loaded evidence, not answer fluency. High-severity unsupported claims are zero-tolerance: invented paths, functions, commands, commit diffs/messages, runbook contents, env vars, ports, model versions, or configuration values. Softer unsupported project-fact claims target `<5%` across the corpus. Re-run the corpus after any model/profile swap.
 
+Latest homelab smoke as of 2026-05-19: `python3 -m unittest discover -s tests -v` passed `131/131`, and live eval against `Qwen/Qwen2.5-32B-Instruct-AWQ` wrote `runtime/nodechat/evals/nodechat-eval-20260520-011100.jsonl` with `gated: 7` and `ok: 11`. That proves the harness runs and the zero-evidence / named-artifact relevance gates fire; it is not an automatic correctness score.
+
 ## Safety Tests
 
 The Nodechat safety boundary has focused stdlib unit tests:
