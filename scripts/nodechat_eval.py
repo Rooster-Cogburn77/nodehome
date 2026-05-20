@@ -17,6 +17,7 @@ import pathlib
 import subprocess
 import sys
 import time
+from collections import Counter
 from typing import Any
 
 
@@ -45,6 +46,198 @@ def utc_now() -> str:
 def default_output_path() -> pathlib.Path:
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
     return ROOT / "runtime" / "nodechat" / "evals" / f"nodechat-eval-{stamp}.jsonl"
+
+
+def default_score_template_path(eval_path: pathlib.Path) -> pathlib.Path:
+    return eval_path.with_name(f"{eval_path.stem}.scores.jsonl")
+
+
+def read_jsonl(path: pathlib.Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for lineno, line in enumerate(handle, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                row = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"{path}:{lineno}: invalid JSONL row: {exc}") from exc
+            if not isinstance(row, dict):
+                raise SystemExit(f"{path}:{lineno}: expected JSON object")
+            rows.append(row)
+    return rows
+
+
+def score_key(row: dict[str, Any]) -> tuple[str, str]:
+    return (str(row.get("case_id") or ""), str(row.get("context") or ""))
+
+
+def score_template_row(row: dict[str, Any]) -> dict[str, Any]:
+    status = str(row.get("status") or "")
+    gated = status == "gated"
+    return {
+        "case_id": row.get("case_id"),
+        "context": row.get("context"),
+        "status": status,
+        "high_severity_unsupported_claims": 0 if gated else None,
+        "project_fact_unsupported_claims": 0 if gated else None,
+        "project_fact_claims_total": 0 if gated else None,
+        "unsupported_claims": [],
+        "notes": "",
+        "response_excerpt": str(row.get("response") or "")[:500],
+    }
+
+
+def write_score_template(eval_path: pathlib.Path, output_path: pathlib.Path) -> int:
+    rows = read_jsonl(eval_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="\n") as handle:
+        for row in rows:
+            handle.write(json.dumps(score_template_row(row), ensure_ascii=False, sort_keys=True) + "\n")
+    print(f"wrote {len(rows)} manual score template row(s): {output_path}")
+    return 0
+
+
+def load_score_overrides(path: pathlib.Path) -> dict[tuple[str, str], dict[str, Any]]:
+    overrides: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in read_jsonl(path):
+        key = score_key(row)
+        if not all(key):
+            raise SystemExit(f"{path}: score row missing case_id/context")
+        if key in overrides:
+            raise SystemExit(f"{path}: duplicate score row for {key[0]} [{key[1]}]")
+        overrides[key] = {
+            "high_severity_unsupported_claims": row.get("high_severity_unsupported_claims"),
+            "project_fact_unsupported_claims": row.get("project_fact_unsupported_claims"),
+            "project_fact_claims_total": row.get("project_fact_claims_total"),
+            "unsupported_claims": row.get("unsupported_claims") or [],
+            "notes": row.get("notes") or "",
+        }
+    return overrides
+
+
+def apply_score_overrides(
+    rows: list[dict[str, Any]],
+    overrides: dict[tuple[str, str], dict[str, Any]],
+) -> list[dict[str, Any]]:
+    scored: list[dict[str, Any]] = []
+    row_keys = {score_key(row) for row in rows}
+    unknown = sorted(key for key in overrides if key not in row_keys)
+    if unknown:
+        names = ", ".join(f"{case_id} [{context}]" for case_id, context in unknown)
+        raise SystemExit(f"score file contains unknown eval row(s): {names}")
+    for row in rows:
+        copied = dict(row)
+        score = dict(copied.get("manual_score") or {})
+        if score_key(row) in overrides:
+            score.update(overrides[score_key(row)])
+        copied["manual_score"] = score
+        scored.append(copied)
+    return scored
+
+
+def int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def manual_score_complete(row: dict[str, Any]) -> bool:
+    score = row.get("manual_score") or {}
+    required = (
+        "high_severity_unsupported_claims",
+        "project_fact_unsupported_claims",
+        "project_fact_claims_total",
+    )
+    return all(int_or_none(score.get(field)) is not None for field in required)
+
+
+def summarize_eval_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    status_counts = Counter(str(row.get("status") or "unknown") for row in rows)
+    scorable = [row for row in rows if row.get("status") == "ok"]
+    incomplete = [row for row in scorable if not manual_score_complete(row)]
+
+    high_total = 0
+    project_unsupported = 0
+    project_claims = 0
+    for row in scorable:
+        if not manual_score_complete(row):
+            continue
+        score = row.get("manual_score") or {}
+        high_total += int(score["high_severity_unsupported_claims"])
+        project_unsupported += int(score["project_fact_unsupported_claims"])
+        project_claims += int(score["project_fact_claims_total"])
+
+    target_high = int(corpus.ACCEPTANCE_TARGETS["high_severity_unsupported_claims"])
+    target_rate = float(corpus.ACCEPTANCE_TARGETS["project_fact_unsupported_claim_rate_lt"])
+    rate = (project_unsupported / project_claims) if project_claims else 0.0
+    if status_counts.get("dry-run"):
+        result = "dry-run"
+    elif incomplete:
+        result = "incomplete"
+    elif high_total > target_high:
+        result = "fail"
+    elif project_claims and rate >= target_rate:
+        result = "fail"
+    else:
+        result = "pass"
+
+    return {
+        "rows": len(rows),
+        "status_counts": dict(sorted(status_counts.items())),
+        "scorable_ok_rows": len(scorable),
+        "manual_scores_complete": len(scorable) - len(incomplete),
+        "manual_scores_required": len(scorable),
+        "needs_score": [score_key(row) for row in incomplete],
+        "high_severity_unsupported_claims": high_total,
+        "high_severity_target": target_high,
+        "project_fact_unsupported_claims": project_unsupported,
+        "project_fact_claims_total": project_claims,
+        "project_fact_unsupported_claim_rate": rate,
+        "project_fact_claim_rate_target_lt": target_rate,
+        "result": result,
+    }
+
+
+def print_eval_summary(summary: dict[str, Any]) -> None:
+    print(f"rows: {summary['rows']}")
+    print(
+        "status_counts: "
+        + ", ".join(f"{status}={count}" for status, count in summary["status_counts"].items())
+    )
+    print(
+        "manual_scores: "
+        f"{summary['manual_scores_complete']}/{summary['manual_scores_required']} ok row(s)"
+    )
+    print(
+        "high_severity_unsupported_claims: "
+        f"{summary['high_severity_unsupported_claims']} "
+        f"(target {summary['high_severity_target']})"
+    )
+    print(
+        "project_fact_unsupported_claim_rate: "
+        f"{summary['project_fact_unsupported_claim_rate']:.2%} "
+        f"({summary['project_fact_unsupported_claims']}/"
+        f"{summary['project_fact_claims_total']}; "
+        f"target < {summary['project_fact_claim_rate_target_lt']:.2%})"
+    )
+    print(f"result: {summary['result']}")
+    if summary["needs_score"]:
+        print("needs_score:")
+        for case_id, context in summary["needs_score"]:
+            print(f"  {case_id} [{context}]")
+
+
+def review_eval(eval_path: pathlib.Path, scores_path: pathlib.Path | None) -> int:
+    rows = read_jsonl(eval_path)
+    if scores_path:
+        rows = apply_score_overrides(rows, load_score_overrides(scores_path))
+    summary = summarize_eval_rows(rows)
+    print_eval_summary(summary)
+    return 0 if summary["result"] == "pass" else 1
 
 
 def make_config(args: argparse.Namespace):
@@ -246,6 +439,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--context", default="all", help="zero, correct, irrelevant, or all")
     parser.add_argument("--dry-run", action="store_true", help="write eval rows without calling a model")
     parser.add_argument("--list", action="store_true", help="list eval cases and exit")
+    parser.add_argument("--review", help="summarize a completed eval JSONL and exit")
+    parser.add_argument("--scores", help="manual score overlay JSONL for --review")
+    parser.add_argument("--write-score-template", help="write a manual score overlay template for an eval JSONL and exit")
+    parser.add_argument("--score-output", help="output path for --write-score-template")
     parser.add_argument("--output", default=str(default_output_path()))
     parser.add_argument("--workspace", default=str(ROOT))
     parser.add_argument("--session-root", default=str(nodechat.DEFAULT_SESSION_ROOT / "eval"))
@@ -272,6 +469,13 @@ def main(argv: list[str] | None = None) -> int:
         for case in corpus.CORPUS:
             print(f"{case['id']}: {case['prompt']}")
         return 0
+    if args.write_score_template:
+        eval_path = pathlib.Path(args.write_score_template)
+        output_path = pathlib.Path(args.score_output) if args.score_output else default_score_template_path(eval_path)
+        return write_score_template(eval_path, output_path)
+    if args.review:
+        scores_path = pathlib.Path(args.scores) if args.scores else None
+        return review_eval(pathlib.Path(args.review), scores_path)
 
     config = make_config(args)
     output_path = pathlib.Path(args.output)

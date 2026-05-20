@@ -95,3 +95,97 @@ class NodechatEvalCorpusTests(unittest.TestCase):
         self.assertEqual(session["web_mode"], "off")
         self.assertEqual(session["live_mode"], "off")
         self.assertEqual(session["_max_tokens_cap"], 640)
+
+    def test_manual_score_overlay_drives_review_result(self):
+        harness = load_eval_harness()
+        rows = [
+            {
+                "case_id": "nodechat_file_behavior",
+                "context": "correct",
+                "status": "ok",
+                "manual_score": {
+                    "high_severity_unsupported_claims": None,
+                    "project_fact_unsupported_claims": None,
+                    "project_fact_claims_total": None,
+                    "unsupported_claims": [],
+                    "notes": "",
+                },
+            }
+        ]
+
+        incomplete = harness.summarize_eval_rows(rows)
+        self.assertEqual(incomplete["result"], "incomplete")
+        self.assertEqual(incomplete["needs_score"], [("nodechat_file_behavior", "correct")])
+
+        scored = harness.apply_score_overrides(
+            rows,
+            {
+                ("nodechat_file_behavior", "correct"): {
+                    "high_severity_unsupported_claims": 0,
+                    "project_fact_unsupported_claims": 0,
+                    "project_fact_claims_total": 4,
+                    "unsupported_claims": [],
+                    "notes": "reviewed manually",
+                }
+            },
+        )
+        summary = harness.summarize_eval_rows(scored)
+        self.assertEqual(summary["result"], "pass")
+        self.assertEqual(summary["manual_scores_complete"], 1)
+        self.assertEqual(summary["project_fact_unsupported_claim_rate"], 0.0)
+
+    def test_manual_score_review_fails_on_high_severity_or_rate(self):
+        harness = load_eval_harness()
+        high_severity = [
+            {
+                "case_id": "hardcoded_commit_202bc41",
+                "context": "correct",
+                "status": "ok",
+                "manual_score": {
+                    "high_severity_unsupported_claims": 1,
+                    "project_fact_unsupported_claims": 0,
+                    "project_fact_claims_total": 3,
+                },
+            }
+        ]
+        self.assertEqual(harness.summarize_eval_rows(high_severity)["result"], "fail")
+
+        high_rate = [
+            {
+                "case_id": "project_summary_current_stack",
+                "context": "correct",
+                "status": "ok",
+                "manual_score": {
+                    "high_severity_unsupported_claims": 0,
+                    "project_fact_unsupported_claims": 1,
+                    "project_fact_claims_total": 10,
+                },
+            }
+        ]
+        self.assertEqual(harness.summarize_eval_rows(high_rate)["result"], "fail")
+
+    def test_score_template_defaults_gated_rows_to_zero(self):
+        harness = load_eval_harness()
+        row = {
+            "case_id": "bmc_current_state",
+            "context": "zero",
+            "status": "gated",
+            "response": "Unknown - not loaded.",
+        }
+        template = harness.score_template_row(row)
+        self.assertEqual(template["high_severity_unsupported_claims"], 0)
+        self.assertEqual(template["project_fact_unsupported_claims"], 0)
+        self.assertEqual(template["project_fact_claims_total"], 0)
+        self.assertEqual(template["response_excerpt"], "Unknown - not loaded.")
+
+    def test_review_does_not_treat_dry_run_as_quality_pass(self):
+        harness = load_eval_harness()
+        rows = [
+            {
+                "case_id": "torrentleech_no_repo_artifact",
+                "context": "correct",
+                "status": "dry-run",
+                "manual_score": {},
+            }
+        ]
+        self.assertEqual(harness.summarize_eval_rows(rows)["result"], "dry-run")
