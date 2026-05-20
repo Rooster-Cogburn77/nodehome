@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import pathlib
 import subprocess
 import sys
@@ -9,6 +10,16 @@ from tests import nodechat_eval_corpus as corpus
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def load_eval_harness():
+    path = ROOT / "scripts" / "nodechat_eval.py"
+    spec = importlib.util.spec_from_file_location("nodechat_eval_test_harness", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class NodechatEvalCorpusTests(unittest.TestCase):
@@ -72,3 +83,15 @@ class NodechatEvalCorpusTests(unittest.TestCase):
             self.assertEqual(rows[0]["status"], "dry-run")
             self.assertEqual(rows[0]["manual_score"]["high_severity_unsupported_claims"], None)
 
+    def test_eval_session_disables_auto_routing_and_caps_output(self):
+        harness = load_eval_harness()
+        args = harness.parse_args(["--dry-run", "--max-tokens", "640"])
+        config = harness.make_config(args)
+        session = harness.prepare_eval_session(config, args)
+
+        self.assertEqual(session["model_mode"], "manual")
+        self.assertEqual(session["history_mode"], "off")
+        self.assertEqual(session["repo_mode"], "off")
+        self.assertEqual(session["web_mode"], "off")
+        self.assertEqual(session["live_mode"], "off")
+        self.assertEqual(session["_max_tokens_cap"], 640)

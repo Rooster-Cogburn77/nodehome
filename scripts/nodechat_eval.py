@@ -161,9 +161,20 @@ def add_context_spec(config, session: dict[str, Any], spec: dict[str, Any], cont
         raise ValueError(f"unsupported eval context type: {kind!r}")
 
 
-def run_case(config, args: argparse.Namespace, case: dict[str, Any], context_name: str) -> dict[str, Any]:
+def prepare_eval_session(config, args: argparse.Namespace) -> dict[str, Any]:
     session = nodechat.make_session(config)
     session["model_mode"] = str(args.model_mode)
+    session["history_mode"] = "off"
+    session["repo_mode"] = "off"
+    session["web_mode"] = "off"
+    session["live_mode"] = "off"
+    if int(args.max_tokens) > 0:
+        session["_max_tokens_cap"] = int(args.max_tokens)
+    return session
+
+
+def run_case(config, args: argparse.Namespace, case: dict[str, Any], context_name: str) -> dict[str, Any]:
+    session = prepare_eval_session(config, args)
     context_specs = list(case["context_sets"][context_name])
     for spec in context_specs:
         add_context_spec(config, session, spec, context_name)
@@ -242,7 +253,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--model", default=nodechat.DEFAULT_MODEL)
     parser.add_argument("--api-key", default="")
     parser.add_argument("--temperature", type=float, default=0.1)
-    parser.add_argument("--max-tokens", type=int, default=0)
+    parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--max-history-messages", type=int, default=0)
     parser.add_argument("--history-url", default=nodechat.DEFAULT_HISTORY_URL)
@@ -282,4 +293,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

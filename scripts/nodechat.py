@@ -891,6 +891,9 @@ def resolve_generation_policy(
 
     policy_max_tokens = int(limits["max_tokens"])
     max_tokens = max(int(config.max_tokens), policy_max_tokens)
+    max_tokens_cap = int(session.get("_max_tokens_cap") or 0)
+    if max_tokens_cap > 0:
+        max_tokens = min(max_tokens, max_tokens_cap)
 
     return {
         "name": policy,

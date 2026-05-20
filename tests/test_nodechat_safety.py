@@ -1700,6 +1700,32 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(event["evidence_state"]["block_count"], 1)
             self.assertEqual(event["evidence_state"]["sources"][0]["category"], "repo")
 
+    def test_generation_policy_respects_session_max_tokens_cap(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            session["_max_tokens_cap"] = 1024
+            nodechat.add_context(
+                session,
+                "/read docs/CURRENT_STATE.md",
+                nodechat.context_block("file_read", "docs/CURRENT_STATE.md", "fake current state"),
+                source="manual-read",
+                provenance={"path": "docs/CURRENT_STATE.md", "chars": 18},
+            )
+            seen, originals = self._stub_chat_and_vllm(vllm_ok=True)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    nodechat.send_user_prompt(config, session, "summarize this")
+            finally:
+                self._restore_chat_and_vllm(originals)
+
+            self.assertEqual(seen[0]["max_tokens"], 1024)
+            rows = nodechat.read_recent_audit(config, 10)
+            event = next(row for row in rows if row["event_type"] == "model_dispatched")
+            self.assertEqual(event["generation_policy"], "grounded_analysis")
+            self.assertEqual(event["max_tokens"], 1024)
+
     def test_answerability_gate_escalates_project_prompt_without_evidence(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
