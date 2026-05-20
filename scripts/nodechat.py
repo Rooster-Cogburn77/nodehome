@@ -4333,6 +4333,7 @@ def evidence_ref(block: dict[str, Any]) -> str:
     prov = block.get("provenance") or {}
     for key in (
         "path",
+        "commit",
         "url",
         "query",
         "command",
@@ -4434,8 +4435,62 @@ def is_project_specific_prompt(prompt: str, dispatch: dict[str, Any]) -> bool:
     return False
 
 
+def explicit_prompt_artifacts(prompt: str) -> list[str]:
+    artifacts: list[str] = []
+    for match in PATHLIKE_CLAIM_RE.finditer(str(prompt or "")):
+        artifact = match.group(0).strip().strip("`'\".,;:()[]{}")
+        if artifact and artifact not in artifacts:
+            artifacts.append(artifact)
+    return artifacts
+
+
+def explicit_prompt_commits(prompt: str) -> list[str]:
+    text = str(prompt or "")
+    if not re.search(r"\b(commit|diff|git\s+show)\b", text, re.I):
+        return []
+    commits: list[str] = []
+    for match in COMMITLIKE_CLAIM_RE.finditer(text):
+        commit = match.group(0).lower()
+        if commit not in commits:
+            commits.append(commit)
+    return commits
+
+
+def loaded_evidence_haystack(evidence_state: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for item in evidence_state.get("sources") or []:
+        parts.append(str(item.get("source") or ""))
+        parts.append(str(item.get("ref") or ""))
+    return "\n".join(parts).replace("\\", "/").lower()
+
+
+def missing_explicit_prompt_evidence(prompt: str, evidence_state: dict[str, Any]) -> list[str]:
+    haystack = loaded_evidence_haystack(evidence_state)
+    if not haystack.strip():
+        return []
+
+    missing: list[str] = []
+    for artifact in explicit_prompt_artifacts(prompt):
+        normalized = artifact.replace("\\", "/").lower()
+        basename = pathlib.PurePath(normalized).name
+        if normalized not in haystack and basename not in haystack:
+            missing.append(artifact)
+    for commit in explicit_prompt_commits(prompt):
+        if commit not in haystack:
+            missing.append(commit)
+    return missing
+
+
 def suggested_context_command(config: Config, session: dict[str, Any], prompt: str) -> str:
     text = " ".join(str(prompt or "").strip().split())
+    commits = explicit_prompt_commits(prompt)
+    if commits:
+        return f"/cmd git show {commits[0]}"
+    artifacts = explicit_prompt_artifacts(prompt)
+    if artifacts:
+        artifact = artifacts[0]
+        if "." in pathlib.PurePath(artifact.replace("\\", "/")).name and not artifact.startswith(("/", "~")):
+            return "/read " + artifact
     if detect_history_query(prompt):
         return "/history " + _trunc(text, 160)
     live_targets = detect_live_targets(prompt)
@@ -4479,6 +4534,25 @@ def answerability_gate_decision(
             "message": (
                 "Unknown - not loaded. Auto-routing did not load evidence for that "
                 "project-specific question.\n"
+                f"Suggested next command: {suggested}\n"
+                "Override only if you intentionally want an ungrounded answer: prefix "
+                "`answer anyway:` or run one-shot with `--force-answer`."
+            ),
+        }
+    missing_evidence = missing_explicit_prompt_evidence(prompt, evidence_state) if project_specific else []
+    if missing_evidence:
+        missing_label = ", ".join(missing_evidence[:3])
+        if len(missing_evidence) > 3:
+            missing_label += ", ..."
+        return {
+            "action": "escalate",
+            "override_status": override_status,
+            "project_specific": project_specific,
+            "suggested_command": suggested,
+            "missing_evidence": missing_evidence,
+            "message": (
+                "Unknown - not loaded. Loaded evidence does not include the "
+                f"requested artifact or commit: {missing_label}.\n"
                 f"Suggested next command: {suggested}\n"
                 "Override only if you intentionally want an ungrounded answer: prefix "
                 "`answer anyway:` or run one-shot with `--force-answer`."

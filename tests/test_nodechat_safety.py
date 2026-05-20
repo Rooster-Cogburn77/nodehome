@@ -1750,6 +1750,127 @@ class NodechatAutoRoutingTests(unittest.TestCase):
             self.assertEqual(event["override_status"], "none")
             self.assertTrue(event["project_specific"])
 
+    def test_answerability_gate_escalates_named_file_with_irrelevant_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "/read docs/runbooks/home-media-server.md",
+                nodechat.context_block("file_read", "docs/runbooks/home-media-server.md", "media server notes"),
+                source="manual-read",
+                provenance={"path": "docs/runbooks/home-media-server.md", "chars": 18},
+            )
+
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = mock.Mock(side_effect=AssertionError("model should not be called"))
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    status = nodechat.send_user_prompt(
+                        config,
+                        session,
+                        "what does scripts/nodechat.py do and what are its main safety boundaries?",
+                    )
+            finally:
+                nodechat.complete_chat = original
+
+            text = buf.getvalue()
+            self.assertEqual(status, "gated")
+            self.assertIn("Loaded evidence does not include", text)
+            self.assertIn("scripts/nodechat.py", text)
+            self.assertIn("/read scripts/nodechat.py", text)
+
+    def test_answerability_gate_passes_named_file_with_matching_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "/read scripts/nodechat.py",
+                nodechat.context_block("file_read", "scripts/nodechat.py", "fake nodechat source"),
+                source="manual-read",
+                provenance={"path": "scripts/nodechat.py", "chars": 20},
+            )
+            seen = []
+
+            original = nodechat.complete_chat
+            try:
+                def fake_complete(config, session):
+                    seen.append(True)
+                    return "ok"
+
+                nodechat.complete_chat = fake_complete
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = nodechat.send_user_prompt(
+                        config,
+                        session,
+                        "what does scripts/nodechat.py do and what are its main safety boundaries?",
+                    )
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(seen, [True])
+
+    def test_answerability_gate_escalates_named_commit_with_irrelevant_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "/read docs/runbooks/nodechat-terminal.md",
+                nodechat.context_block("file_read", "docs/runbooks/nodechat-terminal.md", "terminal notes"),
+                source="manual-read",
+                provenance={"path": "docs/runbooks/nodechat-terminal.md", "chars": 14},
+            )
+
+            original = nodechat.complete_chat
+            try:
+                nodechat.complete_chat = mock.Mock(side_effect=AssertionError("model should not be called"))
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    status = nodechat.send_user_prompt(config, session, "what changed in commit 202bc41?")
+            finally:
+                nodechat.complete_chat = original
+
+            text = buf.getvalue()
+            self.assertEqual(status, "gated")
+            self.assertIn("202bc41", text)
+            self.assertIn("/cmd git show 202bc41", text)
+
+    def test_answerability_gate_passes_named_commit_with_matching_evidence(self):
+        with tempfile.TemporaryDirectory() as workspace_raw:
+            workspace = pathlib.Path(workspace_raw)
+            config = make_config(workspace, workspace / ".sessions")
+            session = nodechat.make_session(config)
+            nodechat.add_context(
+                session,
+                "eval-git:202bc41",
+                nodechat.context_block("git_commit", "202bc41", "commit diff"),
+                source="manual-cmd",
+                provenance={"command": "git show", "commit": "202bc41", "chars": 11},
+            )
+            seen = []
+
+            original = nodechat.complete_chat
+            try:
+                def fake_complete(config, session):
+                    seen.append(True)
+                    return "ok"
+
+                nodechat.complete_chat = fake_complete
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = nodechat.send_user_prompt(config, session, "what changed in commit 202bc41?")
+            finally:
+                nodechat.complete_chat = original
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(seen, [True])
+
     def test_answerability_gate_force_prefix_bypasses_with_audit(self):
         with tempfile.TemporaryDirectory() as workspace_raw:
             workspace = pathlib.Path(workspace_raw)
